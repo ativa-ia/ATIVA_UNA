@@ -93,6 +93,32 @@ export default function StudentDashboardScreen() {
         { id: 'messages', label: 'Mensagens', iconName: 'chat-bubble' },
     ];
 
+    const handleNavPress = (id: string) => {
+        setActiveNavId(id);
+
+        switch (id) {
+            case 'dashboard':
+                // Already on dashboard, do nothing
+                break;
+            case 'calendar':
+                router.push('./calendar');
+                break;
+            case 'grades':
+                router.push('./grades');
+                break;
+            case 'messages':
+                router.push('./messages');
+                break;
+        }
+    };
+
+    const handleSubjectPress = (subject: Subject) => {
+        router.push({
+            pathname: './materials',
+            params: { subject: subject.name }
+        });
+    };
+
     const handleLogout = async () => {
         await clearAuth();
         router.replace('/(auth)/login');
@@ -137,7 +163,7 @@ export default function StudentDashboardScreen() {
                                     key={subject.id}
                                     subject={subject}
                                     style={styles.subjectCard}
-                                    onPress={() => console.log('Subject:', subject.name)}
+                                    onPress={() => handleSubjectPress(subject)}
                                 />
                             ))}
                         </View>
@@ -166,7 +192,7 @@ export default function StudentDashboardScreen() {
                 <BottomNav
                     items={navItems}
                     activeId={activeNavId}
-                    onItemPress={setActiveNavId}
+                    onItemPress={handleNavPress}
                     darkMode
                 />
             </View>
