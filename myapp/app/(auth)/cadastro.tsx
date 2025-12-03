@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
         alignSelf: 'center',
         paddingHorizontal: spacing.base,
         paddingTop: spacing['3xl'],
-        paddingBottom: spacing['2xl'],
+        paddingBottom: spacing['4xl'], // Increased to lift buttons up
     },
     logoContainer: {
         width: 96,
@@ -288,5 +288,6 @@ const styles = StyleSheet.create({
         paddingTop: spacing['2xl'],
         paddingHorizontal: spacing.base,
         gap: spacing.md,
+        // alignItems: 'center', // Removed to allow full width buttons
     },
 });
