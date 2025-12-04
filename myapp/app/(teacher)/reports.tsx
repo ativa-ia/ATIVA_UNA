@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
     View,
     Text,
@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { BottomNav, NavItem } from '@/components/navigation/BottomNav';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing } from '@/constants/spacing';
@@ -17,6 +18,28 @@ import { spacing } from '@/constants/spacing';
  * Tela placeholder para visualização de relatórios
  */
 export default function ReportsScreen() {
+    const [activeNavId, setActiveNavId] = useState('reports');
+
+    const navItems: NavItem[] = [
+        { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
+        { id: 'materials', label: 'Materiais', iconName: 'folder' },
+        { id: 'reports', label: 'Relatórios', iconName: 'assessment' },
+    ];
+
+    const handleNavPress = (id: string) => {
+        setActiveNavId(id);
+        switch (id) {
+            case 'dashboard':
+                router.replace('/(teacher)/dashboard');
+                break;
+            case 'materials':
+                router.replace('/(teacher)/materials');
+                break;
+            case 'reports':
+                break;
+        }
+    };
+
     return (
         <SafeAreaView style={styles.safeArea}>
             <View style={styles.container}>
@@ -40,6 +63,13 @@ export default function ReportsScreen() {
                         Os relatórios de desempenho estarão disponíveis em breve.
                     </Text>
                 </View>
+
+                <BottomNav
+                    items={navItems}
+                    activeId={activeNavId}
+                    onItemPress={handleNavPress}
+                    darkMode
+                />
             </View>
         </SafeAreaView>
     );

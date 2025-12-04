@@ -4,9 +4,9 @@ import {
     Text,
     StyleSheet,
     ScrollView,
-    SafeAreaView,
     TouchableOpacity,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '@/constants/colors';
@@ -19,6 +19,7 @@ import { Student } from '@/types';
  * Tela para o professor fazer chamada dos alunos
  */
 export default function AttendanceCheckScreen() {
+    const insets = useSafeAreaInsets();
     const [students, setStudents] = useState<Student[]>([
         { id: '1', name: 'Ana Silva', present: undefined },
         { id: '2', name: 'Bruno Costa', present: undefined },
@@ -43,10 +44,10 @@ export default function AttendanceCheckScreen() {
     const absentCount = students.filter(s => s.present === false).length;
 
     return (
-        <SafeAreaView style={styles.safeArea}>
+        <View style={styles.safeArea}>
             <View style={styles.container}>
                 {/* Header */}
-                <View style={styles.header}>
+                <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
                     <TouchableOpacity
                         style={styles.backButton}
                         onPress={() => router.back()}
@@ -125,13 +126,13 @@ export default function AttendanceCheckScreen() {
                 </ScrollView>
 
                 {/* Save Button */}
-                <View style={styles.footer}>
+                <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.base }]}>
                     <TouchableOpacity style={styles.saveButton}>
                         <Text style={styles.saveButtonText}>Salvar Chamada</Text>
                     </TouchableOpacity>
                 </View>
             </View>
-        </SafeAreaView>
+        </View>
     );
 }
 
