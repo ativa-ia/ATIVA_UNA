@@ -30,51 +30,65 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     return (
         <View
             style={[
-                styles.container,
-                darkMode ? styles.containerDark : styles.containerLight,
-                { bottom: insets.bottom + spacing.sm } // 8px + safe area from bottom edge
+                styles.wrapper,
+                darkMode ? styles.wrapperDark : styles.wrapperLight,
+                { paddingBottom: insets.bottom + spacing.sm }
             ]}
         >
-            <View style={styles.content}>
-                {items.map((item) => {
-                    const isActive = item.id === activeId;
-                    return (
-                        <TouchableOpacity
-                            key={item.id}
-                            style={styles.item}
-                            onPress={() => onItemPress(item.id)}
-                            activeOpacity={0.7}
-                        >
-                            <MaterialIcons
-                                name={item.iconName}
-                                size={24}
-                                color={isActive ? colors.primary : (darkMode ? colors.zinc400 : colors.zinc500)}
-                            />
-                            <Text
-                                style={[
-                                    styles.label,
-                                    isActive && styles.labelActive,
-                                    darkMode && !isActive && styles.labelDark,
-                                ]}
-                                numberOfLines={1}
+            <View
+                style={[
+                    styles.container,
+                    darkMode ? styles.containerDark : styles.containerLight,
+                ]}
+            >
+                <View style={styles.content}>
+                    {items.map((item) => {
+                        const isActive = item.id === activeId;
+                        return (
+                            <TouchableOpacity
+                                key={item.id}
+                                style={styles.item}
+                                onPress={() => onItemPress(item.id)}
+                                activeOpacity={0.7}
                             >
-                                {item.label}
-                            </Text>
-                        </TouchableOpacity>
-                    );
-                })}
+                                <MaterialIcons
+                                    name={item.iconName}
+                                    size={24}
+                                    color={isActive ? colors.primary : (darkMode ? colors.zinc400 : colors.zinc500)}
+                                />
+                                <Text
+                                    style={[
+                                        styles.label,
+                                        isActive && styles.labelActive,
+                                        darkMode && !isActive && styles.labelDark,
+                                    ]}
+                                    numberOfLines={1}
+                                >
+                                    {item.label}
+                                </Text>
+                            </TouchableOpacity>
+                        );
+                    })}
+                </View>
             </View>
         </View>
     );
 };
 
 const styles = StyleSheet.create({
+    wrapper: {
+        // No absolute positioning - sits at bottom of flex container
+        paddingHorizontal: spacing.base,
+        paddingTop: spacing.sm,
+    },
+    wrapperLight: {
+        backgroundColor: colors.backgroundLight,
+    },
+    wrapperDark: {
+        backgroundColor: colors.backgroundDark,
+    },
     container: {
-        position: 'absolute',
-        // bottom is set dynamically via inline style
-        left: spacing.base, // More margin from sides
-        right: spacing.base,
-        borderRadius: borderRadius.xl, // Rounder corners
+        borderRadius: borderRadius.xl,
         borderWidth: 1,
         overflow: 'hidden',
         elevation: 8,
@@ -84,16 +98,16 @@ const styles = StyleSheet.create({
         shadowRadius: 12,
     },
     containerLight: {
-        backgroundColor: colors.backgroundLight,
+        backgroundColor: '#f6f6f8',
         borderColor: colors.zinc200,
     },
     containerDark: {
-        backgroundColor: colors.backgroundDark,
+        backgroundColor: '#1a1f2e',
         borderColor: colors.zinc800,
     },
     content: {
         flexDirection: 'row',
-        height: 50, // Reduced height further
+        height: 50,
         maxWidth: 448,
         marginHorizontal: 'auto',
         alignItems: 'center',
@@ -104,7 +118,7 @@ const styles = StyleSheet.create({
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 2, // Reduced gap
+        gap: 2,
         paddingVertical: spacing.xs,
         paddingHorizontal: spacing.sm,
         flex: 1,
