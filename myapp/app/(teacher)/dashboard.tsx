@@ -11,11 +11,9 @@ import { router } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Header } from '@/components/navigation/Header';
 import { BottomNav, NavItem } from '@/components/navigation/BottomNav';
-import { NoticeCard } from '@/components/cards/NoticeCard';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing } from '@/constants/spacing';
-import { Notice } from '@/types';
 import { clearAuth } from '@/services/api';
 
 /**
@@ -24,19 +22,6 @@ import { clearAuth } from '@/services/api';
  */
 export default function TeacherDashboardScreen() {
     const [activeNavId, setActiveNavId] = useState('dashboard');
-
-    const announcements: Notice[] = [
-        {
-            id: '1',
-            title: 'Reunião Pedagógica',
-            description: 'Reunião de planejamento do semestre na próxima terça-feira às 14h.',
-        },
-        {
-            id: '2',
-            title: 'Prazo de Notas',
-            description: 'Lembrete: prazo para lançamento de notas termina em 5 dias.',
-        },
-    ];
 
     const navItems: NavItem[] = [
         { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
@@ -97,19 +82,6 @@ export default function TeacherDashboardScreen() {
                         darkMode
                         onNotificationPress={() => console.log('Notifications')}
                     />
-
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Avisos Importantes</Text>
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.horizontalScroll}
-                        >
-                            {announcements.map((notice) => (
-                                <NoticeCard key={notice.id} notice={notice} darkMode />
-                            ))}
-                        </ScrollView>
-                    </View>
 
                     <View style={[styles.section, styles.lastSection]}>
                         <Text style={styles.sectionTitle}>Minhas Turmas</Text>
