@@ -27,9 +27,13 @@ def create_app(config_name=None):
     # Registrar blueprints
     from app.routes.auth_routes import auth_bp
     from app.routes.subject_routes import subject_bp
+    from app.routes.ai_routes import ai_bp
+    from app.routes.notification_routes import notification_bp
     
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(subject_bp, url_prefix='/api/subjects')
+    app.register_blueprint(ai_bp, url_prefix='/api/ai')
+    app.register_blueprint(notification_bp, url_prefix='/api/notifications')
     
     # Rota raiz
     @app.route('/')
@@ -39,7 +43,8 @@ def create_app(config_name=None):
             'version': '1.0.0',
             'endpoints': {
                 'auth': '/api/auth',
-                'subjects': '/api/subjects'
+                'subjects': '/api/subjects',
+                'ai': '/api/ai'
             }
         }
     

@@ -23,6 +23,7 @@ export default function TeacherSubjectDetailsScreen() {
     const insets = useSafeAreaInsets();
     const params = useLocalSearchParams();
     const subjectName = params.subject as string || 'Disciplina';
+    const subjectId = params.subjectId as string || '1';
 
     // Mock data - será substituído por dados reais do backend
     const subjectData = {
@@ -103,7 +104,7 @@ export default function TeacherSubjectDetailsScreen() {
                             activeOpacity={0.8}
                             onPress={() => router.push({
                                 pathname: '/(teacher)/ai-assistant',
-                                params: { subject: subjectName }
+                                params: { subject: subjectName, subjectId: subjectId }
                             })}
                         >
                             <LinearGradient

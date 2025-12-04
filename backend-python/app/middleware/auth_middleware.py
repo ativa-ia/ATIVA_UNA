@@ -12,6 +12,7 @@ def token_required(f):
         
         # Pegar token do header Authorization
         auth_header = request.headers.get('Authorization')
+        print(f"[AUTH DEBUG] Header: {auth_header[:50] if auth_header else 'None'}...")
         
         if not auth_header:
             return jsonify({
@@ -22,6 +23,7 @@ def token_required(f):
         # Formato: "Bearer TOKEN"
         try:
             token = auth_header.split(' ')[1]
+            print(f"[AUTH DEBUG] Token extraído: {token[:20]}...")
         except IndexError:
             return jsonify({
                 'success': False,
@@ -30,6 +32,7 @@ def token_required(f):
         
         # Decodificar token
         payload = decode_token(token)
+        print(f"[AUTH DEBUG] Payload: {payload}")
         
         if payload is None:
             return jsonify({
