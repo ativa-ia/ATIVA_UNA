@@ -29,11 +29,13 @@ def create_app(config_name=None):
     from app.routes.subject_routes import subject_bp
     from app.routes.ai_routes import ai_bp
     from app.routes.notification_routes import notification_bp
+    from app.routes.admin_routes import admin_bp
     
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(subject_bp, url_prefix='/api/subjects')
     app.register_blueprint(ai_bp, url_prefix='/api/ai')
     app.register_blueprint(notification_bp, url_prefix='/api/notifications')
+    app.register_blueprint(admin_bp, url_prefix='/api/admin')
     
     # Rota raiz
     @app.route('/')

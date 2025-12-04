@@ -51,7 +51,9 @@ export default function LoginScreen() {
                 await saveAuth(data.token, data.user.role);
 
                 // Redirecionar baseado no role
-                if (data.user.role === 'student') {
+                if (data.user.role === 'admin') {
+                    router.replace('/(admin)/dashboard');
+                } else if (data.user.role === 'student') {
                     router.replace('/(student)/dashboard');
                 } else {
                     router.replace('/(teacher)/dashboard');

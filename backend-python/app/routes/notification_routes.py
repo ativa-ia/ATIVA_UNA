@@ -60,16 +60,27 @@ def send_notification(current_user):
         'notification': new_notif.to_dict()
     }), 201
 
+from app.models.enrollment import Enrollment
+
 @notification_bp.route('/student/<int:student_id>', methods=['GET'])
 # @token_required # Comentado para facilitar testes se necessário, mas idealmente protegido
 def get_student_notifications(student_id):
     """
     Retorna notificações para um aluno (baseado nas disciplinas que ele cursa).
-    Nota: Como não temos tabela de matricula (Enrollment) completa ainda, 
-    vamos retornar as notificações das disciplinas que o aluno 'segue' (mock).
     """
-    # Mock: Retorna últimas 10 notificações gerais
-    notifications = Notification.query.order_by(Notification.created_at.desc()).limit(10).all()
+    # 1. Buscar disciplinas que o aluno está matriculado
+    enrolled_subjects = db.session.query(Enrollment.subject_id).filter_by(student_id=student_id).all()
+    subject_ids = [s[0] for s in enrolled_subjects]
+    
+    if not subject_ids:
+        return jsonify({'success': True, 'notifications': []})
+
+    # 2. Buscar notificações apenas dessas disciplinas
+    notifications = Notification.query\
+        .filter(Notification.subject_id.in_(subject_ids))\
+        .order_by(Notification.created_at.desc())\
+        .limit(20)\
+        .all()
     
     return jsonify({
         'success': True,

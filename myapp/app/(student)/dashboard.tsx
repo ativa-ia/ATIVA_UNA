@@ -11,10 +11,8 @@ import { router } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Header } from '@/components/navigation/Header';
 import { BottomNav, NavItem } from '@/components/navigation/BottomNav';
-import { NoticeCard } from '@/components/cards/NoticeCard';
 import { SubjectCard } from '@/components/cards/SubjectCard';
-import { ActivityCard } from '@/components/cards/ActivityCard';
-import { Subject, Notice, Activity } from '@/types';
+import { Subject, Activity } from '@/types';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing } from '@/constants/spacing';
@@ -57,23 +55,6 @@ export default function StudentDashboardScreen() {
         }
     };
 
-    const activities: Activity[] = [
-        {
-            id: '1',
-            title: 'Entrega do Projeto Final',
-            subject: 'Engenharia de Software',
-            dueDate: 'em 3 dias',
-            type: 'assignment',
-        },
-        {
-            id: '2',
-            title: 'Prova P2',
-            subject: 'Cálculo I',
-            dueDate: 'em 5 dias',
-            type: 'quiz',
-        },
-    ];
-
     const navItems: NavItem[] = [
         { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
         { id: 'calendar', label: 'Calendário', iconName: 'calendar-today' },
@@ -85,7 +66,6 @@ export default function StudentDashboardScreen() {
 
         switch (id) {
             case 'dashboard':
-                // Already on dashboard, do nothing
                 break;
             case 'calendar':
                 router.push('./calendar');
@@ -111,16 +91,23 @@ export default function StudentDashboardScreen() {
                     contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
                 >
-                    {/* Header */}
-                    <Header
-                        userName="Aluno"
-                        avatarUri="https://i.pravatar.cc/150?img=12"
-                        darkMode
-                        onNotificationPress={() => console.log('Notifications')}
-                        onProfilePress={() => router.push('./settings')}
-                    />
-
-
+                    {/* Header Customizado com Botão de Notificação */}
+                    <View style={styles.headerContainer}>
+                        <View style={styles.headerTop}>
+                            <View>
+                                <Text style={styles.greeting}>Olá, Aluno</Text>
+                                <Text style={styles.date}>Quarta, 4 Dez</Text>
+                            </View>
+                            <TouchableOpacity
+                                style={styles.notificationButton}
+                                onPress={() => router.push('/(student)/notifications')}
+                            >
+                                <MaterialIcons name="notifications-none" size={24} color={colors.white} />
+                                {/* Badge de notificação (mock) */}
+                                <View style={styles.badge} />
+                            </TouchableOpacity>
+                        </View>
+                    </View>
 
                     {/* Minhas Disciplinas Section */}
                     <View style={styles.section}>
@@ -183,11 +170,50 @@ const styles = StyleSheet.create({
     scrollContent: {
         paddingBottom: spacing.base,
     },
+    headerContainer: {
+        paddingHorizontal: spacing.base,
+        paddingTop: spacing.md,
+        paddingBottom: spacing.base,
+    },
+    headerTop: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    greeting: {
+        fontSize: typography.fontSize.xl,
+        fontWeight: typography.fontWeight.bold,
+        fontFamily: typography.fontFamily.display,
+        color: colors.white,
+    },
+    date: {
+        fontSize: typography.fontSize.sm,
+        fontFamily: typography.fontFamily.body,
+        color: colors.zinc400,
+        marginTop: 4,
+    },
+    notificationButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        position: 'relative',
+    },
+    badge: {
+        position: 'absolute',
+        top: 10,
+        right: 10,
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#ef4444',
+        borderWidth: 1,
+        borderColor: colors.backgroundDark,
+    },
     section: {
         marginTop: spacing.base,
-    },
-    lastSection: {
-        marginBottom: spacing.base,
     },
     sectionTitle: {
         fontSize: typography.fontSize.lg,
@@ -199,11 +225,6 @@ const styles = StyleSheet.create({
         paddingBottom: spacing.sm,
         paddingTop: spacing.base,
     },
-    horizontalScroll: {
-        paddingHorizontal: spacing.base,
-        paddingVertical: spacing.sm,
-        gap: spacing.md,
-    },
     subjectsGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
@@ -214,7 +235,6 @@ const styles = StyleSheet.create({
         width: '47%', // Approximately 2 columns with gap
         minWidth: 158,
     },
-
     loadingContainer: {
         padding: spacing.xl,
         alignItems: 'center',
