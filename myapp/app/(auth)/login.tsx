@@ -18,7 +18,7 @@ import { login, saveAuth } from '@/services/api';
 
 /**
  * LoginScreen - Tela de Login
- * Tela principal de boas-vindas e login do Assistente 360
+ * Tela principal de boas-vindas ed login do Assistente 360
  */
 
 export default function LoginScreen() {

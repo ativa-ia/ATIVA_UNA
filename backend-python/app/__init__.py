@@ -67,7 +67,7 @@ def create_app(config_name=None):
         }, 500
     
     # Criar tabelas no banco de dados
-    with app.app_context():
-        db.create_all()
+    # with app.app_context():
+    #     db.create_all()
     
     return app
