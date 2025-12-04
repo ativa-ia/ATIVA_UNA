@@ -212,3 +212,47 @@ export const getTeacherClasses = async (): Promise<TeacherClass[]> => {
         student_count: subject.student_count || 0,
     }));
 };
+
+// ========== ACCOUNT MANAGEMENT ==========
+
+export interface UpdateProfileData {
+    name?: string;
+    email?: string;
+}
+
+export interface ChangePasswordData {
+    current_password: string;
+    new_password: string;
+}
+
+// Atualizar perfil do usuário
+export const updateProfile = async (data: UpdateProfileData): Promise<AuthResponse> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/auth/update-profile`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+    });
+
+    return response.json();
+};
+
+// Alterar senha do usuário
+export const changePassword = async (data: ChangePasswordData): Promise<AuthResponse> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/auth/change-password`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+    });
+
+    return response.json();
+};

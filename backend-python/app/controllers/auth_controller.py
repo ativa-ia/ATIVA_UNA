@@ -146,3 +146,85 @@ def forgot_password():
             'success': False,
             'message': 'Erro ao processar recuperação de senha'
         }), 500
+
+
+def update_profile(current_user):
+    """Atualizar perfil do usuário"""
+    try:
+        data = request.json
+        
+        # Atualizar nome se fornecido
+        if 'name' in data and data['name']:
+            current_user.name = data['name']
+        
+        # Atualizar email se fornecido
+        if 'email' in data and data['email']:
+            # Verificar se o novo email já está em uso
+            if data['email'] != current_user.email:
+                existing_user = User.find_by_email(data['email'])
+                if existing_user:
+                    return jsonify({
+                        'success': False,
+                        'message': 'Este email já está em uso'
+                    }), 400
+                current_user.email = data['email']
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Perfil atualizado com sucesso',
+            'user': current_user.to_dict()
+        }), 200
+        
+    except Exception as e:
+        print(f'Erro ao atualizar perfil: {str(e)}')
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': 'Erro ao atualizar perfil'
+        }), 500
+
+
+def change_password(current_user):
+    """Alterar senha do usuário"""
+    try:
+        data = request.json
+        
+        # Validar campos obrigatórios
+        if not data.get('current_password') or not data.get('new_password'):
+            return jsonify({
+                'success': False,
+                'message': 'Senha atual e nova senha são obrigatórias'
+            }), 400
+        
+        # Verificar senha atual
+        if not current_user.verify_password(data['current_password']):
+            return jsonify({
+                'success': False,
+                'message': 'Senha atual incorreta'
+            }), 401
+        
+        # Validar nova senha
+        if len(data['new_password']) < 6:
+            return jsonify({
+                'success': False,
+                'message': 'A nova senha deve ter no mínimo 6 caracteres'
+            }), 400
+        
+        # Atualizar senha
+        current_user.set_password(data['new_password'])
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Senha alterada com sucesso'
+        }), 200
+        
+    except Exception as e:
+        print(f'Erro ao alterar senha: {str(e)}')
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': 'Erro ao alterar senha'
+        }), 500

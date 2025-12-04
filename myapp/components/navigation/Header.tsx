@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ViewStyle } from 'react-native';
+import { View, Text, StyleSheet, ViewStyle, TouchableOpacity } from 'react-native';
 import { Avatar } from '../common/Avatar';
 import { IconButton } from '../common/IconButton';
 import { colors } from '../../constants/colors';
@@ -10,6 +10,7 @@ interface HeaderProps {
     userName: string;
     avatarUri?: string;
     onNotificationPress?: () => void;
+    onProfilePress?: () => void;
     darkMode?: boolean;
     style?: ViewStyle;
 }
@@ -18,18 +19,25 @@ export const Header: React.FC<HeaderProps> = ({
     userName,
     avatarUri,
     onNotificationPress,
+    onProfilePress,
     darkMode = false,
     style,
 }) => {
     return (
         <View style={[styles.container, style]}>
-            <View style={styles.avatarContainer}>
-                <Avatar uri={avatarUri} size={40} />
-            </View>
+            <TouchableOpacity
+                style={styles.profileContainer}
+                onPress={onProfilePress}
+                activeOpacity={0.7}
+            >
+                <View style={styles.avatarContainer}>
+                    <Avatar uri={avatarUri} size={40} />
+                </View>
 
-            <Text style={[styles.greeting, darkMode && styles.greetingDark]}>
-                Olá, {userName}
-            </Text>
+                <Text style={[styles.greeting, darkMode && styles.greetingDark]}>
+                    Olá, {userName}
+                </Text>
+            </TouchableOpacity>
 
             <View style={styles.actions}>
                 <IconButton
@@ -49,6 +57,11 @@ const styles = StyleSheet.create({
         padding: spacing.base,
         paddingBottom: spacing.sm,
     },
+    profileContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flex: 1,
+    },
     avatarContainer: {
         width: 48,
         height: 48,
@@ -62,6 +75,7 @@ const styles = StyleSheet.create({
         fontFamily: typography.fontFamily.display,
         color: colors.zinc900,
         letterSpacing: typography.letterSpacing.tight,
+        marginLeft: spacing.sm,
     },
     greetingDark: {
         color: colors.white,
