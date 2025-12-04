@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -18,7 +18,7 @@ import { Subject, Notice, Activity } from '@/types';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing } from '@/constants/spacing';
-import { clearAuth } from '@/services/api';
+import { clearAuth, getSubjects, Subject as APISubject } from '@/services/api';
 
 /**
  * StudentDashboardScreen - Dashboard do Aluno
@@ -26,48 +26,36 @@ import { clearAuth } from '@/services/api';
  */
 export default function StudentDashboardScreen() {
     const [activeNavId, setActiveNavId] = useState('dashboard');
+    const [subjects, setSubjects] = useState<Subject[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-    // Mock data
-    const notices: Notice[] = [
-        {
-            id: '1',
-            title: 'Início do Período de Matrículas',
-            description: 'As matrículas para o próximo semestre começam na segunda-feira.',
-        },
-        {
-            id: '2',
-            title: 'Palestra sobre Carreira',
-            description: 'Não perca a palestra com especialistas do mercado nesta sexta.',
-        },
-        {
-            id: '3',
-            title: 'Atualização do Sistema',
-            description: 'O portal do aluno estará em manutenção no domingo das 8h às 12h.',
-        },
-    ];
+    // Buscar disciplinas da API
+    useEffect(() => {
+        loadSubjects();
+    }, []);
 
-    const subjects: Subject[] = [
-        {
-            id: '1',
-            name: 'Cálculo I',
-            imageUrl: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=400',
-        },
-        {
-            id: '2',
-            name: 'Algoritmos Avançados',
-            imageUrl: 'https://images.unsplash.com/photo-1516116216624-53e697fedbea?w=400',
-        },
-        {
-            id: '3',
-            name: 'Engenharia de Software',
-            imageUrl: 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=400',
-        },
-        {
-            id: '4',
-            name: 'Redes de Computadores',
-            imageUrl: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=400',
-        },
-    ];
+    const loadSubjects = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+            const data = await getSubjects();
+
+            // Converter para o formato esperado pelo componente
+            const formattedSubjects: Subject[] = data.map((subject: APISubject) => ({
+                id: subject.id.toString(),
+                name: subject.name,
+                imageUrl: subject.imageUrl || subject.image_url || 'https://via.placeholder.com/400'
+            }));
+
+            setSubjects(formattedSubjects);
+        } catch (err) {
+            console.error('Erro ao carregar disciplinas:', err);
+            setError('Erro ao carregar disciplinas');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const activities: Activity[] = [
         {
@@ -141,16 +129,34 @@ export default function StudentDashboardScreen() {
                     {/* Minhas Disciplinas Section */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Minhas Disciplinas</Text>
-                        <View style={styles.subjectsGrid}>
-                            {subjects.map((subject) => (
-                                <SubjectCard
-                                    key={subject.id}
-                                    subject={subject}
-                                    style={styles.subjectCard}
-                                    onPress={() => handleSubjectPress(subject)}
-                                />
-                            ))}
-                        </View>
+
+                        {loading ? (
+                            <View style={styles.loadingContainer}>
+                                <Text style={styles.loadingText}>Carregando disciplinas...</Text>
+                            </View>
+                        ) : error ? (
+                            <View style={styles.errorContainer}>
+                                <Text style={styles.errorText}>{error}</Text>
+                                <TouchableOpacity style={styles.retryButton} onPress={loadSubjects}>
+                                    <Text style={styles.retryButtonText}>Tentar novamente</Text>
+                                </TouchableOpacity>
+                            </View>
+                        ) : subjects.length === 0 ? (
+                            <View style={styles.emptyContainer}>
+                                <Text style={styles.emptyText}>Nenhuma disciplina encontrada</Text>
+                            </View>
+                        ) : (
+                            <View style={styles.subjectsGrid}>
+                                {subjects.map((subject) => (
+                                    <SubjectCard
+                                        key={subject.id}
+                                        subject={subject}
+                                        style={styles.subjectCard}
+                                        onPress={() => handleSubjectPress(subject)}
+                                    />
+                                ))}
+                            </View>
+                        )}
                     </View>
 
 
@@ -245,5 +251,50 @@ const styles = StyleSheet.create({
         fontWeight: typography.fontWeight.semibold,
         fontFamily: typography.fontFamily.display,
         color: '#ef4444',
+    },
+    loadingContainer: {
+        padding: spacing.xl,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    loadingText: {
+        fontSize: typography.fontSize.base,
+        fontFamily: typography.fontFamily.display,
+        color: colors.zinc400,
+    },
+    errorContainer: {
+        padding: spacing.xl,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: spacing.md,
+    },
+    errorText: {
+        fontSize: typography.fontSize.base,
+        fontFamily: typography.fontFamily.display,
+        color: '#ef4444',
+        textAlign: 'center',
+    },
+    retryButton: {
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.sm,
+        backgroundColor: colors.primary,
+        borderRadius: 8,
+    },
+    retryButtonText: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: typography.fontWeight.semibold,
+        fontFamily: typography.fontFamily.display,
+        color: colors.white,
+    },
+    emptyContainer: {
+        padding: spacing.xl,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    emptyText: {
+        fontSize: typography.fontSize.base,
+        fontFamily: typography.fontFamily.display,
+        color: colors.zinc400,
+        textAlign: 'center',
     },
 });

@@ -26,16 +26,20 @@ def create_app(config_name=None):
     
     # Registrar blueprints
     from app.routes.auth_routes import auth_bp
+    from app.routes.subject_routes import subject_bp
+    
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
+    app.register_blueprint(subject_bp, url_prefix='/api/subjects')
     
     # Rota raiz
     @app.route('/')
     def index():
         return {
-            'message': '🚀 API Assistente 360',
+            'message': 'API Assistente 360',
             'version': '1.0.0',
             'endpoints': {
-                'auth': '/api/auth'
+                'auth': '/api/auth',
+                'subjects': '/api/subjects'
             }
         }
     
