@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -6,6 +6,7 @@ import {
     ScrollView,
     SafeAreaView,
     TouchableOpacity,
+    ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -14,7 +15,7 @@ import { BottomNav, NavItem } from '@/components/navigation/BottomNav';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing } from '@/constants/spacing';
-import { clearAuth } from '@/services/api';
+import { clearAuth, getTeacherClasses, TeacherClass, getMe } from '@/services/api';
 
 /**
  * TeacherDashboardScreen - Dashboard do Professor
@@ -22,6 +23,9 @@ import { clearAuth } from '@/services/api';
  */
 export default function TeacherDashboardScreen() {
     const [activeNavId, setActiveNavId] = useState('dashboard');
+    const [classes, setClasses] = useState<TeacherClass[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [userName, setUserName] = useState('Professor');
 
     const navItems: NavItem[] = [
         { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
@@ -30,15 +34,28 @@ export default function TeacherDashboardScreen() {
         { id: 'reports', label: 'Relatórios', iconName: 'assessment' },
     ];
 
-    // Mock class data
-    const classes = [
-        {
-            id: '1',
-            name: 'Cálculo I',
-            students: 35,
-            schedule: 'Seg/Qua 14h-16h',
-        },
-    ];
+    // Buscar dados do backend
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                // Buscar nome do usuário
+                const meResponse = await getMe();
+                if (meResponse.success && meResponse.user) {
+                    setUserName(meResponse.user.name);
+                }
+
+                // Buscar turmas/disciplinas
+                const classesData = await getTeacherClasses();
+                setClasses(classesData);
+            } catch (error) {
+                console.error('Erro ao buscar dados:', error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        fetchData();
+    }, []);
 
     const handleNavPress = (id: string) => {
         setActiveNavId(id);
@@ -77,7 +94,7 @@ export default function TeacherDashboardScreen() {
                     showsVerticalScrollIndicator={false}
                 >
                     <Header
-                        userName="Professor"
+                        userName={userName}
                         avatarUri="https://i.pravatar.cc/150?img=33"
                         darkMode
                         onNotificationPress={() => console.log('Notifications')}
@@ -86,34 +103,48 @@ export default function TeacherDashboardScreen() {
                     <View style={[styles.section, styles.lastSection]}>
                         <Text style={styles.sectionTitle}>Minhas Turmas</Text>
                         <View style={styles.classesContainer}>
-                            {classes.map((classItem) => (
-                                <TouchableOpacity
-                                    key={classItem.id}
-                                    style={styles.classCard}
-                                    onPress={handleAttendancePress}
-                                    activeOpacity={0.7}
-                                >
-                                    <View style={styles.classHeader}>
-                                        <View style={styles.classIcon}>
-                                            <MaterialIcons name="school" size={24} color={colors.white} />
+                            {isLoading ? (
+                                <View style={styles.loadingContainer}>
+                                    <ActivityIndicator size="large" color={colors.primary} />
+                                    <Text style={styles.loadingText}>Carregando turmas...</Text>
+                                </View>
+                            ) : classes.length === 0 ? (
+                                <View style={styles.emptyContainer}>
+                                    <MaterialIcons name="school" size={48} color={colors.zinc600} />
+                                    <Text style={styles.emptyText}>Nenhuma turma encontrada</Text>
+                                </View>
+                            ) : (
+                                classes.map((classItem) => (
+                                    <TouchableOpacity
+                                        key={classItem.id}
+                                        style={styles.classCard}
+                                        onPress={handleAttendancePress}
+                                        activeOpacity={0.7}
+                                    >
+                                        <View style={styles.classHeader}>
+                                            <View style={styles.classIcon}>
+                                                <MaterialIcons name="school" size={24} color={colors.white} />
+                                            </View>
+                                            <View style={styles.classInfo}>
+                                                <Text style={styles.className}>{classItem.name}</Text>
+                                                <Text style={styles.classSchedule}>{classItem.schedule}</Text>
+                                            </View>
                                         </View>
-                                        <View style={styles.classInfo}>
-                                            <Text style={styles.className}>{classItem.name}</Text>
-                                            <Text style={styles.classSchedule}>{classItem.schedule}</Text>
+                                        <View style={styles.classFooter}>
+                                            <View style={styles.studentsInfo}>
+                                                <MaterialIcons name="people" size={16} color={colors.zinc400} />
+                                                <Text style={styles.studentsCount}>
+                                                    {classItem.student_count || 0} alunos
+                                                </Text>
+                                            </View>
+                                            <View style={styles.attendanceButton}>
+                                                <MaterialIcons name="fact-check" size={16} color={colors.primary} />
+                                                <Text style={styles.attendanceText}>Fazer Chamada</Text>
+                                            </View>
                                         </View>
-                                    </View>
-                                    <View style={styles.classFooter}>
-                                        <View style={styles.studentsInfo}>
-                                            <MaterialIcons name="people" size={16} color={colors.zinc400} />
-                                            <Text style={styles.studentsCount}>{classItem.students} alunos</Text>
-                                        </View>
-                                        <View style={styles.attendanceButton}>
-                                            <MaterialIcons name="fact-check" size={16} color={colors.primary} />
-                                            <Text style={styles.attendanceText}>Fazer Chamada</Text>
-                                        </View>
-                                    </View>
-                                </TouchableOpacity>
-                            ))}
+                                    </TouchableOpacity>
+                                ))
+                            )}
                         </View>
                     </View>
 
@@ -175,6 +206,26 @@ const styles = StyleSheet.create({
     classesContainer: {
         paddingHorizontal: spacing.base,
         gap: spacing.md,
+    },
+    loadingContainer: {
+        alignItems: 'center',
+        paddingVertical: spacing['2xl'],
+        gap: spacing.md,
+    },
+    loadingText: {
+        fontSize: typography.fontSize.sm,
+        fontFamily: typography.fontFamily.display,
+        color: colors.zinc400,
+    },
+    emptyContainer: {
+        alignItems: 'center',
+        paddingVertical: spacing['2xl'],
+        gap: spacing.md,
+    },
+    emptyText: {
+        fontSize: typography.fontSize.base,
+        fontFamily: typography.fontFamily.display,
+        color: colors.zinc400,
     },
     classCard: {
         backgroundColor: 'rgba(39, 39, 42, 0.5)',

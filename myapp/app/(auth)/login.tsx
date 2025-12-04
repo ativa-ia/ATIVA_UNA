@@ -22,7 +22,6 @@ import { login, saveAuth } from '@/services/api';
  */
 
 export default function LoginScreen() {
-    const [selectedRole, setSelectedRole] = useState<'student' | 'teacher'>('student');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -100,51 +99,6 @@ export default function LoginScreen() {
 
                 {/* Form */}
                 <View style={styles.form}>
-                    {/* Profile Selection Title */}
-                    <Text style={styles.profileTitle}>
-                        Para começar, selecione o seu perfil:
-                    </Text>
-
-                    {/* Role Selection */}
-                    <View style={styles.roleSelectionContainer}>
-                        <View style={styles.roleSelection}>
-                            <TouchableOpacity
-                                style={[
-                                    styles.roleOption,
-                                    selectedRole === 'student' && styles.roleOptionActive,
-                                ]}
-                                onPress={() => setSelectedRole('student')}
-                                activeOpacity={0.7}
-                            >
-                                <Text
-                                    style={[
-                                        styles.roleOptionText,
-                                        selectedRole === 'student' && styles.roleOptionTextActive,
-                                    ]}
-                                >
-                                    Sou Aluno
-                                </Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[
-                                    styles.roleOption,
-                                    selectedRole === 'teacher' && styles.roleOptionActive,
-                                ]}
-                                onPress={() => setSelectedRole('teacher')}
-                                activeOpacity={0.7}
-                            >
-                                <Text
-                                    style={[
-                                        styles.roleOptionText,
-                                        selectedRole === 'teacher' && styles.roleOptionTextActive,
-                                    ]}
-                                >
-                                    Sou Professor
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-
                     {/* Input Fields */}
                     <View style={styles.inputsContainer}>
                         <Input

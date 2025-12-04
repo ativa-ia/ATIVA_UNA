@@ -178,3 +178,37 @@ export const getSubjectMaterials = async (subjectId: number): Promise<Material[]
 
     return response.json();
 };
+
+// ========== TEACHER API ==========
+
+export interface TeacherClass {
+    id: number;
+    name: string;
+    code: string;
+    schedule?: string;
+    location?: string;
+    student_count?: number;
+}
+
+// Buscar turmas/disciplinas do professor
+export const getTeacherClasses = async (): Promise<TeacherClass[]> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/subjects`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    const subjects = await response.json();
+
+    // Mapear para o formato esperado pelo dashboard
+    return subjects.map((subject: any) => ({
+        id: subject.id,
+        name: subject.name,
+        code: subject.code,
+        schedule: subject.schedule || 'Seg/Qua 14h-16h',
+        location: subject.location,
+        student_count: subject.student_count || 0,
+    }));
+};
