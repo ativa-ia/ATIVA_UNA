@@ -1,9 +1,10 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '../../constants/colors';
 import { typography } from '../../constants/typography';
-import { spacing } from '../../constants/spacing';
+import { spacing, borderRadius } from '../../constants/spacing';
 
 export interface NavItem {
     id: string;
@@ -24,11 +25,14 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     onItemPress,
     darkMode = false,
 }) => {
+    const insets = useSafeAreaInsets();
+
     return (
         <View
             style={[
                 styles.container,
                 darkMode ? styles.containerDark : styles.containerLight,
+                { bottom: insets.bottom + spacing.sm } // 8px + safe area from bottom edge
             ]}
         >
             <View style={styles.content}>
@@ -52,6 +56,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                                     isActive && styles.labelActive,
                                     darkMode && !isActive && styles.labelDark,
                                 ]}
+                                numberOfLines={1}
                             >
                                 {item.label}
                             </Text>
@@ -66,35 +71,44 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 const styles = StyleSheet.create({
     container: {
         position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        borderTopWidth: 1,
+        // bottom is set dynamically via inline style
+        left: spacing.base, // More margin from sides
+        right: spacing.base,
+        borderRadius: borderRadius.xl, // Rounder corners
+        borderWidth: 1,
+        overflow: 'hidden',
+        elevation: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 12,
     },
     containerLight: {
         backgroundColor: colors.backgroundLight,
-        borderTopColor: colors.zinc200,
+        borderColor: colors.zinc200,
     },
     containerDark: {
         backgroundColor: colors.backgroundDark,
-        borderTopColor: colors.zinc800,
+        borderColor: colors.zinc800,
     },
     content: {
         flexDirection: 'row',
-        height: 80,
-        maxWidth: 448, // max-w-md
+        height: 50, // Reduced height further
+        maxWidth: 448,
         marginHorizontal: 'auto',
         alignItems: 'center',
         justifyContent: 'space-around',
-        paddingHorizontal: spacing.lg,
-        gap: spacing.md,
+        paddingHorizontal: spacing.sm,
     },
     item: {
         flexDirection: 'column',
         alignItems: 'center',
-        gap: 4,
-        padding: spacing.sm,
+        justifyContent: 'center',
+        gap: 2, // Reduced gap
+        paddingVertical: spacing.xs,
+        paddingHorizontal: spacing.sm,
         flex: 1,
+        minWidth: 50,
     },
     label: {
         fontSize: typography.fontSize.xs,

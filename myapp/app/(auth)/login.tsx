@@ -294,7 +294,6 @@ const styles = StyleSheet.create({
         paddingTop: spacing['2xl'],
         paddingHorizontal: spacing.base,
         gap: spacing.md,
-        // alignItems: 'center', // Removed to allow full width buttons
     },
     linkButton: {
         paddingVertical: spacing.sm,

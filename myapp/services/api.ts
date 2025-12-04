@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 //const API_URL = 'http://localhost:3000/api';
 
 // Para testar em dispositivo físico, use seu IP local:
-const API_URL = 'http://192.168.0.237:3000/api';
+const API_URL = 'http://192.168.0.236:3000/api';
 
 export interface LoginData {
     email: string;
