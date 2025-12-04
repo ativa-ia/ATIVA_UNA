@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
     View,
     Text,
@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { BottomNav, NavItem } from '@/components/navigation/BottomNav';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing } from '@/constants/spacing';
@@ -17,6 +18,30 @@ import { spacing } from '@/constants/spacing';
  * Tela placeholder para calendário acadêmico
  */
 export default function CalendarScreen() {
+    const [activeNavId, setActiveNavId] = useState('calendar');
+
+    const navItems: NavItem[] = [
+        { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
+        { id: 'calendar', label: 'Calendário', iconName: 'calendar-today' },
+        { id: 'grades', label: 'Notas', iconName: 'school' },
+    ];
+
+    const handleNavPress = (id: string) => {
+        setActiveNavId(id);
+
+        switch (id) {
+            case 'dashboard':
+                router.push('./dashboard');
+                break;
+            case 'calendar':
+                // Already on calendar, do nothing
+                break;
+            case 'grades':
+                router.push('./grades');
+                break;
+        }
+    };
+
     return (
         <SafeAreaView style={styles.safeArea}>
             <View style={styles.container}>
@@ -40,6 +65,14 @@ export default function CalendarScreen() {
                         O calendário acadêmico estará disponível em breve.
                     </Text>
                 </View>
+
+                {/* Bottom Navigation */}
+                <BottomNav
+                    items={navItems}
+                    activeId={activeNavId}
+                    onItemPress={handleNavPress}
+                    darkMode
+                />
             </View>
         </SafeAreaView>
     );

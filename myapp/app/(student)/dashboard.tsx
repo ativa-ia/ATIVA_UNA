@@ -90,7 +90,6 @@ export default function StudentDashboardScreen() {
         { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
         { id: 'calendar', label: 'Calendário', iconName: 'calendar-today' },
         { id: 'grades', label: 'Notas', iconName: 'school' },
-        { id: 'messages', label: 'Mensagens', iconName: 'chat-bubble' },
     ];
 
     const handleNavPress = (id: string) => {
@@ -106,15 +105,12 @@ export default function StudentDashboardScreen() {
             case 'grades':
                 router.push('./grades');
                 break;
-            case 'messages':
-                router.push('./messages');
-                break;
         }
     };
 
     const handleSubjectPress = (subject: Subject) => {
         router.push({
-            pathname: './materials',
+            pathname: './subject-details',
             params: { subject: subject.name }
         });
     };
@@ -140,19 +136,7 @@ export default function StudentDashboardScreen() {
                         onNotificationPress={() => console.log('Notifications')}
                     />
 
-                    {/* Avisos Section */}
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Avisos</Text>
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.horizontalScroll}
-                        >
-                            {notices.map((notice) => (
-                                <NoticeCard key={notice.id} notice={notice} darkMode />
-                            ))}
-                        </ScrollView>
-                    </View>
+
 
                     {/* Minhas Disciplinas Section */}
                     <View style={styles.section}>
@@ -169,15 +153,7 @@ export default function StudentDashboardScreen() {
                         </View>
                     </View>
 
-                    {/* Próximas Atividades Section */}
-                    <View style={[styles.section, styles.lastSection]}>
-                        <Text style={styles.sectionTitle}>Próximas Atividades</Text>
-                        <View style={styles.activitiesList}>
-                            {activities.map((activity) => (
-                                <ActivityCard key={activity.id} activity={activity} darkMode />
-                            ))}
-                        </View>
-                    </View>
+
 
                     {/* Logout Button */}
                     <View style={styles.logoutContainer}>
