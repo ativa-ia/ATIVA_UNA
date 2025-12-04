@@ -95,3 +95,86 @@ export const getUserRole = async (): Promise<'student' | 'teacher' | null> => {
     const role = await AsyncStorage.getItem('userRole');
     return role as 'student' | 'teacher' | null;
 };
+
+// ========== SUBJECTS API ==========
+
+export interface Subject {
+    id: number;
+    name: string;
+    code: string;
+    description?: string;
+    credits?: number;
+    image_url?: string;
+    imageUrl?: string; // Alias para compatibilidade
+}
+
+export interface SubjectDetails extends Subject {
+    professor?: string;
+    schedule?: string;
+    location?: string;
+    pending_activities?: number;
+}
+
+export interface Material {
+    id: number;
+    subject_id: number;
+    subject?: string;
+    title: string;
+    type: 'pdf' | 'video' | 'link';
+    url?: string;
+    size?: string;
+    uploaded_by: number;
+    uploaded_at?: string;
+    upload_date?: string;
+}
+
+// Buscar disciplinas do usuário logado
+export const getSubjects = async (): Promise<Subject[]> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/subjects`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    const data = await response.json();
+
+    // Mapear image_url para imageUrl para compatibilidade
+    return data.map((subject: any) => ({
+        ...subject,
+        imageUrl: subject.image_url || subject.imageUrl
+    }));
+};
+
+// Buscar detalhes de uma disciplina
+export const getSubjectDetails = async (subjectId: number): Promise<SubjectDetails> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/subjects/${subjectId}`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    const data = await response.json();
+
+    // Mapear image_url para imageUrl
+    return {
+        ...data,
+        imageUrl: data.image_url || data.imageUrl
+    };
+};
+
+// Buscar materiais de uma disciplina
+export const getSubjectMaterials = async (subjectId: number): Promise<Material[]> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/subjects/${subjectId}/materials`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    return response.json();
+};
