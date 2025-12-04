@@ -4,10 +4,10 @@ import {
     Text,
     StyleSheet,
     ScrollView,
-    SafeAreaView,
     TouchableOpacity,
     Image,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '@/constants/colors';
@@ -21,6 +21,7 @@ import { spacing } from '@/constants/spacing';
  * Tela com informações detalhadas da disciplina, ações e avisos
  */
 export default function SubjectDetailsScreen() {
+    const insets = useSafeAreaInsets();
     const params = useLocalSearchParams();
     const subjectName = params.subject as string || 'Disciplina';
 
@@ -38,10 +39,10 @@ export default function SubjectDetailsScreen() {
 
 
     return (
-        <SafeAreaView style={styles.safeArea}>
+        <View style={styles.safeArea}>
             <View style={styles.container}>
                 {/* Header */}
-                <View style={styles.header}>
+                <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
                     <TouchableOpacity
                         style={styles.backButton}
                         onPress={() => router.back()}
@@ -124,7 +125,7 @@ export default function SubjectDetailsScreen() {
                     </View>
                 </ScrollView>
             </View>
-        </SafeAreaView>
+        </View>
     );
 }
 

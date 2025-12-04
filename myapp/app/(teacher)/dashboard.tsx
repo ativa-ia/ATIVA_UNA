@@ -6,56 +6,69 @@ import {
     ScrollView,
     SafeAreaView,
     TouchableOpacity,
-    ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Header } from '@/components/navigation/Header';
 import { BottomNav, NavItem } from '@/components/navigation/BottomNav';
+import { SubjectCard } from '@/components/cards/SubjectCard';
+import { Subject } from '@/types';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing } from '@/constants/spacing';
-import { getTeacherClasses, TeacherClass, getMe } from '@/services/api';
+import { getSubjects, Subject as APISubject, getTeacherClasses, TeacherClass, getMe } from '@/services/api';
 
 /**
  * TeacherDashboardScreen - Dashboard do Professor
- * Tela principal do professor com turmas e atividades
+ * Tela principal do professor com disciplinas que leciona
  */
 export default function TeacherDashboardScreen() {
     const [activeNavId, setActiveNavId] = useState('dashboard');
-    const [classes, setClasses] = useState<TeacherClass[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const [subjects, setSubjects] = useState<Subject[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [userName, setUserName] = useState('Professor');
+
+    // Buscar disciplinas da API
+    useEffect(() => {
+        loadData();
+    }, []);
+
+    const loadData = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+
+            // Buscar nome do usuário
+            const meResponse = await getMe();
+            if (meResponse.success && meResponse.user) {
+                setUserName(meResponse.user.name);
+            }
+
+            // Buscar disciplinas
+            const data = await getSubjects();
+
+            // Converter para o formato esperado pelo componente
+            const formattedSubjects: Subject[] = data.map((subject: APISubject) => ({
+                id: subject.id.toString(),
+                name: subject.name,
+                imageUrl: subject.imageUrl || subject.image_url || 'https://via.placeholder.com/400'
+            }));
+
+            setSubjects(formattedSubjects);
+        } catch (err) {
+            console.error('Erro ao carregar disciplinas:', err);
+            setError('Erro ao carregar disciplinas');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const navItems: NavItem[] = [
         { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
-        { id: 'classes', label: 'Turmas', iconName: 'groups' },
         { id: 'materials', label: 'Materiais', iconName: 'folder' },
         { id: 'reports', label: 'Relatórios', iconName: 'assessment' },
     ];
-
-    // Buscar dados do backend
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                // Buscar nome do usuário
-                const meResponse = await getMe();
-                if (meResponse.success && meResponse.user) {
-                    setUserName(meResponse.user.name);
-                }
-
-                // Buscar turmas/disciplinas
-                const classesData = await getTeacherClasses();
-                setClasses(classesData);
-            } catch (error) {
-                console.error('Erro ao buscar dados:', error);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        fetchData();
-    }, []);
 
     const handleNavPress = (id: string) => {
         setActiveNavId(id);
@@ -63,9 +76,6 @@ export default function TeacherDashboardScreen() {
         switch (id) {
             case 'dashboard':
                 // Already on dashboard
-                break;
-            case 'classes':
-                router.push('/(teacher)/classes');
                 break;
             case 'materials':
                 router.push('/(teacher)/materials');
@@ -76,10 +86,12 @@ export default function TeacherDashboardScreen() {
         }
     };
 
-    const handleAttendancePress = () => {
-        router.push('/(teacher)/attendance');
+    const handleSubjectPress = (subject: Subject) => {
+        router.push({
+            pathname: '/(teacher)/attendance',
+            params: { subject: subject.name }
+        });
     };
-
 
 
     return (
@@ -90,65 +102,52 @@ export default function TeacherDashboardScreen() {
                     contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
                 >
+                    {/* Header */}
                     <Header
                         userName={userName}
                         avatarUri="https://i.pravatar.cc/150?img=33"
                         darkMode
                         onNotificationPress={() => console.log('Notifications')}
-                        onProfilePress={() => router.push('./settings')}
+                        onProfilePress={() => router.push('/(teacher)/settings')}
                     />
 
-                    <View style={[styles.section, styles.lastSection]}>
-                        <Text style={styles.sectionTitle}>Minhas Turmas</Text>
-                        <View style={styles.classesContainer}>
-                            {isLoading ? (
-                                <View style={styles.loadingContainer}>
-                                    <ActivityIndicator size="large" color={colors.primary} />
-                                    <Text style={styles.loadingText}>Carregando turmas...</Text>
-                                </View>
-                            ) : classes.length === 0 ? (
-                                <View style={styles.emptyContainer}>
-                                    <MaterialIcons name="school" size={48} color={colors.zinc600} />
-                                    <Text style={styles.emptyText}>Nenhuma turma encontrada</Text>
-                                </View>
-                            ) : (
-                                classes.map((classItem) => (
-                                    <TouchableOpacity
-                                        key={classItem.id}
-                                        style={styles.classCard}
-                                        onPress={handleAttendancePress}
-                                        activeOpacity={0.7}
-                                    >
-                                        <View style={styles.classHeader}>
-                                            <View style={styles.classIcon}>
-                                                <MaterialIcons name="school" size={24} color={colors.white} />
-                                            </View>
-                                            <View style={styles.classInfo}>
-                                                <Text style={styles.className}>{classItem.name}</Text>
-                                                <Text style={styles.classSchedule}>{classItem.schedule}</Text>
-                                            </View>
-                                        </View>
-                                        <View style={styles.classFooter}>
-                                            <View style={styles.studentsInfo}>
-                                                <MaterialIcons name="people" size={16} color={colors.zinc400} />
-                                                <Text style={styles.studentsCount}>
-                                                    {classItem.student_count || 0} alunos
-                                                </Text>
-                                            </View>
-                                            <View style={styles.attendanceButton}>
-                                                <MaterialIcons name="fact-check" size={16} color={colors.primary} />
-                                                <Text style={styles.attendanceText}>Fazer Chamada</Text>
-                                            </View>
-                                        </View>
-                                    </TouchableOpacity>
-                                ))
-                            )}
-                        </View>
+                    {/* Minhas Disciplinas Section */}
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Minhas Disciplinas</Text>
+
+                        {loading ? (
+                            <View style={styles.loadingContainer}>
+                                <Text style={styles.loadingText}>Carregando disciplinas...</Text>
+                            </View>
+                        ) : error ? (
+                            <View style={styles.errorContainer}>
+                                <Text style={styles.errorText}>{error}</Text>
+                                <TouchableOpacity style={styles.retryButton} onPress={loadData}>
+                                    <Text style={styles.retryButtonText}>Tentar novamente</Text>
+                                </TouchableOpacity>
+                            </View>
+                        ) : subjects.length === 0 ? (
+                            <View style={styles.emptyContainer}>
+                                <Text style={styles.emptyText}>Nenhuma disciplina encontrada</Text>
+                            </View>
+                        ) : (
+                            <View style={styles.subjectsGrid}>
+                                {subjects.map((subject) => (
+                                    <SubjectCard
+                                        key={subject.id}
+                                        subject={subject}
+                                        style={styles.subjectCard}
+                                        onPress={() => handleSubjectPress(subject)}
+                                    />
+                                ))}
+                            </View>
+                        )}
                     </View>
 
 
                 </ScrollView>
 
+                {/* Bottom Navigation */}
                 <BottomNav
                     items={navItems}
                     activeId={activeNavId}
@@ -172,13 +171,10 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     scrollContent: {
-        paddingBottom: 96,
+        paddingBottom: spacing.base,
     },
     section: {
         marginTop: spacing.base,
-    },
-    lastSection: {
-        marginBottom: spacing.base,
     },
     sectionTitle: {
         fontSize: typography.fontSize.lg,
@@ -190,103 +186,60 @@ const styles = StyleSheet.create({
         paddingBottom: spacing.sm,
         paddingTop: spacing.base,
     },
-    horizontalScroll: {
-        paddingHorizontal: spacing.base,
-        paddingVertical: spacing.sm,
-        gap: spacing.md,
-    },
-    classesContainer: {
+    subjectsGrid: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
         paddingHorizontal: spacing.base,
         gap: spacing.md,
     },
+    subjectCard: {
+        width: '47%',
+        minWidth: 158,
+    },
+
     loadingContainer: {
+        padding: spacing.xl,
         alignItems: 'center',
-        paddingVertical: spacing['2xl'],
-        gap: spacing.md,
+        justifyContent: 'center',
     },
     loadingText: {
-        fontSize: typography.fontSize.sm,
-        fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
-    },
-    emptyContainer: {
-        alignItems: 'center',
-        paddingVertical: spacing['2xl'],
-        gap: spacing.md,
-    },
-    emptyText: {
         fontSize: typography.fontSize.base,
-        fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        fontFamily: typography.fontFamily.body,
+        color: colors.textSecondary,
     },
-    classCard: {
-        backgroundColor: 'rgba(39, 39, 42, 0.5)',
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: colors.zinc800,
-        padding: spacing.base,
-        gap: spacing.md,
-    },
-    classHeader: {
-        flexDirection: 'row',
+    errorContainer: {
+        padding: spacing.xl,
         alignItems: 'center',
-        gap: spacing.md,
-    },
-    classIcon: {
-        width: 48,
-        height: 48,
-        borderRadius: 12,
-        backgroundColor: colors.primary,
         justifyContent: 'center',
-        alignItems: 'center',
     },
-    classInfo: {
-        flex: 1,
+    errorText: {
+        fontSize: typography.fontSize.base,
+        fontFamily: typography.fontFamily.body,
+        color: '#ef4444',
+        marginBottom: spacing.md,
+        textAlign: 'center',
     },
-    className: {
-        fontSize: typography.fontSize.lg,
-        fontWeight: typography.fontWeight.bold,
-        fontFamily: typography.fontFamily.display,
-        color: colors.white,
-        marginBottom: 4,
-    },
-    classSchedule: {
-        fontSize: typography.fontSize.sm,
-        fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
-    },
-    classFooter: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingTop: spacing.sm,
-        borderTopWidth: 1,
-        borderTopColor: colors.zinc800,
-    },
-    studentsInfo: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-    },
-    studentsCount: {
-        fontSize: typography.fontSize.sm,
-        fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
-    },
-    attendanceButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
-        paddingHorizontal: spacing.md,
+    retryButton: {
+        paddingHorizontal: spacing.base,
         paddingVertical: spacing.sm,
-        backgroundColor: colors.primaryOpacity20,
+        backgroundColor: colors.primary,
         borderRadius: 8,
     },
-    attendanceText: {
+    retryButtonText: {
         fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.semibold,
         fontFamily: typography.fontFamily.display,
-        color: colors.primary,
+        color: colors.white,
     },
-
+    emptyContainer: {
+        padding: spacing.xl,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    emptyText: {
+        fontSize: typography.fontSize.base,
+        fontFamily: typography.fontFamily.body,
+        color: colors.textSecondary,
+        textAlign: 'center',
+    },
 });

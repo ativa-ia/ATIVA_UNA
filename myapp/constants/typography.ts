@@ -7,6 +7,7 @@ export const typography = {
     // Font Family
     fontFamily: {
         display: 'Lexend',
+        body: 'Lexend',
     },
 
     // Font Sizes
