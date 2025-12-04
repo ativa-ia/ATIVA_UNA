@@ -88,7 +88,7 @@ export default function TeacherDashboardScreen() {
 
     const handleSubjectPress = (subject: Subject) => {
         router.push({
-            pathname: '/(teacher)/attendance',
+            pathname: '/(teacher)/subject-details',
             params: { subject: subject.name }
         });
     };
