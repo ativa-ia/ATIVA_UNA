@@ -16,7 +16,7 @@ import { Subject } from '@/types';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing } from '@/constants/spacing';
-import { clearAuth, getSubjects, Subject as APISubject, getMe } from '@/services/api';
+import { getSubjects, Subject as APISubject, getTeacherClasses, TeacherClass, getMe } from '@/services/api';
 
 /**
  * TeacherDashboardScreen - Dashboard do Professor
@@ -93,10 +93,6 @@ export default function TeacherDashboardScreen() {
         });
     };
 
-    const handleLogout = async () => {
-        await clearAuth();
-        router.replace('/(auth)/login');
-    };
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -112,6 +108,7 @@ export default function TeacherDashboardScreen() {
                         avatarUri="https://i.pravatar.cc/150?img=33"
                         darkMode
                         onNotificationPress={() => console.log('Notifications')}
+                        onProfilePress={() => router.push('/(teacher)/settings')}
                     />
 
                     {/* Minhas Disciplinas Section */}
@@ -147,13 +144,7 @@ export default function TeacherDashboardScreen() {
                         )}
                     </View>
 
-                    {/* Logout Button */}
-                    <View style={styles.logoutContainer}>
-                        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                            <MaterialIcons name="logout" size={20} color="#ef4444" />
-                            <Text style={styles.logoutText}>Sair</Text>
-                        </TouchableOpacity>
-                    </View>
+
                 </ScrollView>
 
                 {/* Bottom Navigation */}
@@ -205,27 +196,7 @@ const styles = StyleSheet.create({
         width: '47%',
         minWidth: 158,
     },
-    logoutContainer: {
-        paddingHorizontal: spacing.base,
-        paddingVertical: spacing.xl,
-    },
-    logoutButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: spacing.sm,
-        padding: spacing.base,
-        backgroundColor: 'rgba(239, 68, 68, 0.1)',
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#ef4444',
-    },
-    logoutText: {
-        fontSize: typography.fontSize.base,
-        fontWeight: typography.fontWeight.semibold,
-        fontFamily: typography.fontFamily.display,
-        color: '#ef4444',
-    },
+
     loadingContainer: {
         padding: spacing.xl,
         alignItems: 'center',
@@ -233,23 +204,23 @@ const styles = StyleSheet.create({
     },
     loadingText: {
         fontSize: typography.fontSize.base,
-        fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        fontFamily: typography.fontFamily.body,
+        color: colors.textSecondary,
     },
     errorContainer: {
         padding: spacing.xl,
         alignItems: 'center',
         justifyContent: 'center',
-        gap: spacing.md,
     },
     errorText: {
         fontSize: typography.fontSize.base,
-        fontFamily: typography.fontFamily.display,
+        fontFamily: typography.fontFamily.body,
         color: '#ef4444',
+        marginBottom: spacing.md,
         textAlign: 'center',
     },
     retryButton: {
-        paddingHorizontal: spacing.lg,
+        paddingHorizontal: spacing.base,
         paddingVertical: spacing.sm,
         backgroundColor: colors.primary,
         borderRadius: 8,
@@ -267,8 +238,8 @@ const styles = StyleSheet.create({
     },
     emptyText: {
         fontSize: typography.fontSize.base,
-        fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        fontFamily: typography.fontFamily.body,
+        color: colors.textSecondary,
         textAlign: 'center',
     },
 });

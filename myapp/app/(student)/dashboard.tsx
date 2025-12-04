@@ -18,7 +18,7 @@ import { Subject, Notice, Activity } from '@/types';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing } from '@/constants/spacing';
-import { clearAuth, getSubjects, Subject as APISubject } from '@/services/api';
+import { getSubjects, Subject as APISubject } from '@/services/api';
 
 /**
  * StudentDashboardScreen - Dashboard do Aluno
@@ -103,11 +103,6 @@ export default function StudentDashboardScreen() {
         });
     };
 
-    const handleLogout = async () => {
-        await clearAuth();
-        router.replace('/(auth)/login');
-    };
-
     return (
         <SafeAreaView style={styles.safeArea}>
             <View style={styles.container}>
@@ -122,6 +117,7 @@ export default function StudentDashboardScreen() {
                         avatarUri="https://i.pravatar.cc/150?img=12"
                         darkMode
                         onNotificationPress={() => console.log('Notifications')}
+                        onProfilePress={() => router.push('./settings')}
                     />
 
 
@@ -159,15 +155,6 @@ export default function StudentDashboardScreen() {
                         )}
                     </View>
 
-
-
-                    {/* Logout Button */}
-                    <View style={styles.logoutContainer}>
-                        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-                            <MaterialIcons name="logout" size={20} color="#ef4444" />
-                            <Text style={styles.logoutText}>Sair</Text>
-                        </TouchableOpacity>
-                    </View>
                 </ScrollView>
 
                 {/* Bottom Navigation */}
@@ -227,31 +214,7 @@ const styles = StyleSheet.create({
         width: '47%', // Approximately 2 columns with gap
         minWidth: 158,
     },
-    activitiesList: {
-        paddingHorizontal: spacing.base,
-        gap: spacing.md,
-    },
-    logoutContainer: {
-        paddingHorizontal: spacing.base,
-        paddingVertical: spacing.xl,
-    },
-    logoutButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: spacing.sm,
-        padding: spacing.base,
-        backgroundColor: 'rgba(239, 68, 68, 0.1)',
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#ef4444',
-    },
-    logoutText: {
-        fontSize: typography.fontSize.base,
-        fontWeight: typography.fontWeight.semibold,
-        fontFamily: typography.fontFamily.display,
-        color: '#ef4444',
-    },
+
     loadingContainer: {
         padding: spacing.xl,
         alignItems: 'center',
