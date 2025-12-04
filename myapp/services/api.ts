@@ -24,7 +24,7 @@ export interface AuthResponse {
     user?: {
         id: number;
         email: string;
-        role: 'student' | 'teacher';
+        role: 'student' | 'teacher' | 'admin';
         name: string;
     };
     token?: string;
@@ -91,9 +91,9 @@ export const isAuthenticated = async (): Promise<boolean> => {
 };
 
 // Obter role do usuário
-export const getUserRole = async (): Promise<'student' | 'teacher' | null> => {
+export const getUserRole = async (): Promise<'student' | 'teacher' | 'admin' | null> => {
     const role = await AsyncStorage.getItem('userRole');
-    return role as 'student' | 'teacher' | null;
+    return role as 'student' | 'teacher' | 'admin' | null;
 };
 
 // ========== SUBJECTS API ==========
