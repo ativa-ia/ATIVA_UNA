@@ -86,12 +86,15 @@ const styles = StyleSheet.create({
         marginHorizontal: 'auto',
         alignItems: 'center',
         justifyContent: 'space-around',
-        paddingHorizontal: spacing.base,
+        paddingHorizontal: spacing.lg,
+        gap: spacing.md,
     },
     item: {
         flexDirection: 'column',
         alignItems: 'center',
         gap: 4,
+        padding: spacing.sm,
+        flex: 1,
     },
     label: {
         fontSize: typography.fontSize.xs,
