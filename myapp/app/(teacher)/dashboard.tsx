@@ -45,6 +45,39 @@ export default function TeacherDashboardScreen() {
         { id: 'reports', label: 'Relatórios', iconName: 'assessment' },
     ];
 
+    // Mock class data
+    const classes = [
+        {
+            id: '1',
+            name: 'Cálculo I',
+            students: 35,
+            schedule: 'Seg/Qua 14h-16h',
+        },
+    ];
+
+    const handleNavPress = (id: string) => {
+        setActiveNavId(id);
+
+        switch (id) {
+            case 'dashboard':
+                // Already on dashboard
+                break;
+            case 'classes':
+                router.push('/(teacher)/classes');
+                break;
+            case 'materials':
+                router.push('/(teacher)/materials');
+                break;
+            case 'reports':
+                router.push('/(teacher)/reports');
+                break;
+        }
+    };
+
+    const handleAttendancePress = () => {
+        router.push('/(teacher)/attendance');
+    };
+
     const handleLogout = async () => {
         await clearAuth();
         router.replace('/(auth)/login');
@@ -80,9 +113,36 @@ export default function TeacherDashboardScreen() {
 
                     <View style={[styles.section, styles.lastSection]}>
                         <Text style={styles.sectionTitle}>Minhas Turmas</Text>
-                        <Text style={styles.placeholder}>
-                            Conteúdo das turmas será exibido aqui
-                        </Text>
+                        <View style={styles.classesContainer}>
+                            {classes.map((classItem) => (
+                                <TouchableOpacity
+                                    key={classItem.id}
+                                    style={styles.classCard}
+                                    onPress={handleAttendancePress}
+                                    activeOpacity={0.7}
+                                >
+                                    <View style={styles.classHeader}>
+                                        <View style={styles.classIcon}>
+                                            <MaterialIcons name="school" size={24} color={colors.white} />
+                                        </View>
+                                        <View style={styles.classInfo}>
+                                            <Text style={styles.className}>{classItem.name}</Text>
+                                            <Text style={styles.classSchedule}>{classItem.schedule}</Text>
+                                        </View>
+                                    </View>
+                                    <View style={styles.classFooter}>
+                                        <View style={styles.studentsInfo}>
+                                            <MaterialIcons name="people" size={16} color={colors.zinc400} />
+                                            <Text style={styles.studentsCount}>{classItem.students} alunos</Text>
+                                        </View>
+                                        <View style={styles.attendanceButton}>
+                                            <MaterialIcons name="fact-check" size={16} color={colors.primary} />
+                                            <Text style={styles.attendanceText}>Fazer Chamada</Text>
+                                        </View>
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
                     </View>
 
                     {/* Logout Button */}
@@ -97,7 +157,7 @@ export default function TeacherDashboardScreen() {
                 <BottomNav
                     items={navItems}
                     activeId={activeNavId}
-                    onItemPress={setActiveNavId}
+                    onItemPress={handleNavPress}
                     darkMode
                 />
             </View>
@@ -140,13 +200,78 @@ const styles = StyleSheet.create({
         paddingVertical: spacing.sm,
         gap: spacing.md,
     },
-    placeholder: {
-        fontSize: typography.fontSize.base,
+    classesContainer: {
+        paddingHorizontal: spacing.base,
+        gap: spacing.md,
+    },
+    classCard: {
+        backgroundColor: 'rgba(39, 39, 42, 0.5)',
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: colors.zinc800,
+        padding: spacing.base,
+        gap: spacing.md,
+    },
+    classHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.md,
+    },
+    classIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 12,
+        backgroundColor: colors.primary,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    classInfo: {
+        flex: 1,
+    },
+    className: {
+        fontSize: typography.fontSize.lg,
+        fontWeight: typography.fontWeight.bold,
+        fontFamily: typography.fontFamily.display,
+        color: colors.white,
+        marginBottom: 4,
+    },
+    classSchedule: {
+        fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.display,
         color: colors.zinc400,
-        paddingHorizontal: spacing.base,
-        paddingVertical: spacing.xl,
-        textAlign: 'center',
+    },
+    classFooter: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingTop: spacing.sm,
+        borderTopWidth: 1,
+        borderTopColor: colors.zinc800,
+    },
+    studentsInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    studentsCount: {
+        fontSize: typography.fontSize.sm,
+        fontFamily: typography.fontFamily.display,
+        color: colors.zinc400,
+    },
+    attendanceButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+        backgroundColor: colors.primaryOpacity20,
+        borderRadius: 8,
+    },
+    attendanceText: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: typography.fontWeight.semibold,
+        fontFamily: typography.fontFamily.display,
+        color: colors.primary,
     },
     logoutContainer: {
         paddingHorizontal: spacing.base,
