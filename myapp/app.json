@@ -38,6 +38,12 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "@jamsch/expo-speech-recognition",
+        {
+          "microphonePermission": "Permitir acesso ao microfone para transcrição de voz."
+        }
       ]
     ],
     "experiments": {

@@ -8,6 +8,7 @@ from app.models.teaching import Teaching
 from app.models.material import Material
 from app.models.activity import Activity
 from app.models.announcement import Announcement
+from app.models.ai_session import AISession, AIMessage
 
 __all__ = [
     'User',
@@ -18,5 +19,8 @@ __all__ = [
     'Teaching',
     'Material',
     'Activity',
-    'Announcement'
+    'Announcement',
+    'AISession',
+    'AIMessage'
 ]
+

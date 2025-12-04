@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
     View,
     Text,
@@ -8,6 +8,8 @@ import {
     TextInput,
     KeyboardAvoidingView,
     Platform,
+    ActivityIndicator,
+    Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -16,6 +18,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
+import { sendAIMessage } from '@/services/ai';
+import { sendNotification } from '@/services/notifications';
+// import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "@jamsch/expo-speech-recognition";
 
 interface Message {
     id: string;
@@ -39,6 +44,7 @@ export default function AIAssistantScreen() {
     const insets = useSafeAreaInsets();
     const params = useLocalSearchParams();
     const subjectName = params.subject as string || 'Disciplina';
+    const subjectId = parseInt(params.subjectId as string) || 1;
     const scrollViewRef = useRef<ScrollView>(null);
 
     const [messages, setMessages] = useState<Message[]>([
@@ -50,6 +56,145 @@ export default function AIAssistantScreen() {
         }
     ]);
     const [inputText, setInputText] = useState('');
+
+    // Speech Recognition State
+    const [isRecording, setIsRecording] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
+
+    const recognitionRef = useRef<any>(null);
+    const isRecordingRef = useRef(false);
+    const silenceTimer = useRef<any>(null);
+    const currentSessionTextRef = useRef(''); // Texto da sessão atual
+    const savedTextRef = useRef(''); // Texto salvo de sessões anteriores
+    const [triggerAutoSend, setTriggerAutoSend] = useState(false);
+    const [sendingNotificationId, setSendingNotificationId] = useState<string | null>(null);
+
+    // Efeito para Auto-Send
+    useEffect(() => {
+        if (triggerAutoSend && inputText.trim()) {
+            handleSend();
+            setTriggerAutoSend(false);
+            savedTextRef.current = '';
+            currentSessionTextRef.current = '';
+        }
+    }, [triggerAutoSend]);
+
+    useEffect(() => {
+        if (Platform.OS === 'web') {
+            // @ts-ignore
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (SpeechRecognition) {
+                recognitionRef.current = new SpeechRecognition();
+                recognitionRef.current.continuous = true;
+                recognitionRef.current.interimResults = true;
+                recognitionRef.current.lang = 'pt-BR';
+
+                recognitionRef.current.onresult = (event: any) => {
+                    let interimTranscript = '';
+                    let finalTranscript = '';
+
+                    // Iterar sobre os resultados para separar final de interim
+                    for (let i = event.resultIndex; i < event.results.length; ++i) {
+                        if (event.results[i].isFinal) {
+                            finalTranscript += event.results[i][0].transcript;
+                        } else {
+                            interimTranscript += event.results[i][0].transcript;
+                        }
+                    }
+
+                    // No modo continuous do Chrome, event.results acumula tudo da sessão atual.
+                    // Vamos pegar tudo o que já foi transcrito nesta sessão.
+                    const sessionTranscript = Array.from(event.results)
+                        .map((result: any) => result[0].transcript)
+                        .join('');
+
+                    currentSessionTextRef.current = sessionTranscript;
+
+                    // Combinar texto salvo (de sessões anteriores) + texto da sessão atual
+                    const fullText = (savedTextRef.current + (savedTextRef.current && sessionTranscript ? ' ' : '') + sessionTranscript).trim();
+                    setInputText(fullText);
+
+                    // Resetar timer de silêncio
+                    if (silenceTimer.current) clearTimeout(silenceTimer.current);
+
+                    if (sessionTranscript.trim()) {
+                        silenceTimer.current = setTimeout(() => {
+                            console.log("Silêncio detectado, enviando...");
+                            isRecordingRef.current = false;
+                            recognitionRef.current.stop();
+                            setIsRecording(false);
+                            setTriggerAutoSend(true);
+                        }, 2000);
+                    }
+                };
+
+                recognitionRef.current.onerror = (event: any) => {
+                    console.error('Speech recognition error', event.error);
+                    if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                        setIsRecording(false);
+                        isRecordingRef.current = false;
+                    }
+                };
+
+                recognitionRef.current.onend = () => {
+                    // Salvar o texto da sessão que acabou
+                    if (currentSessionTextRef.current) {
+                        savedTextRef.current = (savedTextRef.current + ' ' + currentSessionTextRef.current).trim();
+                        currentSessionTextRef.current = '';
+                    }
+
+                    if (isRecordingRef.current) {
+                        try {
+                            recognitionRef.current.start();
+                        } catch (e) {
+                            setIsRecording(false);
+                            isRecordingRef.current = false;
+                        }
+                    } else {
+                        setIsRecording(false);
+                    }
+                };
+            }
+        }
+        return () => {
+            if (silenceTimer.current) clearTimeout(silenceTimer.current);
+        };
+    }, []);
+
+    const handleMicPress = async () => {
+        if (Platform.OS === 'web') {
+            if (!recognitionRef.current) {
+                Alert.alert('Erro', 'Seu navegador não suporta reconhecimento de voz.');
+                return;
+            }
+
+            if (isRecording) {
+                isRecordingRef.current = false;
+                recognitionRef.current.stop();
+                setIsRecording(false);
+                if (silenceTimer.current) clearTimeout(silenceTimer.current);
+            } else {
+                isRecordingRef.current = true;
+                // Se o usuário já digitou algo, salvamos como texto base
+                if (inputText.trim()) {
+                    savedTextRef.current = inputText;
+                } else {
+                    savedTextRef.current = '';
+                }
+                currentSessionTextRef.current = '';
+
+                try {
+                    recognitionRef.current.start();
+                    setIsRecording(true);
+                } catch (e) {
+                    console.error('Erro ao iniciar:', e);
+                    isRecordingRef.current = false;
+                }
+            }
+        } else {
+            Alert.alert("Em breve", "O reconhecimento de voz no celular estará disponível na versão final.");
+        }
+    };
 
     const quickActions: QuickAction[] = [
         {
@@ -78,8 +223,15 @@ export default function AIAssistantScreen() {
         },
     ];
 
-    const handleSend = () => {
-        if (!inputText.trim()) return;
+    const handleSend = async () => {
+        if (!inputText.trim() || isLoading) return;
+
+        /*
+        if (isRecording) {
+            ExpoSpeechRecognitionModule.stop();
+            setIsRecording(false);
+        }
+        */
 
         const userMessage: Message = {
             id: Date.now().toString(),
@@ -89,21 +241,33 @@ export default function AIAssistantScreen() {
         };
 
         setMessages(prev => [...prev, userMessage]);
+        const messageToSend = inputText;
         setInputText('');
+        setIsLoading(true);
+        scrollViewRef.current?.scrollToEnd({ animated: true });
 
-        // Simulate AI response
-        setTimeout(() => {
+        try {
+            const response = await sendAIMessage(subjectId, messageToSend);
+
             const aiResponse: Message = {
                 id: (Date.now() + 1).toString(),
-                text: 'Entendi sua solicitação! Estou processando...\n\nEsta é uma demonstração. A integração com a IA será implementada em breve.',
+                text: response.success ? response.response || 'Resposta vazia' : (response.error || 'Erro ao processar'),
                 isUser: false,
                 timestamp: new Date(),
             };
             setMessages(prev => [...prev, aiResponse]);
+        } catch (error) {
+            const errorMessage: Message = {
+                id: (Date.now() + 1).toString(),
+                text: 'Erro ao conectar com a IA. Verifique sua conexão.',
+                isUser: false,
+                timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, errorMessage]);
+        } finally {
+            setIsLoading(false);
             scrollViewRef.current?.scrollToEnd({ animated: true });
-        }, 1000);
-
-        scrollViewRef.current?.scrollToEnd({ animated: true });
+        }
     };
 
     const handleQuickAction = (action: QuickAction) => {
@@ -115,6 +279,28 @@ export default function AIAssistantScreen() {
         };
 
         setInputText(prompts[action.id] || '');
+    };
+
+    const handleSendToStudents = async (message: Message) => {
+        setSendingNotificationId(message.id);
+        try {
+            const result = await sendNotification({
+                subject_id: subjectId,
+                title: 'Nova mensagem do Professor',
+                message: message.text,
+                type: 'general'
+            });
+
+            if (result.success) {
+                Alert.alert('Sucesso', 'Notificação enviada para os alunos!');
+            } else {
+                Alert.alert('Erro', result.message || 'Falha ao enviar notificação');
+            }
+        } catch (error) {
+            Alert.alert('Erro', 'Erro de conexão ao enviar notificação');
+        } finally {
+            setSendingNotificationId(null);
+        }
     };
 
     return (
@@ -205,9 +391,36 @@ export default function AIAssistantScreen() {
                                     ]}>
                                         {message.text}
                                     </Text>
+                                    {!message.isUser && (
+                                        <TouchableOpacity
+                                            style={styles.notifyButton}
+                                            onPress={() => handleSendToStudents(message)}
+                                            disabled={sendingNotificationId === message.id}
+                                        >
+                                            {sendingNotificationId === message.id ? (
+                                                <ActivityIndicator size="small" color={colors.white} />
+                                            ) : (
+                                                <>
+                                                    <MaterialIcons name="notifications-active" size={14} color={colors.zinc400} />
+                                                    <Text style={styles.notifyButtonText}>Enviar para Alunos</Text>
+                                                </>
+                                            )}
+                                        </TouchableOpacity>
+                                    )}
                                 </View>
                             </View>
                         ))}
+                        {isLoading && (
+                            <View style={[styles.messageBubble, styles.aiBubble]}>
+                                <View style={styles.aiAvatar}>
+                                    <MaterialIcons name="auto-awesome" size={16} color={colors.white} />
+                                </View>
+                                <View style={[styles.messageContent, styles.aiMessageContent]}>
+                                    <ActivityIndicator size="small" color="#10b981" />
+                                    <Text style={[styles.messageText, { marginTop: 8 }]}>Pensando...</Text>
+                                </View>
+                            </View>
+                        )}
                     </ScrollView>
 
                     {/* Input Area */}
@@ -215,25 +428,39 @@ export default function AIAssistantScreen() {
                         <View style={styles.inputWrapper}>
                             <TextInput
                                 style={styles.textInput}
-                                placeholder="Digite sua mensagem..."
-                                placeholderTextColor={colors.zinc500}
+                                placeholder={isRecording ? "Ouvindo..." : "Digite sua mensagem..."}
+                                placeholderTextColor={isRecording ? '#10b981' : colors.zinc500}
                                 value={inputText}
                                 onChangeText={setInputText}
                                 multiline
                                 maxLength={1000}
+                                editable={!isRecording}
                             />
+                            <TouchableOpacity
+                                style={[
+                                    styles.micButton,
+                                    isRecording && styles.micButtonActive,
+                                ]}
+                                onPress={handleMicPress}
+                            >
+                                <MaterialIcons
+                                    name={isRecording ? "stop" : "mic"}
+                                    size={24}
+                                    color={isRecording ? colors.white : colors.zinc600}
+                                />
+                            </TouchableOpacity>
                             <TouchableOpacity
                                 style={[
                                     styles.sendButton,
                                     !inputText.trim() && styles.sendButtonDisabled,
                                 ]}
                                 onPress={handleSend}
-                                disabled={!inputText.trim()}
+                                disabled={!inputText.trim() || isRecording}
                             >
                                 <MaterialIcons
                                     name="send"
                                     size={24}
-                                    color={inputText.trim() ? colors.white : colors.zinc600}
+                                    color={inputText.trim() && !isRecording ? colors.white : colors.zinc600}
                                 />
                             </TouchableOpacity>
                         </View>
@@ -374,6 +601,21 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(39, 39, 42, 0.8)',
         borderBottomLeftRadius: 4,
     },
+    notifyButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        marginTop: 8,
+        paddingTop: 8,
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(255,255,255,0.1)',
+        alignSelf: 'flex-start',
+    },
+    notifyButtonText: {
+        fontSize: typography.fontSize.xs,
+        color: colors.zinc400,
+        fontFamily: typography.fontFamily.display,
+    },
     messageText: {
         fontSize: typography.fontSize.base,
         fontFamily: typography.fontFamily.display,
@@ -409,15 +651,26 @@ const styles = StyleSheet.create({
         maxHeight: 100,
         paddingVertical: spacing.xs,
     },
+    micButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: colors.zinc800,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    micButtonActive: {
+        backgroundColor: '#ef4444',
+    },
     sendButton: {
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: colors.primary,
+        backgroundColor: colors.zinc800,
         justifyContent: 'center',
         alignItems: 'center',
     },
     sendButtonDisabled: {
-        backgroundColor: colors.zinc800,
+        opacity: 0.5,
     },
 });
