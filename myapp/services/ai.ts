@@ -1,6 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const API_URL = 'http://192.168.0.236:3000/api';
+import { API_URL } from './api';
 
 export interface AIChatResponse {
     success: boolean;

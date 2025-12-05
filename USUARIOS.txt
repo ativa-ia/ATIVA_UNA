@@ -1,0 +1,65 @@
+===============================================================================
+                    ASSISTENTE 360 - USUÁRIOS DO SISTEMA
+===============================================================================
+
+ADMIN
+-----
+Email: admin@assistente360.com
+Senha: admin123
+
+===============================================================================
+
+PROFESSORES
+-----------
+
+1. Profª Maria Silva
+   Email: maria.silva@edu.br
+   Senha: prof123
+   Disciplinas: Programação I, POO
+
+2. Prof. João Santos
+   Email: joao.santos@edu.br
+   Senha: prof123
+   Disciplinas: Cálculo I, Algoritmos e Estruturas de Dados
+
+3. Profª Ana Costa
+   Email: ana.costa@edu.br
+   Senha: prof123
+   Disciplinas: Banco de Dados I, Desenvolvimento Web
+
+4. Prof. Carlos Lima
+   Email: carlos.lima@edu.br
+   Senha: prof123
+   Disciplinas: Inteligência Artificial, Redes de Computadores
+
+===============================================================================
+
+ALUNOS
+------
+
+1. Lucas Oliveira
+   Email: lucas.aluno@edu.br
+   Senha: aluno123
+   Matriculado em: Programação I, Cálculo I, Algoritmos
+
+2. Julia Mendes
+   Email: julia.aluno@edu.br
+   Senha: aluno123
+   Matriculado em: POO, Banco de Dados I, Desenvolvimento Web
+
+3. Pedro Henrique
+   Email: pedro.aluno@edu.br
+   Senha: aluno123
+   Matriculado em: Programação I, POO, Inteligência Artificial
+
+4. Maria Clara
+   Email: maria.aluno@edu.br
+   Senha: aluno123
+   Matriculado em: Cálculo I, Banco de Dados I, Redes
+
+5. Rafael Costa
+   Email: rafael.aluno@edu.br
+   Senha: aluno123
+   Matriculado em: Algoritmos, Desenvolvimento Web, IA, Redes
+
+===============================================================================
