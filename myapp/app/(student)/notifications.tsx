@@ -25,11 +25,31 @@ export default function StudentNotificationsScreen() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
+    const [userId, setUserId] = useState<number | null>(null);
+
     const fetchNotifications = async () => {
         try {
-            // Em um app real, pegariamos o ID do aluno do token
-            // Aqui vamos usar um ID fixo ou pegar do storage se tiver
-            const response = await fetch(`${API_URL}/notifications/student/1`);
+            const token = await AsyncStorage.getItem('authToken');
+
+            // Primeiro, buscar o ID do usuário logado
+            const meResponse = await fetch(`${API_URL}/auth/me`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const meData = await meResponse.json();
+
+            if (!meData.success || !meData.user) {
+                console.error('Usuário não encontrado');
+                setLoading(false);
+                return;
+            }
+
+            const studentId = meData.user.id;
+            setUserId(studentId);
+
+            // Buscar notificações do aluno
+            const response = await fetch(`${API_URL}/notifications/student/${studentId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
             const data = await response.json();
             if (data.success) {
                 setNotifications(data.notifications);

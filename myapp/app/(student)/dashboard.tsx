@@ -16,7 +16,7 @@ import { Subject, Activity } from '@/types';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing } from '@/constants/spacing';
-import { getSubjects, Subject as APISubject } from '@/services/api';
+import { getSubjects, Subject as APISubject, getMe } from '@/services/api';
 
 /**
  * StudentDashboardScreen - Dashboard do Aluno
@@ -27,16 +27,38 @@ export default function StudentDashboardScreen() {
     const [subjects, setSubjects] = useState<Subject[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [userName, setUserName] = useState('Aluno');
+
+    // Formatar data atual
+    const getCurrentDate = () => {
+        const date = new Date();
+        const options: Intl.DateTimeFormatOptions = {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'short'
+        };
+        const formatted = date.toLocaleDateString('pt-BR', options);
+        // Capitalizar primeira letra
+        return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+    };
 
     // Buscar disciplinas da API
     useEffect(() => {
-        loadSubjects();
+        loadData();
     }, []);
 
-    const loadSubjects = async () => {
+    const loadData = async () => {
         try {
             setLoading(true);
             setError(null);
+
+            // Buscar nome do usuário
+            const meResponse = await getMe();
+            if (meResponse.success && meResponse.user) {
+                setUserName(meResponse.user.name);
+            }
+
+            // Buscar disciplinas
             const data = await getSubjects();
 
             // Converter para o formato esperado pelo componente
@@ -95,8 +117,8 @@ export default function StudentDashboardScreen() {
                     <View style={styles.headerContainer}>
                         <View style={styles.headerTop}>
                             <View>
-                                <Text style={styles.greeting}>Olá, Aluno</Text>
-                                <Text style={styles.date}>Quarta, 4 Dez</Text>
+                                <Text style={styles.greeting}>Olá, {userName}</Text>
+                                <Text style={styles.date}>{getCurrentDate()}</Text>
                             </View>
                             <TouchableOpacity
                                 style={styles.notificationButton}
@@ -120,7 +142,7 @@ export default function StudentDashboardScreen() {
                         ) : error ? (
                             <View style={styles.errorContainer}>
                                 <Text style={styles.errorText}>{error}</Text>
-                                <TouchableOpacity style={styles.retryButton} onPress={loadSubjects}>
+                                <TouchableOpacity style={styles.retryButton} onPress={loadData}>
                                     <Text style={styles.retryButtonText}>Tentar novamente</Text>
                                 </TouchableOpacity>
                             </View>
