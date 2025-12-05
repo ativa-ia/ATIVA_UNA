@@ -1,6 +1,6 @@
 import requests
 
-url = "https://assistente360-360un.vercel.app/debug"
+url = "https://ativa-ia-9rkb.vercel.app/debug"
 print(f"Testing: {url}")
 try:
     resp = requests.get(url, timeout=15)

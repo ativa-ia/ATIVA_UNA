@@ -1,7 +1,7 @@
 import requests
 import json
 
-url = "https://assistente360-360un.vercel.app/api/auth/register"
+url = "https://ativa-ia-9rkb.vercel.app/api/auth/register"
 payload = {
     "email": "test_final@example.com",
     "password": "password123",

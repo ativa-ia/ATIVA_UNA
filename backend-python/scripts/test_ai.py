@@ -1,7 +1,7 @@
 import requests
 
 # Primeiro, fazer login para pegar o token
-login_url = "https://assistente360-360un.vercel.app/api/auth/login"
+login_url = "https://ativa-ia-9rkb.vercel.app/api/auth/login"
 login_payload = {
     "email": "maria.silva@edu.br",
     "password": "prof123"
@@ -21,7 +21,7 @@ print(f"   Token obtido: {token[:20]}...")
 
 # Testar o endpoint de chat
 print("\n2. Testando chat com IA...")
-chat_url = "https://assistente360-360un.vercel.app/api/ai/chat"
+chat_url = "https://ativa-ia-9rkb.vercel.app/api/ai/chat"
 chat_payload = {
     "message": "Olá, pode me ajudar?",
     "subject_id": 1

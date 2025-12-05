@@ -3,7 +3,7 @@ import random
 import string
 import sys
 
-BASE_URL = "https://assistente360-360un.vercel.app/api"
+BASE_URL = "https://ativa-ia-9rkb.vercel.app/api"
 
 def generate_random_email():
     return f"test_{''.join(random.choices(string.ascii_lowercase, k=8))}@example.com"
@@ -17,7 +17,7 @@ def test_api():
     # 1. Testar Health Check
     try:
         print("\n🏥 Testando Health Check...")
-        resp = requests.get("https://assistente360-360un.vercel.app/health")
+        resp = requests.get("https://ativa-ia-9rkb.vercel.app/health")
         print(f"Status: {resp.status_code}")
         print(f"Response: {resp.text}")
     except Exception as e:
