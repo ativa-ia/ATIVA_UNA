@@ -22,6 +22,7 @@ import { spacing, borderRadius } from '@/constants/spacing';
 import { sendAIMessage } from '@/services/ai';
 import { sendNotification } from '@/services/notifications';
 import { processContent, createQuiz, broadcastQuiz, Quiz } from '@/services/quiz';
+import { getChatHistory, saveChatMessage, clearChatHistory } from '@/services/chat';
 
 interface Message {
     id: string;
@@ -48,15 +49,56 @@ export default function AIAssistantScreen() {
     const subjectId = parseInt(params.subjectId as string) || 1;
     const scrollViewRef = useRef<ScrollView>(null);
 
-    const [messages, setMessages] = useState<Message[]>([
-        {
-            id: '1',
-            text: `Olá! Sou seu assistente de IA para a disciplina ${subjectName}. Como posso ajudá-lo hoje?\n\nPosso ajudar com:\n• Gerar quizzes e atividades\n• Criar resumos de conteúdo\n• Sugerir planos de aula\n• Analisar desempenho dos alunos\n• Responder dúvidas sobre o conteúdo`,
-            isUser: false,
-            timestamp: new Date(),
-        }
-    ]);
+    const welcomeMessage: Message = {
+        id: '1',
+        text: `Olá! Sou seu assistente de IA para a disciplina ${subjectName}. Como posso ajudá-lo hoje?\n\nPosso ajudar com:\n• Gerar quizzes e atividades\n• Criar resumos de conteúdo\n• Sugerir planos de aula\n• Analisar desempenho dos alunos\n• Responder dúvidas sobre o conteúdo`,
+        isUser: false,
+        timestamp: new Date(),
+    };
+
+    const [messages, setMessages] = useState<Message[]>([welcomeMessage]);
     const [inputText, setInputText] = useState('');
+    const [isChatLoading, setIsChatLoading] = useState(true);
+
+    // Carregar histórico de chat ao iniciar
+    useEffect(() => {
+        const loadHistory = async () => {
+            try {
+                const result = await getChatHistory(subjectId);
+                if (result.success && result.messages && result.messages.length > 0) {
+                    const loadedMessages: Message[] = result.messages.map((m) => ({
+                        id: m.id.toString(),
+                        text: m.content,
+                        isUser: m.is_user,
+                        timestamp: new Date(m.created_at),
+                    }));
+                    setMessages(loadedMessages);
+                }
+            } catch (error) {
+                console.log('Erro ao carregar histórico:', error);
+            } finally {
+                setIsChatLoading(false);
+            }
+        };
+        loadHistory();
+    }, [subjectId]);
+
+    // Limpar chat
+    const handleClearChat = () => {
+        Alert.alert(
+            'Limpar Conversa',
+            'Tem certeza que deseja apagar todo o histórico desta conversa?',
+            [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                    text: 'Limpar', style: 'destructive', onPress: async () => {
+                        await clearChatHistory(subjectId);
+                        setMessages([welcomeMessage]);
+                    }
+                }
+            ]
+        );
+    };
 
     // Speech Recognition State
     const [isRecording, setIsRecording] = useState(false);
@@ -313,11 +355,19 @@ export default function AIAssistantScreen() {
                 '🎉 Quiz Enviado!',
                 `Quiz enviado para ${broadcastResult.enrolled_students} alunos!\n\nTempo: ${Math.floor(quizTimeLimit / 60)} minutos`,
                 [{
-                    text: 'OK', onPress: () => {
+                    text: 'Ver Resultados', onPress: () => {
                         setShowQuizPreview(false);
                         setGeneratedQuiz(null);
                         setDictatedContent('');
                         setInputText('');
+                        // Navegar para tela de resultados
+                        router.push({
+                            pathname: '/(teacher)/quiz-results',
+                            params: {
+                                quizId: createResult.quiz.id.toString(),
+                                subject: subjectName
+                            }
+                        });
                     }
                 }]
             );
@@ -469,7 +519,13 @@ export default function AIAssistantScreen() {
                             <Text style={styles.headerSubtitle}>{subjectName}</Text>
                         </View>
                     </View>
-                    <View style={styles.placeholder} />
+                    <TouchableOpacity
+                        style={styles.clearButton}
+                        onPress={handleClearChat}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                        <MaterialIcons name="delete-outline" size={22} color="rgba(255,255,255,0.7)" />
+                    </TouchableOpacity>
                 </LinearGradient>
 
                 <KeyboardAvoidingView
@@ -873,6 +929,13 @@ const styles = StyleSheet.create({
     placeholder: {
         width: 48,
         height: 48,
+    },
+    clearButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     keyboardAvoid: {
         flex: 1,

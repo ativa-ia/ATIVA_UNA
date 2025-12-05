@@ -42,21 +42,27 @@ export default function SubjectDetailsScreen() {
             if (quizStarted) return;
 
             try {
+                console.log(`[Quiz Poll] Checking for quiz in subject ${subjectId}...`);
                 const result = await checkActiveQuiz(subjectId);
+                console.log('[Quiz Poll] Result:', JSON.stringify(result, null, 2));
+
                 if (result.success && result.active && result.quiz) {
+                    console.log('[Quiz Poll] Quiz ATIVO encontrado:', result.quiz.title);
                     setActiveQuiz(result.quiz);
                     setAlreadyAnswered(result.already_answered || false);
 
                     // Só mostra popup se não respondeu E não começou ainda
                     if (!result.already_answered && !quizStarted) {
+                        console.log('[Quiz Poll] Mostrando popup...');
                         setShowQuizPopup(true);
                     }
                 } else {
+                    console.log('[Quiz Poll] Nenhum quiz ativo');
                     setActiveQuiz(null);
                     setShowQuizPopup(false);
                 }
             } catch (error) {
-                console.log('Erro ao verificar quiz:', error);
+                console.log('[Quiz Poll] Erro ao verificar quiz:', error);
             }
         };
 

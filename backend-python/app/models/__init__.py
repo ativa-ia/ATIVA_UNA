@@ -10,6 +10,7 @@ from app.models.activity import Activity
 from app.models.announcement import Announcement
 from app.models.ai_session import AISession, AIMessage
 from app.models.quiz import Quiz, QuizQuestion, QuizResponse
+from app.models.chat import ChatMessage
 
 __all__ = [
     'User',
@@ -25,6 +26,7 @@ __all__ = [
     'AIMessage',
     'Quiz',
     'QuizQuestion',
-    'QuizResponse'
+    'QuizResponse',
+    'ChatMessage'
 ]
 

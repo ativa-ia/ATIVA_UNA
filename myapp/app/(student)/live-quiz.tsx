@@ -83,21 +83,17 @@ export default function LiveQuizScreen() {
     const handleSubmit = async (autoSubmit = false) => {
         if (!quiz) return;
 
-        if (!autoSubmit) {
-            const answeredCount = Object.keys(answers).length;
-            const totalQuestions = quiz.questions?.length || 0;
+        const answeredCount = Object.keys(answers).length;
+        const totalQuestions = quiz.questions?.length || 0;
+        const minRequired = Math.ceil(totalQuestions * 0.8); // 80% mínimo
 
-            if (answeredCount < totalQuestions) {
-                Alert.alert(
-                    'Atenção',
-                    `Você respondeu ${answeredCount} de ${totalQuestions} perguntas. Deseja enviar mesmo assim?`,
-                    [
-                        { text: 'Cancelar', style: 'cancel' },
-                        { text: 'Enviar', onPress: () => submitAnswers() }
-                    ]
-                );
-                return;
-            }
+        if (!autoSubmit && answeredCount < minRequired) {
+            Alert.alert(
+                '⚠️ Responda Mais Perguntas',
+                `Você precisa responder pelo menos ${minRequired} de ${totalQuestions} perguntas (80%).\n\nVocê respondeu apenas ${answeredCount}.`,
+                [{ text: 'OK' }]
+            );
+            return;
         }
 
         await submitAnswers();
@@ -268,27 +264,38 @@ export default function LiveQuizScreen() {
 
                 {/* Quick navigation */}
                 <View style={styles.quickNav}>
-                    <Text style={styles.quickNavLabel}>Ir para pergunta:</Text>
+                    <View style={styles.quickNavHeader}>
+                        <Text style={styles.quickNavLabel}>Ir para pergunta:</Text>
+                        <Text style={styles.answeredCount}>
+                            {Object.keys(answers).length}/{quiz.questions.length} respondidas
+                        </Text>
+                    </View>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                         <View style={styles.quickNavButtons}>
-                            {quiz.questions.map((q: QuizQuestion, i: number) => (
-                                <TouchableOpacity
-                                    key={i}
-                                    style={[
-                                        styles.quickNavBtn,
-                                        i === currentQuestion && styles.quickNavBtnActive,
-                                        answers[q.id?.toString()] !== undefined && styles.quickNavBtnAnswered
-                                    ]}
-                                    onPress={() => setCurrentQuestion(i)}
-                                >
-                                    <Text style={[
-                                        styles.quickNavBtnText,
-                                        i === currentQuestion && styles.quickNavBtnTextActive
-                                    ]}>
-                                        {i + 1}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
+                            {quiz.questions.map((q: QuizQuestion, i: number) => {
+                                const isAnswered = answers[q.id?.toString()] !== undefined;
+                                const isCurrent = i === currentQuestion;
+                                return (
+                                    <TouchableOpacity
+                                        key={i}
+                                        style={[
+                                            styles.quickNavBtn,
+                                            isCurrent && styles.quickNavBtnActive,
+                                            isAnswered && styles.quickNavBtnAnswered,
+                                            !isAnswered && !isCurrent && styles.quickNavBtnUnanswered
+                                        ]}
+                                        onPress={() => setCurrentQuestion(i)}
+                                    >
+                                        <Text style={[
+                                            styles.quickNavBtnText,
+                                            isCurrent && styles.quickNavBtnTextActive,
+                                            !isAnswered && !isCurrent && styles.quickNavBtnTextUnanswered
+                                        ]}>
+                                            {i + 1}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
                         </View>
                     </ScrollView>
                 </View>
@@ -499,6 +506,10 @@ const styles = StyleSheet.create({
     quickNavBtnAnswered: {
         borderColor: '#10b981',
     },
+    quickNavBtnUnanswered: {
+        borderColor: '#ef4444',
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    },
     quickNavBtnText: {
         fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.semibold,
@@ -507,6 +518,21 @@ const styles = StyleSheet.create({
     },
     quickNavBtnTextActive: {
         color: colors.white,
+    },
+    quickNavBtnTextUnanswered: {
+        color: '#ef4444',
+    },
+    quickNavHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: spacing.sm,
+    },
+    answeredCount: {
+        fontSize: typography.fontSize.sm,
+        fontFamily: typography.fontFamily.display,
+        color: '#10b981',
+        fontWeight: typography.fontWeight.semibold,
     },
     footer: {
         flexDirection: 'row',

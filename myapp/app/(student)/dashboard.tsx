@@ -101,7 +101,7 @@ export default function StudentDashboardScreen() {
     const handleSubjectPress = (subject: Subject) => {
         router.push({
             pathname: './subject-details',
-            params: { subject: subject.name }
+            params: { subject: subject.name, subjectId: subject.id }
         });
     };
 
