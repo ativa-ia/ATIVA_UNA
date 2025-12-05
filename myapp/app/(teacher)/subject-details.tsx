@@ -122,6 +122,30 @@ export default function TeacherSubjectDetailsScreen() {
                             </LinearGradient>
                         </TouchableOpacity>
 
+                        {/* Transcription Button */}
+                        <TouchableOpacity
+                            style={styles.transcriptionButton}
+                            activeOpacity={0.8}
+                            onPress={() => router.push({
+                                pathname: '/(teacher)/transcription',
+                                params: { subject: subjectName, subjectId: subjectId }
+                            })}
+                        >
+                            <LinearGradient
+                                colors={['#8b5cf6', '#a855f7', '#c084fc']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={styles.aiButtonGradient}
+                            >
+                                <MaterialIcons name="mic" size={24} color={colors.white} />
+                                <View style={styles.aiTextContainer}>
+                                    <Text style={styles.aiButtonText}>Transcrever Aula</Text>
+                                    <Text style={styles.aiButtonSubtext}>Ditar conteúdo e gerar material</Text>
+                                </View>
+                                <MaterialIcons name="arrow-forward-ios" size={18} color="rgba(255,255,255,0.7)" />
+                            </LinearGradient>
+                        </TouchableOpacity>
+
                         {/* Primary Action - Attendance */}
                         <TouchableOpacity
                             style={styles.primaryButton}
@@ -344,6 +368,15 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
         elevation: 4,
         shadowColor: '#10b981',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+    },
+    transcriptionButton: {
+        borderRadius: 16,
+        overflow: 'hidden',
+        elevation: 4,
+        shadowColor: '#8b5cf6',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,
