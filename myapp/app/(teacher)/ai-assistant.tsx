@@ -95,35 +95,31 @@ export default function AIAssistantScreen() {
                     let interimTranscript = '';
                     let finalTranscript = '';
 
-                    // Iterar sobre os resultados para separar final de interim
+                    // Separar resultados finais e interim
                     for (let i = event.resultIndex; i < event.results.length; ++i) {
+                        const transcript = event.results[i][0].transcript;
                         if (event.results[i].isFinal) {
-                            finalTranscript += event.results[i][0].transcript;
+                            finalTranscript += transcript;
                         } else {
-                            interimTranscript += event.results[i][0].transcript;
+                            interimTranscript = transcript; // Só o último interim
                         }
                     }
 
-                    // Mostrar texto interim em tempo real
-                    setInterimText(interimTranscript);
+                    // Mostrar texto interim em tempo real (popup)
+                    setInterimText(interimTranscript || finalTranscript);
 
-                    // No modo continuous do Chrome, event.results acumula tudo da sessão atual.
-                    // Vamos pegar tudo o que já foi transcrito nesta sessão.
-                    const sessionTranscript = Array.from(event.results)
-                        .map((result: any) => result[0].transcript)
-                        .join('');
-
-                    currentSessionTextRef.current = sessionTranscript;
-
-                    // Combinar texto salvo (de sessões anteriores) + texto da sessão atual
-                    const fullText = (savedTextRef.current + (savedTextRef.current && sessionTranscript ? ' ' : '') + sessionTranscript).trim();
-                    setInputText(fullText);
+                    // Acumular apenas texto final para evitar duplicação
+                    if (finalTranscript) {
+                        const separator = savedTextRef.current ? ' ' : '';
+                        savedTextRef.current = savedTextRef.current + separator + finalTranscript;
+                        setInputText(savedTextRef.current.trim());
+                    }
 
                     // Resetar timer de silêncio
                     if (silenceTimer.current) clearTimeout(silenceTimer.current);
 
                     // Só auto-enviar se NÃO estiver no modo ditado
-                    if (sessionTranscript.trim() && !dictationMode) {
+                    if (!dictationMode && savedTextRef.current.trim()) {
                         silenceTimer.current = setTimeout(() => {
                             console.log("Silêncio detectado, enviando...");
                             isRecordingRef.current = false;
@@ -131,7 +127,7 @@ export default function AIAssistantScreen() {
                             setIsRecording(false);
                             setInterimText('');
                             setTriggerAutoSend(true);
-                        }, 2000);
+                        }, 2500);
                     }
                 };
 
@@ -144,12 +140,7 @@ export default function AIAssistantScreen() {
                 };
 
                 recognitionRef.current.onend = () => {
-                    // Salvar o texto da sessão que acabou
-                    if (currentSessionTextRef.current) {
-                        savedTextRef.current = (savedTextRef.current + ' ' + currentSessionTextRef.current).trim();
-                        currentSessionTextRef.current = '';
-                    }
-
+                    // Em modo ditado, sempre reiniciar automaticamente
                     if (isRecordingRef.current) {
                         try {
                             recognitionRef.current.start();
@@ -166,7 +157,7 @@ export default function AIAssistantScreen() {
         return () => {
             if (silenceTimer.current) clearTimeout(silenceTimer.current);
         };
-    }, []);
+    }, [dictationMode]);
 
     const handleMicPress = async () => {
         if (Platform.OS === 'web') {
@@ -454,8 +445,37 @@ export default function AIAssistantScreen() {
                             )}
                         </View>
 
-                        {/* Indicador de transcrição em tempo real */}
-                        {isRecording && interimText && (
+                        {/* Popup de transcrição em tempo real (modo ditado) */}
+                        {isRecording && dictationMode && (
+                            <View style={styles.dictationPopup}>
+                                <View style={styles.dictationPopupHeader}>
+                                    <View style={styles.recordingIndicator}>
+                                        <View style={styles.recordingDotAnimated} />
+                                        <Text style={styles.recordingLabel}>Gravando...</Text>
+                                    </View>
+                                    <TouchableOpacity
+                                        style={styles.stopDictationButton}
+                                        onPress={handleMicPress}
+                                    >
+                                        <MaterialIcons name="stop" size={20} color={colors.white} />
+                                        <Text style={styles.stopDictationText}>Parar</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                <View style={styles.dictationContent}>
+                                    <Text style={styles.dictationTranscript}>
+                                        {inputText || 'Comece a falar...'}
+                                    </Text>
+                                    {interimText && (
+                                        <Text style={styles.dictationInterim}>
+                                            {interimText}
+                                        </Text>
+                                    )}
+                                </View>
+                            </View>
+                        )}
+
+                        {/* Indicador simples quando não está em modo ditado */}
+                        {isRecording && !dictationMode && interimText && (
                             <View style={styles.interimContainer}>
                                 <View style={styles.recordingDot} />
                                 <Text style={styles.interimText} numberOfLines={1}>
@@ -724,7 +744,7 @@ const styles = StyleSheet.create({
         gap: 6,
         paddingHorizontal: spacing.sm,
         paddingVertical: 6,
-        borderRadius: borderRadius.md,
+        borderRadius: borderRadius.default,
         backgroundColor: 'rgba(39, 39, 42, 0.5)',
         borderWidth: 1,
         borderColor: colors.zinc700,
@@ -747,6 +767,72 @@ const styles = StyleSheet.create({
         color: colors.zinc500,
         fontStyle: 'italic',
     },
+    dictationPopup: {
+        backgroundColor: 'rgba(16, 24, 40, 0.98)',
+        borderRadius: borderRadius.lg,
+        borderWidth: 2,
+        borderColor: '#10b981',
+        padding: spacing.base,
+        marginBottom: spacing.sm,
+        minHeight: 120,
+    },
+    dictationPopupHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: spacing.md,
+        paddingBottom: spacing.sm,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(255,255,255,0.1)',
+    },
+    recordingIndicator: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+    },
+    recordingDotAnimated: {
+        width: 12,
+        height: 12,
+        borderRadius: 6,
+        backgroundColor: '#ef4444',
+    },
+    recordingLabel: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: typography.fontWeight.semibold,
+        fontFamily: typography.fontFamily.display,
+        color: '#ef4444',
+    },
+    stopDictationButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: spacing.md,
+        paddingVertical: 8,
+        backgroundColor: '#ef4444',
+        borderRadius: borderRadius.default,
+    },
+    stopDictationText: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: typography.fontWeight.semibold,
+        fontFamily: typography.fontFamily.display,
+        color: colors.white,
+    },
+    dictationContent: {
+        flex: 1,
+    },
+    dictationTranscript: {
+        fontSize: typography.fontSize.base,
+        fontFamily: typography.fontFamily.display,
+        color: colors.white,
+        lineHeight: 24,
+    },
+    dictationInterim: {
+        fontSize: typography.fontSize.base,
+        fontFamily: typography.fontFamily.display,
+        color: '#10b981',
+        fontStyle: 'italic',
+        marginTop: spacing.sm,
+    },
     interimContainer: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -755,7 +841,7 @@ const styles = StyleSheet.create({
         paddingVertical: 8,
         marginBottom: spacing.sm,
         backgroundColor: 'rgba(16, 185, 129, 0.1)',
-        borderRadius: borderRadius.md,
+        borderRadius: borderRadius.default,
         borderWidth: 1,
         borderColor: 'rgba(16, 185, 129, 0.3)',
     },
