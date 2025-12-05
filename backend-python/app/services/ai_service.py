@@ -3,7 +3,7 @@ Service para integração com Google Gemini AI
 """
 import os
 from dotenv import load_dotenv
-import google.generativeai as genai
+# import google.generativeai as genai
 from typing import List, Optional, Generator
 from app import db
 from app.models.ai_session import AISession, AIMessage
