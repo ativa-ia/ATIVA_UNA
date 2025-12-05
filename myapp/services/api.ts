@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 //const API_URL = 'http://localhost:3000/api';
 
 // Para testar em dispositivo físico, use seu IP local:
-export const API_URL = 'https://assistente360-360un-ad7go2xf4-betozns-projects.vercel.app/api';
+export const API_URL = 'https://assistente360-360un.vercel.app/api';
 
 export interface LoginData {
     email: string;
