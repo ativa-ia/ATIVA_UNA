@@ -15,9 +15,16 @@ load_dotenv()
 
 # Configurar API key
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
+HAS_GEMINI = False
 
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+try:
+    import google.generativeai as genai
+    if GEMINI_API_KEY:
+        genai.configure(api_key=GEMINI_API_KEY)
+    HAS_GEMINI = True
+except ImportError as e:
+    print(f"Aviso: Não foi possível importar google.generativeai: {e}")
+    HAS_GEMINI = False
 
 
 def get_system_prompt(teacher: User, subject: Subject) -> str:
@@ -94,6 +101,9 @@ def chat_with_gemini(
     """
     Envia mensagem para o Gemini e retorna resposta
     """
+    if not HAS_GEMINI:
+        return "Erro: Biblioteca do Google Gemini não instalada no servidor. Contate o administrador."
+
     if not GEMINI_API_KEY:
         return "Erro: GEMINI_API_KEY não configurada. Configure a variável de ambiente."
 
@@ -145,6 +155,10 @@ def chat_stream(
     """
     Versão streaming do chat
     """
+    if not HAS_GEMINI:
+        yield "Erro: Biblioteca do Google Gemini não instalada."
+        return
+
     if not GEMINI_API_KEY:
         yield "Erro: GEMINI_API_KEY não configurada."
         return
