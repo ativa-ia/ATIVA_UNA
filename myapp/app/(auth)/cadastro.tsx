@@ -19,7 +19,7 @@ import { register, saveAuth } from '@/services/api';
 
 /**
  * CadastroScreen - Tela de Cadastro
- * Tela para criar nova conta no Assistente 360
+ * Tela para criar nova conta no ATIVA IA
  */
 
 export default function CadastroScreen() {

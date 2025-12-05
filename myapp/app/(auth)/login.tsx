@@ -18,7 +18,7 @@ import { login, saveAuth } from '@/services/api';
 
 /**
  * LoginScreen - Tela de Login
- * Tela principal de boas-vindas ed login do Assistente 360
+ * Tela principal de boas-vindas ed login do ATIVA IA
  */
 
 export default function LoginScreen() {
@@ -93,7 +93,7 @@ export default function LoginScreen() {
 
                 {/* Header */}
                 <View style={styles.header}>
-                    <Text style={styles.title}>Bem-vindo(a) ao Assistente 360</Text>
+                    <Text style={styles.title}>Bem-vindo(a) ao ATIVA IA</Text>
                     <Text style={styles.subtitle}>
                         Sua jornada acadêmica, mais conectada.
                     </Text>

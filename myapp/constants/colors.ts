@@ -1,6 +1,6 @@
 /**
  * Design System - Colors
- * Paleta de cores do Assistente 360
+ * Paleta de cores do ATIVA IA
  */
 
 export const colors = {

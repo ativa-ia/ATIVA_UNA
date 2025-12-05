@@ -59,7 +59,7 @@ def create_app(config_name=None):
     @app.route('/')
     def index():
         return {
-            'message': 'API Assistente 360',
+            'message': 'API ATIVA IA',
             'version': '1.0.0',
             'endpoints': {
                 'auth': '/api/auth',

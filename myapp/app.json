@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "myapp",
-    "slug": "myapp",
+    "name": "ATIVA IA",
+    "slug": "ativa-ia",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "ativa-ia",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
