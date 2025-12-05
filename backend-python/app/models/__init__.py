@@ -9,6 +9,7 @@ from app.models.material import Material
 from app.models.activity import Activity
 from app.models.announcement import Announcement
 from app.models.ai_session import AISession, AIMessage
+from app.models.quiz import Quiz, QuizQuestion, QuizResponse
 
 __all__ = [
     'User',
@@ -21,6 +22,9 @@ __all__ = [
     'Activity',
     'Announcement',
     'AISession',
-    'AIMessage'
+    'AIMessage',
+    'Quiz',
+    'QuizQuestion',
+    'QuizResponse'
 ]
 

@@ -10,6 +10,7 @@ import {
     Platform,
     ActivityIndicator,
     Alert,
+    Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -20,7 +21,7 @@ import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { sendAIMessage } from '@/services/ai';
 import { sendNotification } from '@/services/notifications';
-// import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "@jamsch/expo-speech-recognition";
+import { processContent, createQuiz, broadcastQuiz, Quiz } from '@/services/quiz';
 
 interface Message {
     id: string;
@@ -62,6 +63,14 @@ export default function AIAssistantScreen() {
     const [isLoading, setIsLoading] = useState(false);
     const [dictationMode, setDictationMode] = useState(false); // Modo ditado (sem auto-enviar)
     const [interimText, setInterimText] = useState(''); // Texto sendo reconhecido em tempo real
+
+    // Post-Dictation Actions State
+    const [showDictationActions, setShowDictationActions] = useState(false);
+    const [dictatedContent, setDictatedContent] = useState('');
+    const [processingAction, setProcessingAction] = useState<string | null>(null);
+    const [generatedQuiz, setGeneratedQuiz] = useState<any>(null);
+    const [showQuizPreview, setShowQuizPreview] = useState(false);
+    const [quizTimeLimit, setQuizTimeLimit] = useState(300); // 5 minutos default
 
     const recognitionRef = useRef<any>(null);
     const isRecordingRef = useRef(false);
@@ -185,6 +194,12 @@ export default function AIAssistantScreen() {
                 setIsRecording(false);
                 setInterimText('');
                 if (silenceTimer.current) clearTimeout(silenceTimer.current);
+
+                // Se estava em modo ditado e tem conteúdo, mostra ações
+                if (dictationMode && inputText.trim()) {
+                    setDictatedContent(inputText.trim());
+                    setShowDictationActions(true);
+                }
             } else {
                 isRecordingRef.current = true;
                 // Se o usuário já digitou algo, salvamos como texto base
@@ -208,6 +223,119 @@ export default function AIAssistantScreen() {
             }
         } else {
             Alert.alert("Em breve", "O reconhecimento de voz no celular estará disponível na versão final.");
+        }
+    };
+
+    // Handler para ações pós-ditado
+    const handleDictationAction = async (action: 'quiz' | 'summary' | 'discussion') => {
+        setProcessingAction(action);
+
+        try {
+            const result = await processContent(dictatedContent, action, subjectId);
+
+            if (!result.success) {
+                Alert.alert('Erro', result.error || 'Falha ao processar conteúdo');
+                setProcessingAction(null);
+                return;
+            }
+
+            if (action === 'quiz' && result.result?.questions) {
+                setGeneratedQuiz(result.result);
+                setShowDictationActions(false);
+                setShowQuizPreview(true);
+            } else if (action === 'summary' && result.result?.text) {
+                // Adiciona o resumo como mensagem no chat
+                const summaryMessage: Message = {
+                    id: Date.now().toString(),
+                    text: `📝 **Resumo do Conteúdo:**\n\n${result.result.text}`,
+                    isUser: false,
+                    timestamp: new Date(),
+                };
+                setMessages(prev => [...prev, summaryMessage]);
+                setShowDictationActions(false);
+                setInputText('');
+            } else if (action === 'discussion' && result.result?.questions) {
+                // Adiciona perguntas de discussão no chat
+                const discussionText = result.result.questions
+                    .map((q: any, i: number) => `${i + 1}. ${q.question}\n   _${q.objective}_`)
+                    .join('\n\n');
+                const discussionMessage: Message = {
+                    id: Date.now().toString(),
+                    text: `💬 **Perguntas para Discussão:**\n\n${discussionText}`,
+                    isUser: false,
+                    timestamp: new Date(),
+                };
+                setMessages(prev => [...prev, discussionMessage]);
+                setShowDictationActions(false);
+                setInputText('');
+            }
+        } catch (error) {
+            console.error('Erro ao processar:', error);
+            Alert.alert('Erro', 'Falha ao processar conteúdo');
+        } finally {
+            setProcessingAction(null);
+        }
+    };
+
+    // Handler para enviar quiz ao vivo
+    const handleBroadcastQuiz = async () => {
+        if (!generatedQuiz?.questions) return;
+
+        try {
+            setProcessingAction('broadcasting');
+
+            // Criar quiz no banco
+            const createResult = await createQuiz(
+                subjectId,
+                `Quiz: ${subjectName}`,
+                generatedQuiz.questions,
+                quizTimeLimit,
+                dictatedContent.substring(0, 200)
+            );
+
+            if (!createResult.success || !createResult.quiz) {
+                Alert.alert('Erro', createResult.error || 'Falha ao criar quiz');
+                setProcessingAction(null);
+                return;
+            }
+
+            // Broadcast para todos os alunos
+            const broadcastResult = await broadcastQuiz(createResult.quiz.id);
+
+            if (!broadcastResult.success) {
+                Alert.alert('Erro', broadcastResult.error || 'Falha ao enviar quiz');
+                setProcessingAction(null);
+                return;
+            }
+
+            // Sucesso!
+            Alert.alert(
+                '🎉 Quiz Enviado!',
+                `Quiz enviado para ${broadcastResult.enrolled_students} alunos!\n\nTempo: ${Math.floor(quizTimeLimit / 60)} minutos`,
+                [{
+                    text: 'OK', onPress: () => {
+                        setShowQuizPreview(false);
+                        setGeneratedQuiz(null);
+                        setDictatedContent('');
+                        setInputText('');
+                    }
+                }]
+            );
+
+            // Adiciona mensagem no chat
+            const quizMessage: Message = {
+                id: Date.now().toString(),
+                text: `🎯 **Quiz Enviado!**\n\nQuiz com ${generatedQuiz.questions.length} perguntas enviado para ${broadcastResult.enrolled_students} alunos.\n\n⏱️ Tempo: ${Math.floor(quizTimeLimit / 60)} minutos`,
+                isUser: false,
+                timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, quizMessage]);
+
+        } catch (error) {
+            console.error('Erro ao enviar quiz:', error);
+            Alert.alert('Erro', 'Falha ao enviar quiz');
+        } finally {
+            setProcessingAction(null);
         }
     };
 
@@ -543,6 +671,160 @@ export default function AIAssistantScreen() {
                     </View>
                 </KeyboardAvoidingView>
             </View>
+
+            {/* Modal: Ações pós-ditado */}
+            <Modal
+                visible={showDictationActions}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowDictationActions(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.actionModal}>
+                        <Text style={styles.actionModalTitle}>O que fazer com este conteúdo?</Text>
+                        <Text style={styles.actionModalSubtitle} numberOfLines={2}>
+                            "{dictatedContent.substring(0, 100)}..."
+                        </Text>
+
+                        <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={() => handleDictationAction('quiz')}
+                            disabled={processingAction !== null}
+                        >
+                            <MaterialIcons name="quiz" size={24} color="#10b981" />
+                            <View style={styles.actionButtonText}>
+                                <Text style={styles.actionButtonTitle}>🎯 Gerar Quiz ao Vivo</Text>
+                                <Text style={styles.actionButtonDesc}>10 perguntas para os alunos</Text>
+                            </View>
+                            {processingAction === 'quiz' && <ActivityIndicator color="#10b981" />}
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={() => handleDictationAction('summary')}
+                            disabled={processingAction !== null}
+                        >
+                            <MaterialIcons name="summarize" size={24} color="#3b82f6" />
+                            <View style={styles.actionButtonText}>
+                                <Text style={styles.actionButtonTitle}>📝 Criar Resumo</Text>
+                                <Text style={styles.actionButtonDesc}>Resumo didático do conteúdo</Text>
+                            </View>
+                            {processingAction === 'summary' && <ActivityIndicator color="#3b82f6" />}
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.actionButton}
+                            onPress={() => handleDictationAction('discussion')}
+                            disabled={processingAction !== null}
+                        >
+                            <MaterialIcons name="forum" size={24} color="#f59e0b" />
+                            <View style={styles.actionButtonText}>
+                                <Text style={styles.actionButtonTitle}>💬 Perguntas de Discussão</Text>
+                                <Text style={styles.actionButtonDesc}>5 perguntas para debate</Text>
+                            </View>
+                            {processingAction === 'discussion' && <ActivityIndicator color="#f59e0b" />}
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.cancelButton}
+                            onPress={() => {
+                                setShowDictationActions(false);
+                                setDictatedContent('');
+                            }}
+                        >
+                            <Text style={styles.cancelButtonText}>Cancelar</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Modal: Preview do Quiz */}
+            <Modal
+                visible={showQuizPreview}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowQuizPreview(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.quizPreviewModal}>
+                        <Text style={styles.quizPreviewTitle}>🎯 Quiz Gerado!</Text>
+                        <Text style={styles.quizPreviewSubtitle}>
+                            {generatedQuiz?.questions?.length || 0} perguntas prontas
+                        </Text>
+
+                        <ScrollView style={styles.quizPreviewList}>
+                            {generatedQuiz?.questions?.map((q: any, i: number) => (
+                                <View key={i} style={styles.quizPreviewItem}>
+                                    <Text style={styles.quizPreviewQuestion}>
+                                        {i + 1}. {q.question}
+                                    </Text>
+                                    {q.options?.map((opt: string, j: number) => (
+                                        <Text
+                                            key={j}
+                                            style={[
+                                                styles.quizPreviewOption,
+                                                j === q.correct && styles.quizPreviewCorrect
+                                            ]}
+                                        >
+                                            {String.fromCharCode(65 + j)}) {opt}
+                                        </Text>
+                                    ))}
+                                </View>
+                            ))}
+                        </ScrollView>
+
+                        <View style={styles.quizTimeSelector}>
+                            <Text style={styles.quizTimerLabel}>⏱️ Tempo para responder:</Text>
+                            <View style={styles.quizTimerButtons}>
+                                {[180, 300, 600, 900].map((time) => (
+                                    <TouchableOpacity
+                                        key={time}
+                                        style={[
+                                            styles.quizTimerButton,
+                                            quizTimeLimit === time && styles.quizTimerButtonActive
+                                        ]}
+                                        onPress={() => setQuizTimeLimit(time)}
+                                    >
+                                        <Text style={[
+                                            styles.quizTimerButtonText,
+                                            quizTimeLimit === time && styles.quizTimerButtonTextActive
+                                        ]}>
+                                            {Math.floor(time / 60)} min
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        </View>
+
+                        <TouchableOpacity
+                            style={styles.broadcastButton}
+                            onPress={handleBroadcastQuiz}
+                            disabled={processingAction === 'broadcasting'}
+                        >
+                            {processingAction === 'broadcasting' ? (
+                                <ActivityIndicator color={colors.white} />
+                            ) : (
+                                <>
+                                    <MaterialIcons name="send" size={24} color={colors.white} />
+                                    <Text style={styles.broadcastButtonText}>
+                                        ENVIAR PARA ALUNOS
+                                    </Text>
+                                </>
+                            )}
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={styles.cancelButton}
+                            onPress={() => {
+                                setShowQuizPreview(false);
+                                setGeneratedQuiz(null);
+                            }}
+                        >
+                            <Text style={styles.cancelButtonText}>Cancelar</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -874,5 +1156,177 @@ const styles = StyleSheet.create({
         fontFamily: typography.fontFamily.display,
         color: '#10b981',
         fontStyle: 'italic',
+    },
+    // Modal styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: spacing.base,
+    },
+    actionModal: {
+        backgroundColor: colors.zinc900,
+        borderRadius: borderRadius.xl,
+        padding: spacing.lg,
+        width: '100%',
+        maxWidth: 400,
+        borderWidth: 1,
+        borderColor: colors.zinc700,
+    },
+    actionModalTitle: {
+        fontSize: typography.fontSize.xl,
+        fontWeight: typography.fontWeight.bold,
+        fontFamily: typography.fontFamily.display,
+        color: colors.white,
+        textAlign: 'center',
+        marginBottom: spacing.sm,
+    },
+    actionModalSubtitle: {
+        fontSize: typography.fontSize.sm,
+        fontFamily: typography.fontFamily.display,
+        color: colors.zinc400,
+        textAlign: 'center',
+        marginBottom: spacing.lg,
+        fontStyle: 'italic',
+    },
+    actionButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.md,
+        padding: spacing.md,
+        backgroundColor: 'rgba(39, 39, 42, 0.5)',
+        borderRadius: borderRadius.lg,
+        marginBottom: spacing.sm,
+        borderWidth: 1,
+        borderColor: colors.zinc700,
+    },
+    actionButtonText: {
+        flex: 1,
+    },
+    actionButtonTitle: {
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.semibold,
+        fontFamily: typography.fontFamily.display,
+        color: colors.white,
+    },
+    actionButtonDesc: {
+        fontSize: typography.fontSize.sm,
+        fontFamily: typography.fontFamily.display,
+        color: colors.zinc400,
+    },
+    cancelButton: {
+        padding: spacing.md,
+        marginTop: spacing.sm,
+    },
+    cancelButtonText: {
+        fontSize: typography.fontSize.base,
+        fontFamily: typography.fontFamily.display,
+        color: colors.zinc400,
+        textAlign: 'center',
+    },
+    // Quiz preview modal
+    quizPreviewModal: {
+        backgroundColor: colors.zinc900,
+        borderRadius: borderRadius.xl,
+        padding: spacing.lg,
+        width: '100%',
+        maxWidth: 500,
+        maxHeight: '80%',
+        borderWidth: 1,
+        borderColor: colors.zinc700,
+    },
+    quizPreviewTitle: {
+        fontSize: typography.fontSize['2xl'],
+        fontWeight: typography.fontWeight.bold,
+        fontFamily: typography.fontFamily.display,
+        color: colors.white,
+        textAlign: 'center',
+    },
+    quizPreviewSubtitle: {
+        fontSize: typography.fontSize.base,
+        fontFamily: typography.fontFamily.display,
+        color: '#10b981',
+        textAlign: 'center',
+        marginBottom: spacing.md,
+    },
+    quizPreviewList: {
+        maxHeight: 300,
+        marginBottom: spacing.md,
+    },
+    quizPreviewItem: {
+        padding: spacing.md,
+        backgroundColor: 'rgba(39, 39, 42, 0.5)',
+        borderRadius: borderRadius.lg,
+        marginBottom: spacing.sm,
+    },
+    quizPreviewQuestion: {
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.semibold,
+        fontFamily: typography.fontFamily.display,
+        color: colors.white,
+        marginBottom: spacing.sm,
+    },
+    quizPreviewOption: {
+        fontSize: typography.fontSize.sm,
+        fontFamily: typography.fontFamily.display,
+        color: colors.zinc300,
+        paddingLeft: spacing.md,
+        marginBottom: 4,
+    },
+    quizPreviewCorrect: {
+        color: '#10b981',
+        fontWeight: typography.fontWeight.semibold,
+    },
+    quizTimeSelector: {
+        marginBottom: spacing.md,
+    },
+    quizTimerLabel: {
+        fontSize: typography.fontSize.base,
+        fontFamily: typography.fontFamily.display,
+        color: colors.white,
+        marginBottom: spacing.sm,
+    },
+    quizTimerButtons: {
+        flexDirection: 'row',
+        gap: spacing.sm,
+    },
+    quizTimerButton: {
+        flex: 1,
+        padding: spacing.sm,
+        backgroundColor: 'rgba(39, 39, 42, 0.5)',
+        borderRadius: borderRadius.default,
+        borderWidth: 1,
+        borderColor: colors.zinc700,
+    },
+    quizTimerButtonActive: {
+        backgroundColor: '#10b981',
+        borderColor: '#10b981',
+    },
+    quizTimerButtonText: {
+        fontSize: typography.fontSize.sm,
+        fontFamily: typography.fontFamily.display,
+        color: colors.zinc400,
+        textAlign: 'center',
+    },
+    quizTimerButtonTextActive: {
+        color: colors.white,
+        fontWeight: typography.fontWeight.bold,
+    },
+    broadcastButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: spacing.sm,
+        padding: spacing.md,
+        backgroundColor: '#10b981',
+        borderRadius: borderRadius.lg,
+        marginBottom: spacing.sm,
+    },
+    broadcastButtonText: {
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.bold,
+        fontFamily: typography.fontFamily.display,
+        color: colors.white,
     },
 });

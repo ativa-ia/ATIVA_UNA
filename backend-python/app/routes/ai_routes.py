@@ -118,3 +118,147 @@ def end_session(current_user, session_id):
         'success': True,
         'message': 'Sessão encerrada'
     })
+
+
+@ai_bp.route('/process-content', methods=['POST'])
+@token_required
+def process_content(current_user):
+    """
+    Processa conteúdo ditado e gera quiz, resumo ou perguntas
+    
+    Body:
+    {
+        "content": "string",      # Conteúdo ditado pelo professor
+        "action": "string",       # 'quiz', 'summary', 'discussion'
+        "subject_id": int
+    }
+    """
+    import google.generativeai as genai
+    import os
+    import json
+    
+    data = request.get_json()
+    
+    if not data:
+        return jsonify({'success': False, 'error': 'Dados não fornecidos'}), 400
+    
+    content = data.get('content')
+    action = data.get('action')
+    subject_id = data.get('subject_id')
+    
+    if not content:
+        return jsonify({'success': False, 'error': 'Conteúdo não fornecido'}), 400
+    
+    if action not in ['quiz', 'summary', 'discussion']:
+        return jsonify({'success': False, 'error': 'Ação inválida'}), 400
+    
+    # Configurar Gemini
+    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+    if not GEMINI_API_KEY:
+        return jsonify({'success': False, 'error': 'GEMINI_API_KEY não configurada'}), 500
+    
+    genai.configure(api_key=GEMINI_API_KEY)
+    
+    prompts = {
+        'quiz': f"""Você é um professor criando um quiz educacional.
+
+Com base no seguinte conteúdo:
+---
+{content}
+---
+
+Gere EXATAMENTE 10 perguntas de múltipla escolha em formato JSON.
+Cada pergunta deve ter 4 alternativas (A, B, C, D).
+
+Responda APENAS com o JSON, sem texto adicional:
+{{
+  "questions": [
+    {{
+      "question": "Texto da pergunta?",
+      "options": ["Alternativa A", "Alternativa B", "Alternativa C", "Alternativa D"],
+      "correct": 0
+    }}
+  ]
+}}
+
+IMPORTANTE: "correct" é o índice da resposta correta (0=A, 1=B, 2=C, 3=D)""",
+
+        'summary': f"""Você é um professor criando material didático.
+
+Com base no seguinte conteúdo:
+---
+{content}
+---
+
+Crie um resumo didático e bem estruturado com:
+1. Título do tema
+2. Pontos principais (em tópicos)
+3. Conceitos-chave para memorizar
+4. Conclusão
+
+Seja claro e objetivo. Use linguagem acessível para estudantes.""",
+
+        'discussion': f"""Você é um professor preparando uma discussão em sala.
+
+Com base no seguinte conteúdo:
+---
+{content}
+---
+
+Gere EXATAMENTE 5 perguntas para discussão em grupo.
+As perguntas devem estimular pensamento crítico e debate.
+
+Responda em formato JSON:
+{{
+  "questions": [
+    {{
+      "question": "Pergunta para discussão?",
+      "objective": "O que a pergunta busca desenvolver nos alunos"
+    }}
+  ]
+}}"""
+    }
+    
+    try:
+        model = genai.GenerativeModel('gemini-2.0-flash')
+        response = model.generate_content(prompts[action])
+        result_text = response.text
+        
+        # Para quiz e discussion, tentar parsear como JSON
+        if action in ['quiz', 'discussion']:
+            # Limpar resposta de possíveis marcadores markdown
+            clean_text = result_text.strip()
+            if clean_text.startswith('```json'):
+                clean_text = clean_text[7:]
+            if clean_text.startswith('```'):
+                clean_text = clean_text[3:]
+            if clean_text.endswith('```'):
+                clean_text = clean_text[:-3]
+            
+            try:
+                parsed = json.loads(clean_text.strip())
+                return jsonify({
+                    'success': True,
+                    'action': action,
+                    'result': parsed
+                })
+            except json.JSONDecodeError:
+                # Se não conseguir parsear, retorna texto bruto
+                return jsonify({
+                    'success': True,
+                    'action': action,
+                    'result': {'raw': result_text}
+                })
+        else:
+            # Para summary, retorna texto
+            return jsonify({
+                'success': True,
+                'action': action,
+                'result': {'text': result_text}
+            })
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Erro ao processar: {str(e)}'
+        }), 500
