@@ -21,7 +21,7 @@ class Config:
 class DevelopmentConfig(Config):
     """Configuração de desenvolvimento"""
     DEBUG = True
-    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'sqlite:///database.sqlite')
+    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL') or 'sqlite:///database.sqlite'
     SQLALCHEMY_ECHO = True  # Log de queries SQL
 
 

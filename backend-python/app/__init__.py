@@ -76,6 +76,24 @@ def create_app(config_name=None):
             'version': '1.0.0'
         }, 200
     
+    # Rota de Debug (temporária para diagnóstico)
+    @app.route('/debug')
+    def debug_info():
+        db_url = os.getenv('DATABASE_URL', 'NOT SET')
+        # Mascarar a senha
+        masked_url = 'NOT SET'
+        if db_url and db_url != 'NOT SET' and '@' in db_url:
+            parts = db_url.split('@')
+            user_part = parts[0].split(':')[0] if ':' in parts[0] else parts[0]
+            masked_url = user_part + ':****@' + parts[1]
+        return {
+            'flask_env': os.getenv('FLASK_ENV', 'NOT SET (using development)'),
+            'database_url_configured': db_url != 'NOT SET',
+            'database_url_preview': masked_url,
+            'sqlalchemy_uri_set': bool(app.config.get('SQLALCHEMY_DATABASE_URI')),
+            'debug_mode': app.config.get('DEBUG', False)
+        }
+    
     # Rota 404
     @app.errorhandler(404)
     def not_found(error):
