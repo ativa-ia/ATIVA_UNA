@@ -83,14 +83,19 @@ export default function AIAssistantScreen() {
 
     // Track which results have been processed
     const processedResultsRef = useRef<Set<number>>(new Set());
+    const lastFinalTextRef = useRef<string>(''); // Track last final to avoid duplicates
 
     useEffect(() => {
         if (Platform.OS === 'web') {
             // @ts-ignore
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (SpeechRecognition) {
+                // Detect mobile browser
+                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
                 recognitionRef.current = new SpeechRecognition();
-                recognitionRef.current.continuous = true;
+                // On mobile, don't use continuous to avoid duplications
+                recognitionRef.current.continuous = !isMobile;
                 recognitionRef.current.interimResults = true;
                 recognitionRef.current.lang = 'pt-BR';
 
@@ -100,17 +105,18 @@ export default function AIAssistantScreen() {
                     // Process only new final results
                     for (let i = 0; i < event.results.length; i++) {
                         const result = event.results[i];
-                        const transcript = result[0].transcript;
+                        const transcript = result[0].transcript.trim();
 
-                        if (result.isFinal) {
-                            // Only add if not already processed
-                            if (!processedResultsRef.current.has(i)) {
+                        if (result.isFinal && transcript) {
+                            // Only add if not already processed AND not duplicate of last text
+                            if (!processedResultsRef.current.has(i) && transcript !== lastFinalTextRef.current) {
                                 processedResultsRef.current.add(i);
+                                lastFinalTextRef.current = transcript;
                                 const separator = savedTextRef.current ? ' ' : '';
-                                savedTextRef.current = savedTextRef.current + separator + transcript.trim();
+                                savedTextRef.current = savedTextRef.current + separator + transcript;
                                 setInputText(savedTextRef.current);
                             }
-                        } else {
+                        } else if (!result.isFinal) {
                             // Show current interim (last one only)
                             currentInterim = transcript;
                         }
@@ -189,6 +195,7 @@ export default function AIAssistantScreen() {
                 }
                 // Clear tracking for new session
                 processedResultsRef.current.clear();
+                lastFinalTextRef.current = '';
                 setInterimText('');
 
                 try {
