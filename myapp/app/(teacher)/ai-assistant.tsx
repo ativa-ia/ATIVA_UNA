@@ -60,6 +60,8 @@ export default function AIAssistantScreen() {
     // Speech Recognition State
     const [isRecording, setIsRecording] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [dictationMode, setDictationMode] = useState(false); // Modo ditado (sem auto-enviar)
+    const [interimText, setInterimText] = useState(''); // Texto sendo reconhecido em tempo real
 
     const recognitionRef = useRef<any>(null);
     const isRecordingRef = useRef(false);
@@ -102,6 +104,9 @@ export default function AIAssistantScreen() {
                         }
                     }
 
+                    // Mostrar texto interim em tempo real
+                    setInterimText(interimTranscript);
+
                     // No modo continuous do Chrome, event.results acumula tudo da sessão atual.
                     // Vamos pegar tudo o que já foi transcrito nesta sessão.
                     const sessionTranscript = Array.from(event.results)
@@ -117,12 +122,14 @@ export default function AIAssistantScreen() {
                     // Resetar timer de silêncio
                     if (silenceTimer.current) clearTimeout(silenceTimer.current);
 
-                    if (sessionTranscript.trim()) {
+                    // Só auto-enviar se NÃO estiver no modo ditado
+                    if (sessionTranscript.trim() && !dictationMode) {
                         silenceTimer.current = setTimeout(() => {
                             console.log("Silêncio detectado, enviando...");
                             isRecordingRef.current = false;
                             recognitionRef.current.stop();
                             setIsRecording(false);
+                            setInterimText('');
                             setTriggerAutoSend(true);
                         }, 2000);
                     }
@@ -425,16 +432,48 @@ export default function AIAssistantScreen() {
 
                     {/* Input Area */}
                     <View style={[styles.inputContainer, { paddingBottom: insets.bottom + spacing.sm }]}>
+                        {/* Modo Ditado Toggle */}
+                        <View style={styles.dictationToggle}>
+                            <TouchableOpacity
+                                style={[styles.dictationButton, dictationMode && styles.dictationButtonActive]}
+                                onPress={() => setDictationMode(!dictationMode)}
+                            >
+                                <MaterialIcons
+                                    name="edit-note"
+                                    size={18}
+                                    color={dictationMode ? colors.white : colors.zinc500}
+                                />
+                                <Text style={[styles.dictationText, dictationMode && styles.dictationTextActive]}>
+                                    {dictationMode ? 'Modo Ditado ON' : 'Modo Ditado'}
+                                </Text>
+                            </TouchableOpacity>
+                            {dictationMode && (
+                                <Text style={styles.dictationHint}>
+                                    Ditado não envia automaticamente
+                                </Text>
+                            )}
+                        </View>
+
+                        {/* Indicador de transcrição em tempo real */}
+                        {isRecording && interimText && (
+                            <View style={styles.interimContainer}>
+                                <View style={styles.recordingDot} />
+                                <Text style={styles.interimText} numberOfLines={1}>
+                                    {interimText}
+                                </Text>
+                            </View>
+                        )}
+
                         <View style={styles.inputWrapper}>
                             <TextInput
                                 style={styles.textInput}
-                                placeholder={isRecording ? "Ouvindo..." : "Digite sua mensagem..."}
+                                placeholder={isRecording ? "🎤 Ouvindo..." : "Digite sua mensagem..."}
                                 placeholderTextColor={isRecording ? '#10b981' : colors.zinc500}
                                 value={inputText}
                                 onChangeText={setInputText}
                                 multiline
-                                maxLength={1000}
-                                editable={!isRecording}
+                                maxLength={2000}
+                                editable={!isRecording || dictationMode}
                             />
                             <TouchableOpacity
                                 style={[
@@ -452,15 +491,15 @@ export default function AIAssistantScreen() {
                             <TouchableOpacity
                                 style={[
                                     styles.sendButton,
-                                    !inputText.trim() && styles.sendButtonDisabled,
+                                    (!inputText.trim() || isLoading) && styles.sendButtonDisabled,
                                 ]}
                                 onPress={handleSend}
-                                disabled={!inputText.trim() || isRecording}
+                                disabled={!inputText.trim() || isLoading}
                             >
                                 <MaterialIcons
                                     name="send"
                                     size={24}
-                                    color={inputText.trim() && !isRecording ? colors.white : colors.zinc600}
+                                    color={inputText.trim() && !isLoading ? colors.white : colors.zinc600}
                                 />
                             </TouchableOpacity>
                         </View>
@@ -672,5 +711,65 @@ const styles = StyleSheet.create({
     },
     sendButtonDisabled: {
         opacity: 0.5,
+    },
+    dictationToggle: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: spacing.sm,
+    },
+    dictationButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 6,
+        borderRadius: borderRadius.md,
+        backgroundColor: 'rgba(39, 39, 42, 0.5)',
+        borderWidth: 1,
+        borderColor: colors.zinc700,
+    },
+    dictationButtonActive: {
+        backgroundColor: '#10b981',
+        borderColor: '#10b981',
+    },
+    dictationText: {
+        fontSize: typography.fontSize.xs,
+        fontFamily: typography.fontFamily.display,
+        color: colors.zinc500,
+    },
+    dictationTextActive: {
+        color: colors.white,
+    },
+    dictationHint: {
+        fontSize: typography.fontSize.xs,
+        fontFamily: typography.fontFamily.display,
+        color: colors.zinc500,
+        fontStyle: 'italic',
+    },
+    interimContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: 8,
+        marginBottom: spacing.sm,
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+        borderRadius: borderRadius.md,
+        borderWidth: 1,
+        borderColor: 'rgba(16, 185, 129, 0.3)',
+    },
+    recordingDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#ef4444',
+    },
+    interimText: {
+        flex: 1,
+        fontSize: typography.fontSize.sm,
+        fontFamily: typography.fontFamily.display,
+        color: '#10b981',
+        fontStyle: 'italic',
     },
 });
