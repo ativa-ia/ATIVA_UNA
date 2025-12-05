@@ -5,6 +5,12 @@ from flask_migrate import Migrate
 from app.config import config
 import os
 
+import logging
+
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Inicializar extensões
 db = SQLAlchemy()
 migrate = Migrate()
@@ -20,22 +26,32 @@ def create_app(config_name=None):
     app.config.from_object(config[config_name])
     
     # Inicializar extensões
-    db.init_app(app)
-    migrate.init_app(app, db)
-    CORS(app)  # Permitir requisições do React Native
+    try:
+        logger.info("Inicializando extensoes...")
+        db.init_app(app)
+        migrate.init_app(app, db)
+        CORS(app)  # Permitir requisições do React Native
+        logger.info("Extensoes inicializadas com sucesso.")
+    except Exception as e:
+        logger.error(f"Erro ao inicializar extensoes: {e}")
     
     # Registrar blueprints
-    from app.routes.auth_routes import auth_bp
-    from app.routes.subject_routes import subject_bp
-    from app.routes.ai_routes import ai_bp
-    from app.routes.notification_routes import notification_bp
-    from app.routes.admin_routes import admin_bp
-    
-    app.register_blueprint(auth_bp, url_prefix='/api/auth')
-    app.register_blueprint(subject_bp, url_prefix='/api/subjects')
-    app.register_blueprint(ai_bp, url_prefix='/api/ai')
-    app.register_blueprint(notification_bp, url_prefix='/api/notifications')
-    app.register_blueprint(admin_bp, url_prefix='/api/admin')
+    try:
+        logger.info("Registrando blueprints...")
+        from app.routes.auth_routes import auth_bp
+        from app.routes.subject_routes import subject_bp
+        from app.routes.ai_routes import ai_bp
+        from app.routes.notification_routes import notification_bp
+        from app.routes.admin_routes import admin_bp
+        
+        app.register_blueprint(auth_bp, url_prefix='/api/auth')
+        app.register_blueprint(subject_bp, url_prefix='/api/subjects')
+        app.register_blueprint(ai_bp, url_prefix='/api/ai')
+        app.register_blueprint(notification_bp, url_prefix='/api/notifications')
+        app.register_blueprint(admin_bp, url_prefix='/api/admin')
+        logger.info("Blueprints registrados com sucesso.")
+    except Exception as e:
+        logger.error(f"Erro ao registrar blueprints: {e}")
     
     # Rota raiz
     @app.route('/')
@@ -53,6 +69,7 @@ def create_app(config_name=None):
     # Rota de Health Check
     @app.route('/health')
     def health_check():
+        logger.info("Health check endpoint called")
         return {
             'status': 'ok',
             'message': 'Server is healthy',
