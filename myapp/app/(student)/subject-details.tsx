@@ -32,17 +32,23 @@ export default function SubjectDetailsScreen() {
     const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
     const [showQuizPopup, setShowQuizPopup] = useState(false);
     const [alreadyAnswered, setAlreadyAnswered] = useState(false);
+    const [quizStarted, setQuizStarted] = useState(false); // Novo estado para controlar início local
     const pollingRef = useRef<any>(null);
 
     // Polling para verificar quiz ativo
     useEffect(() => {
         const checkForQuiz = async () => {
+            // Se já começou o quiz, não precisa verificar ou mostrar popup
+            if (quizStarted) return;
+
             try {
                 const result = await checkActiveQuiz(subjectId);
                 if (result.success && result.active && result.quiz) {
                     setActiveQuiz(result.quiz);
                     setAlreadyAnswered(result.already_answered || false);
-                    if (!result.already_answered) {
+
+                    // Só mostra popup se não respondeu E não começou ainda
+                    if (!result.already_answered && !quizStarted) {
                         setShowQuizPopup(true);
                     }
                 } else {
@@ -63,11 +69,16 @@ export default function SubjectDetailsScreen() {
         return () => {
             if (pollingRef.current) clearInterval(pollingRef.current);
         };
-    }, [subjectId]);
+    }, [subjectId, quizStarted]); // Adicionado quizStarted nas dependências
 
     const handleStartQuiz = () => {
         if (activeQuiz) {
+            setQuizStarted(true); // Marca como iniciado
             setShowQuizPopup(false);
+
+            // Limpa o intervalo para garantir
+            if (pollingRef.current) clearInterval(pollingRef.current);
+
             router.push({
                 pathname: '/(student)/live-quiz',
                 params: { quiz: JSON.stringify(activeQuiz) }
