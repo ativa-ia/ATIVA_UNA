@@ -50,6 +50,15 @@ def create_app(config_name=None):
             }
         }
     
+    # Rota de Health Check
+    @app.route('/health')
+    def health_check():
+        return {
+            'status': 'ok',
+            'message': 'Server is healthy',
+            'version': '1.0.0'
+        }, 200
+    
     # Rota 404
     @app.errorhandler(404)
     def not_found(error):
