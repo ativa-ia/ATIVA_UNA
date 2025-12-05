@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -6,14 +6,16 @@ import {
     ScrollView,
     TouchableOpacity,
     Image,
+    Modal,
+    ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
-import { spacing } from '@/constants/spacing';
-
+import { spacing, borderRadius } from '@/constants/spacing';
+import { checkActiveQuiz, Quiz } from '@/services/quiz';
 
 
 /**
@@ -24,6 +26,60 @@ export default function SubjectDetailsScreen() {
     const insets = useSafeAreaInsets();
     const params = useLocalSearchParams();
     const subjectName = params.subject as string || 'Disciplina';
+    const subjectId = parseInt(params.subjectId as string) || 1;
+
+    // Quiz ao vivo state
+    const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
+    const [showQuizPopup, setShowQuizPopup] = useState(false);
+    const [alreadyAnswered, setAlreadyAnswered] = useState(false);
+    const pollingRef = useRef<any>(null);
+
+    // Polling para verificar quiz ativo
+    useEffect(() => {
+        const checkForQuiz = async () => {
+            try {
+                const result = await checkActiveQuiz(subjectId);
+                if (result.success && result.active && result.quiz) {
+                    setActiveQuiz(result.quiz);
+                    setAlreadyAnswered(result.already_answered || false);
+                    if (!result.already_answered) {
+                        setShowQuizPopup(true);
+                    }
+                } else {
+                    setActiveQuiz(null);
+                    setShowQuizPopup(false);
+                }
+            } catch (error) {
+                console.log('Erro ao verificar quiz:', error);
+            }
+        };
+
+        // Verificar imediatamente
+        checkForQuiz();
+
+        // Polling a cada 5 segundos
+        pollingRef.current = setInterval(checkForQuiz, 5000);
+
+        return () => {
+            if (pollingRef.current) clearInterval(pollingRef.current);
+        };
+    }, [subjectId]);
+
+    const handleStartQuiz = () => {
+        if (activeQuiz) {
+            setShowQuizPopup(false);
+            router.push({
+                pathname: '/(student)/live-quiz',
+                params: { quiz: JSON.stringify(activeQuiz) }
+            });
+        }
+    };
+
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs.toString().padStart(2, '0')}`;
+    };
 
     // Mock data - será substituído por dados reais do backend
     const subjectData = {
@@ -35,7 +91,6 @@ export default function SubjectDetailsScreen() {
         location: 'Sala B-204',
         pendingActivities: 3,
     };
-
 
 
     return (
@@ -125,6 +180,60 @@ export default function SubjectDetailsScreen() {
                     </View>
                 </ScrollView>
             </View>
+
+            {/* Quiz ao Vivo Popup */}
+            <Modal
+                visible={showQuizPopup && !alreadyAnswered}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowQuizPopup(false)}
+            >
+                <View style={styles.quizModalOverlay}>
+                    <View style={styles.quizPopup}>
+                        <View style={styles.quizPopupIcon}>
+                            <Text style={styles.quizPopupEmoji}>🎯</Text>
+                        </View>
+
+                        <Text style={styles.quizPopupTitle}>Quiz ao Vivo!</Text>
+                        <Text style={styles.quizPopupSubtitle}>
+                            {activeQuiz?.title}
+                        </Text>
+
+                        <View style={styles.quizInfo}>
+                            <View style={styles.quizInfoItem}>
+                                <MaterialIcons name="quiz" size={20} color="#10b981" />
+                                <Text style={styles.quizInfoText}>
+                                    {activeQuiz?.question_count || 10} perguntas
+                                </Text>
+                            </View>
+                            <View style={styles.quizInfoItem}>
+                                <MaterialIcons name="timer" size={20} color="#f59e0b" />
+                                <Text style={styles.quizInfoText}>
+                                    {formatTime(activeQuiz?.time_remaining || 300)} restantes
+                                </Text>
+                            </View>
+                        </View>
+
+                        <TouchableOpacity
+                            style={styles.startQuizButton}
+                            onPress={handleStartQuiz}
+                        >
+                            <Text style={styles.startQuizButtonText}>Começar Quiz</Text>
+                            <MaterialIcons name="arrow-forward" size={24} color={colors.white} />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Indicador de quiz já respondido */}
+            {activeQuiz && alreadyAnswered && (
+                <View style={styles.quizAnsweredBanner}>
+                    <MaterialIcons name="check-circle" size={20} color="#10b981" />
+                    <Text style={styles.quizAnsweredText}>
+                        Você já respondeu o quiz atual
+                    </Text>
+                </View>
+            )}
         </View>
     );
 }
@@ -289,5 +398,97 @@ const styles = StyleSheet.create({
         fontFamily: typography.fontFamily.display,
         color: colors.white,
     },
-
+    // Quiz popup styles
+    quizModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.85)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: spacing.base,
+    },
+    quizPopup: {
+        backgroundColor: colors.zinc900,
+        borderRadius: borderRadius.xl,
+        padding: spacing.xl,
+        width: '100%',
+        maxWidth: 350,
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#10b981',
+    },
+    quizPopupIcon: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: spacing.md,
+    },
+    quizPopupEmoji: {
+        fontSize: 40,
+    },
+    quizPopupTitle: {
+        fontSize: typography.fontSize['2xl'],
+        fontWeight: typography.fontWeight.bold,
+        fontFamily: typography.fontFamily.display,
+        color: colors.white,
+        marginBottom: spacing.xs,
+    },
+    quizPopupSubtitle: {
+        fontSize: typography.fontSize.base,
+        fontFamily: typography.fontFamily.display,
+        color: colors.zinc300,
+        textAlign: 'center',
+        marginBottom: spacing.lg,
+    },
+    quizInfo: {
+        flexDirection: 'row',
+        gap: spacing.lg,
+        marginBottom: spacing.lg,
+    },
+    quizInfoItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+    },
+    quizInfoText: {
+        fontSize: typography.fontSize.sm,
+        fontFamily: typography.fontFamily.display,
+        color: colors.zinc300,
+    },
+    startQuizButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.xl,
+        backgroundColor: '#10b981',
+        borderRadius: borderRadius.lg,
+    },
+    startQuizButtonText: {
+        fontSize: typography.fontSize.lg,
+        fontWeight: typography.fontWeight.bold,
+        fontFamily: typography.fontFamily.display,
+        color: colors.white,
+    },
+    quizAnsweredBanner: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: spacing.sm,
+        paddingVertical: spacing.md,
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+        borderTopWidth: 1,
+        borderTopColor: 'rgba(16, 185, 129, 0.3)',
+    },
+    quizAnsweredText: {
+        fontSize: typography.fontSize.sm,
+        fontFamily: typography.fontFamily.display,
+        color: '#10b981',
+    },
 });
