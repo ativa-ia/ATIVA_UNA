@@ -81,6 +81,9 @@ export default function AIAssistantScreen() {
         }
     }, [triggerAutoSend]);
 
+    // Track which results have been processed
+    const processedResultsRef = useRef<Set<number>>(new Set());
+
     useEffect(() => {
         if (Platform.OS === 'web') {
             // @ts-ignore
@@ -92,33 +95,33 @@ export default function AIAssistantScreen() {
                 recognitionRef.current.lang = 'pt-BR';
 
                 recognitionRef.current.onresult = (event: any) => {
-                    let interimTranscript = '';
-                    let finalTranscript = '';
+                    let currentInterim = '';
 
-                    // Separar resultados finais e interim
-                    for (let i = event.resultIndex; i < event.results.length; ++i) {
-                        const transcript = event.results[i][0].transcript;
-                        if (event.results[i].isFinal) {
-                            finalTranscript += transcript;
+                    // Process only new final results
+                    for (let i = 0; i < event.results.length; i++) {
+                        const result = event.results[i];
+                        const transcript = result[0].transcript;
+
+                        if (result.isFinal) {
+                            // Only add if not already processed
+                            if (!processedResultsRef.current.has(i)) {
+                                processedResultsRef.current.add(i);
+                                const separator = savedTextRef.current ? ' ' : '';
+                                savedTextRef.current = savedTextRef.current + separator + transcript.trim();
+                                setInputText(savedTextRef.current);
+                            }
                         } else {
-                            interimTranscript = transcript; // Só o último interim
+                            // Show current interim (last one only)
+                            currentInterim = transcript;
                         }
                     }
 
-                    // Mostrar texto interim em tempo real (popup)
-                    setInterimText(interimTranscript || finalTranscript);
+                    setInterimText(currentInterim);
 
-                    // Acumular apenas texto final para evitar duplicação
-                    if (finalTranscript) {
-                        const separator = savedTextRef.current ? ' ' : '';
-                        savedTextRef.current = savedTextRef.current + separator + finalTranscript;
-                        setInputText(savedTextRef.current.trim());
-                    }
-
-                    // Resetar timer de silêncio
+                    // Reset silence timer
                     if (silenceTimer.current) clearTimeout(silenceTimer.current);
 
-                    // Só auto-enviar se NÃO estiver no modo ditado
+                    // Auto-send only if NOT in dictation mode
                     if (!dictationMode && savedTextRef.current.trim()) {
                         silenceTimer.current = setTimeout(() => {
                             console.log("Silêncio detectado, enviando...");
@@ -126,6 +129,7 @@ export default function AIAssistantScreen() {
                             recognitionRef.current.stop();
                             setIsRecording(false);
                             setInterimText('');
+                            processedResultsRef.current.clear();
                             setTriggerAutoSend(true);
                         }, 2500);
                     }
@@ -140,7 +144,10 @@ export default function AIAssistantScreen() {
                 };
 
                 recognitionRef.current.onend = () => {
-                    // Em modo ditado, sempre reiniciar automaticamente
+                    // Clear processed results on session end
+                    processedResultsRef.current.clear();
+
+                    // In dictation mode, always restart automatically
                     if (isRecordingRef.current) {
                         try {
                             recognitionRef.current.start();
@@ -170,6 +177,7 @@ export default function AIAssistantScreen() {
                 isRecordingRef.current = false;
                 recognitionRef.current.stop();
                 setIsRecording(false);
+                setInterimText('');
                 if (silenceTimer.current) clearTimeout(silenceTimer.current);
             } else {
                 isRecordingRef.current = true;
@@ -179,7 +187,9 @@ export default function AIAssistantScreen() {
                 } else {
                     savedTextRef.current = '';
                 }
-                currentSessionTextRef.current = '';
+                // Clear tracking for new session
+                processedResultsRef.current.clear();
+                setInterimText('');
 
                 try {
                     recognitionRef.current.start();
