@@ -44,11 +44,16 @@ def register():
             'errors': err.messages
         }), 400
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
         print(f'Erro no cadastro: {str(e)}')
+        print(f'Detalhes: {error_details}')
         db.session.rollback()
         return jsonify({
             'success': False,
-            'message': 'Erro ao cadastrar usuário'
+            'message': 'Erro ao cadastrar usuário',
+            'error_type': type(e).__name__,
+            'error_detail': str(e)
         }), 500
 
 
