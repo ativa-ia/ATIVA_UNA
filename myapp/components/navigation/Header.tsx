@@ -12,6 +12,7 @@ interface HeaderProps {
     onNotificationPress?: () => void;
     onProfilePress?: () => void;
     darkMode?: boolean;
+    showNotifications?: boolean;
     style?: ViewStyle;
 }
 
@@ -21,6 +22,7 @@ export const Header: React.FC<HeaderProps> = ({
     onNotificationPress,
     onProfilePress,
     darkMode = false,
+    showNotifications = true,
     style,
 }) => {
     return (
@@ -40,11 +42,13 @@ export const Header: React.FC<HeaderProps> = ({
             </TouchableOpacity>
 
             <View style={styles.actions}>
-                <IconButton
-                    iconName="notifications"
-                    onPress={onNotificationPress || (() => { })}
-                    color={darkMode ? colors.white : colors.zinc900}
-                />
+                {showNotifications && (
+                    <IconButton
+                        iconName="notifications"
+                        onPress={onNotificationPress || (() => { })}
+                        color={darkMode ? colors.white : colors.zinc900}
+                    />
+                )}
             </View>
         </View>
     );

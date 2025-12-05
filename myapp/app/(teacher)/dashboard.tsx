@@ -107,7 +107,7 @@ export default function TeacherDashboardScreen() {
                         userName={userName}
                         avatarUri="https://i.pravatar.cc/150?img=33"
                         darkMode
-                        onNotificationPress={() => console.log('Notifications')}
+                        showNotifications={false}
                         onProfilePress={() => router.push('/(teacher)/settings')}
                     />
 

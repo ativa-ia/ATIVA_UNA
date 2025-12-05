@@ -113,21 +113,28 @@ export default function StudentDashboardScreen() {
                     contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
                 >
-                    {/* Header Customizado com Botão de Notificação */}
+                    {/* Header Customizado com Botões */}
                     <View style={styles.headerContainer}>
                         <View style={styles.headerTop}>
                             <View>
                                 <Text style={styles.greeting}>Olá, {userName}</Text>
                                 <Text style={styles.date}>{getCurrentDate()}</Text>
                             </View>
-                            <TouchableOpacity
-                                style={styles.notificationButton}
-                                onPress={() => router.push('/(student)/notifications')}
-                            >
-                                <MaterialIcons name="notifications-none" size={24} color={colors.white} />
-                                {/* Badge de notificação (mock) */}
-                                <View style={styles.badge} />
-                            </TouchableOpacity>
+                            <View style={styles.headerButtons}>
+                                <TouchableOpacity
+                                    style={styles.headerButton}
+                                    onPress={() => router.push('/(student)/notifications')}
+                                >
+                                    <MaterialIcons name="notifications-none" size={24} color={colors.white} />
+                                    <View style={styles.badge} />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.headerButton}
+                                    onPress={() => router.push('/(student)/settings')}
+                                >
+                                    <MaterialIcons name="settings" size={24} color={colors.white} />
+                                </TouchableOpacity>
+                            </View>
                         </View>
                     </View>
 
@@ -215,6 +222,19 @@ const styles = StyleSheet.create({
         marginTop: 4,
     },
     notificationButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        position: 'relative',
+    },
+    headerButtons: {
+        flexDirection: 'row',
+        gap: spacing.sm,
+    },
+    headerButton: {
         width: 40,
         height: 40,
         borderRadius: 20,
