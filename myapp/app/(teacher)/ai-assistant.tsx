@@ -364,7 +364,7 @@ export default function AIAssistantScreen() {
                         router.push({
                             pathname: '/(teacher)/quiz-results',
                             params: {
-                                quizId: createResult.quiz.id.toString(),
+                                quizId: createResult.quiz!.id.toString(),
                                 subject: subjectName
                             }
                         });
