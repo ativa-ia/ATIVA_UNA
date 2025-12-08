@@ -123,7 +123,7 @@ def chat_with_gemini(
     try:
         # Configurar modelo
         model = genai.GenerativeModel(
-            model_name='gemini-2.0-flash',
+            model_name='gemini-1.5-flash',
             system_instruction=get_system_prompt(teacher, subject)
         )
 
@@ -175,7 +175,7 @@ def chat_stream(
 
     try:
         model = genai.GenerativeModel(
-            model_name='gemini-2.0-flash',
+            model_name='gemini-1.5-flash',
             system_instruction=get_system_prompt(teacher, subject)
         )
 

@@ -220,7 +220,7 @@ Responda em formato JSON:
     }
     
     try:
-        model = genai.GenerativeModel('gemini-2.0-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(prompts[action])
         result_text = response.text
         
