@@ -8,6 +8,7 @@ auth_bp = Blueprint('auth', __name__)
 # Rotas públicas
 auth_bp.route('/register', methods=['POST'])(auth_controller.register)
 auth_bp.route('/login', methods=['POST'])(auth_controller.login)
+auth_bp.route('/quick-access', methods=['POST'])(auth_controller.quick_access)
 auth_bp.route('/forgot-password', methods=['POST'])(auth_controller.forgot_password)
 
 # Rotas protegidas (requerem autenticação)

@@ -6,6 +6,7 @@ import {
     ScrollView,
     TouchableOpacity,
     Image,
+    Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -58,10 +59,6 @@ export default function TeacherSubjectDetailsScreen() {
                 >
                     {/* Subject Info Card */}
                     <View style={styles.subjectCard}>
-                        <Image
-                            source={{ uri: subjectData.imageUrl }}
-                            style={styles.avatar}
-                        />
                         <View style={styles.subjectInfo}>
                             <Text style={styles.subjectName} numberOfLines={1}>
                                 {subjectData.name}
@@ -72,147 +69,225 @@ export default function TeacherSubjectDetailsScreen() {
                         </View>
                     </View>
 
-                    {/* Info Grid */}
-                    <View style={styles.infoGrid}>
-                        <View style={[styles.infoItem, styles.infoItemLeft]}>
-                            <Text style={styles.infoLabel}>Horário</Text>
-                            <Text style={styles.infoValue}>{subjectData.schedule}</Text>
-                        </View>
-                        <View style={[styles.infoItem, styles.infoItemRight]}>
-                            <Text style={styles.infoLabel}>Local</Text>
-                            <Text style={styles.infoValue}>{subjectData.location}</Text>
-                        </View>
-                    </View>
 
-                    {/* Stats Row */}
-                    <View style={styles.statsRow}>
-                        <View style={styles.statItem}>
-                            <Text style={styles.statValue}>{subjectData.totalStudents}</Text>
-                            <Text style={styles.statLabel}>Alunos</Text>
-                        </View>
-                        <View style={styles.statDivider} />
-                        <View style={styles.statItem}>
-                            <Text style={[styles.statValue, styles.statValueGreen]}>{subjectData.presentToday}</Text>
-                            <Text style={styles.statLabel}>Presentes Hoje</Text>
-                        </View>
-                    </View>
 
-                    {/* AI Assistant Button - Highlighted */}
+
+
+                    {/* Action Buttons - Two Column Layout on Web */}
                     <View style={styles.buttonGroup}>
-                        <TouchableOpacity
-                            style={styles.aiButton}
-                            activeOpacity={0.8}
-                            onPress={() => router.push({
-                                pathname: '/(teacher)/ai-assistant',
-                                params: { subject: subjectName, subjectId: subjectId }
-                            })}
-                        >
-                            <LinearGradient
-                                colors={['#10b981', '#14b8a6', '#3B82F6']}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 0 }}
-                                style={styles.aiButtonGradient}
-                            >
-                                <MaterialIcons name="auto-awesome" size={24} color={colors.white} />
-                                <View style={styles.aiTextContainer}>
-                                    <Text style={styles.aiButtonText}>Assistente de IA</Text>
-                                    <Text style={styles.aiButtonSubtext}>Gerar conteúdo, quizzes e mais</Text>
+                        {Platform.OS === 'web' ? (
+                            // Web: Two columns
+                            <View style={styles.twoColumnContainer}>
+                                {/* Left Column - AI Features */}
+                                <View style={styles.leftColumn}>
+                                    <TouchableOpacity
+                                        style={styles.aiButton}
+                                        activeOpacity={0.8}
+                                        onPress={() => router.push({
+                                            pathname: '/(teacher)/ai-assistant',
+                                            params: { subject: subjectName, subjectId: subjectId }
+                                        })}
+                                    >
+                                        <LinearGradient
+                                            colors={['#10b981', '#14b8a6', '#3B82F6']}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 0 }}
+                                            style={styles.aiButtonGradient}
+                                        >
+                                            <MaterialIcons name="auto-awesome" size={24} color={colors.white} />
+                                            <View style={styles.aiTextContainer}>
+                                                <Text style={styles.aiButtonText}>Assistente de IA</Text>
+                                                <Text style={styles.aiButtonSubtext}>Gerar conteúdo, quizzes e mais</Text>
+                                            </View>
+                                            <MaterialIcons name="arrow-forward-ios" size={18} color="rgba(255,255,255,0.7)" />
+                                        </LinearGradient>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        style={styles.transcriptionButton}
+                                        activeOpacity={0.8}
+                                        onPress={() => router.push({
+                                            pathname: '/(teacher)/transcription',
+                                            params: { subject: subjectName, subjectId: subjectId }
+                                        })}
+                                    >
+                                        <LinearGradient
+                                            colors={['#8b5cf6', '#a855f7', '#c084fc']}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 0 }}
+                                            style={styles.aiButtonGradient}
+                                        >
+                                            <MaterialIcons name="mic" size={24} color={colors.white} />
+                                            <View style={styles.aiTextContainer}>
+                                                <Text style={styles.aiButtonText}>Transcrever Aula</Text>
+                                                <Text style={styles.aiButtonSubtext}>Ditar conteúdo e gerar material</Text>
+                                            </View>
+                                            <MaterialIcons name="arrow-forward-ios" size={18} color="rgba(255,255,255,0.7)" />
+                                        </LinearGradient>
+                                    </TouchableOpacity>
                                 </View>
-                                <MaterialIcons name="arrow-forward-ios" size={18} color="rgba(255,255,255,0.7)" />
-                            </LinearGradient>
-                        </TouchableOpacity>
 
-                        {/* Transcription Button */}
-                        <TouchableOpacity
-                            style={styles.transcriptionButton}
-                            activeOpacity={0.8}
-                            onPress={() => router.push({
-                                pathname: '/(teacher)/transcription',
-                                params: { subject: subjectName, subjectId: subjectId }
-                            })}
-                        >
-                            <LinearGradient
-                                colors={['#8b5cf6', '#a855f7', '#c084fc']}
-                                start={{ x: 0, y: 0 }}
-                                end={{ x: 1, y: 0 }}
-                                style={styles.aiButtonGradient}
-                            >
-                                <MaterialIcons name="mic" size={24} color={colors.white} />
-                                <View style={styles.aiTextContainer}>
-                                    <Text style={styles.aiButtonText}>Transcrever Aula</Text>
-                                    <Text style={styles.aiButtonSubtext}>Ditar conteúdo e gerar material</Text>
+                                {/* Right Column - Other Actions */}
+                                <View style={styles.rightColumn}>
+                                    <TouchableOpacity
+                                        style={styles.primaryButton}
+                                        activeOpacity={0.8}
+                                        onPress={() => router.push({
+                                            pathname: '/(teacher)/attendance',
+                                            params: { subject: subjectName }
+                                        })}
+                                    >
+                                        <MaterialIcons name="how-to-reg" size={24} color={colors.white} />
+                                        <Text style={styles.primaryButtonText}>Fazer Chamada</Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        style={styles.secondaryButton}
+                                        activeOpacity={0.8}
+                                        onPress={() => router.push({
+                                            pathname: '/(teacher)/materials',
+                                            params: { subject: subjectName }
+                                        })}
+                                    >
+                                        <MaterialIcons name="folder" size={24} color={colors.white} />
+                                        <Text style={styles.secondaryButtonText}>Materiais de Aula</Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        style={styles.secondaryButton}
+                                        activeOpacity={0.8}
+                                        onPress={() => console.log('Atividades')}
+                                    >
+                                        <MaterialIcons name="assignment" size={24} color={colors.white} />
+                                        <Text style={styles.secondaryButtonText}>Atividades e Quizzes</Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        style={styles.secondaryButton}
+                                        activeOpacity={0.8}
+                                        onPress={() => console.log('Notas')}
+                                    >
+                                        <MaterialIcons name="grade" size={24} color={colors.white} />
+                                        <Text style={styles.secondaryButtonText}>Lançar Notas</Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        style={styles.secondaryButton}
+                                        activeOpacity={0.8}
+                                        onPress={() => router.push({
+                                            pathname: '/(teacher)/class-report',
+                                            params: { subject: subjectName, subjectId: subjectId }
+                                        })}
+                                    >
+                                        <MaterialIcons name="assessment" size={24} color={colors.white} />
+                                        <Text style={styles.secondaryButtonText}>Relatórios da Turma</Text>
+                                    </TouchableOpacity>
                                 </View>
-                                <MaterialIcons name="arrow-forward-ios" size={18} color="rgba(255,255,255,0.7)" />
-                            </LinearGradient>
-                        </TouchableOpacity>
-
-                        {/* Primary Action - Attendance */}
-                        <TouchableOpacity
-                            style={styles.primaryButton}
-                            activeOpacity={0.8}
-                            onPress={() => router.push({
-                                pathname: '/(teacher)/attendance',
-                                params: { subject: subjectName }
-                            })}
-                        >
-                            <MaterialIcons name="how-to-reg" size={24} color={colors.white} />
-                            <Text style={styles.primaryButtonText}>Fazer Chamada</Text>
-                        </TouchableOpacity>
-
-                        {/* Secondary Actions */}
-                        <TouchableOpacity
-                            style={styles.secondaryButton}
-                            activeOpacity={0.8}
-                            onPress={() => console.log('Ver alunos')}
-                        >
-                            <MaterialIcons name="people" size={24} color={colors.white} />
-                            <Text style={styles.secondaryButtonText}>Ver Lista de Alunos</Text>
-                            <View style={styles.badge}>
-                                <Text style={styles.badgeText}>{subjectData.totalStudents}</Text>
                             </View>
-                        </TouchableOpacity>
+                        ) : (
+                            // Mobile: Single column (original layout)
+                            <>
+                                <TouchableOpacity
+                                    style={styles.aiButton}
+                                    activeOpacity={0.8}
+                                    onPress={() => router.push({
+                                        pathname: '/(teacher)/ai-assistant',
+                                        params: { subject: subjectName, subjectId: subjectId }
+                                    })}
+                                >
+                                    <LinearGradient
+                                        colors={['#10b981', '#14b8a6', '#3B82F6']}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 0 }}
+                                        style={styles.aiButtonGradient}
+                                    >
+                                        <MaterialIcons name="auto-awesome" size={24} color={colors.white} />
+                                        <View style={styles.aiTextContainer}>
+                                            <Text style={styles.aiButtonText}>Assistente de IA</Text>
+                                            <Text style={styles.aiButtonSubtext}>Gerar conteúdo, quizzes e mais</Text>
+                                        </View>
+                                        <MaterialIcons name="arrow-forward-ios" size={18} color="rgba(255,255,255,0.7)" />
+                                    </LinearGradient>
+                                </TouchableOpacity>
 
-                        <TouchableOpacity
-                            style={styles.secondaryButton}
-                            activeOpacity={0.8}
-                            onPress={() => router.push({
-                                pathname: '/(teacher)/materials',
-                                params: { subject: subjectName }
-                            })}
-                        >
-                            <MaterialIcons name="folder" size={24} color={colors.white} />
-                            <Text style={styles.secondaryButtonText}>Materiais de Aula</Text>
-                        </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.transcriptionButton}
+                                    activeOpacity={0.8}
+                                    onPress={() => router.push({
+                                        pathname: '/(teacher)/transcription',
+                                        params: { subject: subjectName, subjectId: subjectId }
+                                    })}
+                                >
+                                    <LinearGradient
+                                        colors={['#8b5cf6', '#a855f7', '#c084fc']}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 0 }}
+                                        style={styles.aiButtonGradient}
+                                    >
+                                        <MaterialIcons name="mic" size={24} color={colors.white} />
+                                        <View style={styles.aiTextContainer}>
+                                            <Text style={styles.aiButtonText}>Transcrever Aula</Text>
+                                            <Text style={styles.aiButtonSubtext}>Ditar conteúdo e gerar material</Text>
+                                        </View>
+                                        <MaterialIcons name="arrow-forward-ios" size={18} color="rgba(255,255,255,0.7)" />
+                                    </LinearGradient>
+                                </TouchableOpacity>
 
-                        <TouchableOpacity
-                            style={styles.secondaryButton}
-                            activeOpacity={0.8}
-                            onPress={() => console.log('Atividades')}
-                        >
-                            <MaterialIcons name="assignment" size={24} color={colors.white} />
-                            <Text style={styles.secondaryButtonText}>Atividades e Quizzes</Text>
-                        </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.primaryButton}
+                                    activeOpacity={0.8}
+                                    onPress={() => router.push({
+                                        pathname: '/(teacher)/attendance',
+                                        params: { subject: subjectName }
+                                    })}
+                                >
+                                    <MaterialIcons name="how-to-reg" size={24} color={colors.white} />
+                                    <Text style={styles.primaryButtonText}>Fazer Chamada</Text>
+                                </TouchableOpacity>
 
-                        <TouchableOpacity
-                            style={styles.secondaryButton}
-                            activeOpacity={0.8}
-                            onPress={() => console.log('Notas')}
-                        >
-                            <MaterialIcons name="grade" size={24} color={colors.white} />
-                            <Text style={styles.secondaryButtonText}>Lançar Notas</Text>
-                        </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.secondaryButton}
+                                    activeOpacity={0.8}
+                                    onPress={() => router.push({
+                                        pathname: '/(teacher)/materials',
+                                        params: { subject: subjectName }
+                                    })}
+                                >
+                                    <MaterialIcons name="folder" size={24} color={colors.white} />
+                                    <Text style={styles.secondaryButtonText}>Materiais de Aula</Text>
+                                </TouchableOpacity>
 
-                        <TouchableOpacity
-                            style={styles.secondaryButton}
-                            activeOpacity={0.8}
-                            onPress={() => router.push({
-                                pathname: '/(teacher)/class-report',
-                                params: { subject: subjectName }
-                            })}
-                        >
-                            <MaterialIcons name="assessment" size={24} color={colors.white} />
-                            <Text style={styles.secondaryButtonText}>Relatórios da Turma</Text>
-                        </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={styles.secondaryButton}
+                                    activeOpacity={0.8}
+                                    onPress={() => console.log('Atividades')}
+                                >
+                                    <MaterialIcons name="assignment" size={24} color={colors.white} />
+                                    <Text style={styles.secondaryButtonText}>Atividades e Quizzes</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.secondaryButton}
+                                    activeOpacity={0.8}
+                                    onPress={() => console.log('Notas')}
+                                >
+                                    <MaterialIcons name="grade" size={24} color={colors.white} />
+                                    <Text style={styles.secondaryButtonText}>Lançar Notas</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.secondaryButton}
+                                    activeOpacity={0.8}
+                                    onPress={() => router.push({
+                                        pathname: '/(teacher)/class-report',
+                                        params: { subject: subjectName, subjectId: subjectId }
+                                    })}
+                                >
+                                    <MaterialIcons name="assessment" size={24} color={colors.white} />
+                                    <Text style={styles.secondaryButtonText}>Relatórios da Turma</Text>
+                                </TouchableOpacity>
+                            </>
+                        )}
                     </View>
                 </ScrollView>
             </View>
@@ -359,9 +434,22 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.base,
         paddingVertical: spacing.md,
         gap: spacing.md,
-        maxWidth: 480,
+        maxWidth: 1200,
         alignSelf: 'center',
         width: '100%',
+    },
+    twoColumnContainer: {
+        flexDirection: 'row',
+        gap: spacing.md,
+        alignItems: 'flex-start',
+    },
+    leftColumn: {
+        flex: 1,
+        gap: spacing.md,
+    },
+    rightColumn: {
+        flex: 1,
+        gap: spacing.md,
     },
     aiButton: {
         borderRadius: 16,

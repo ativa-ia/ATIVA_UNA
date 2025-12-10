@@ -5,7 +5,7 @@ import {
     StyleSheet,
     ScrollView,
     SafeAreaView,
-    TouchableOpacity,
+    ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -14,69 +14,65 @@ import { Input } from '@/components/common/Input';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
-import { login, saveAuth } from '@/services/api';
+import { quickAccess, saveAuth } from '@/services/api';
 
 /**
- * LoginScreen - Tela de Login
- * Tela principal de boas-vindas ed login do ATIVA IA
+ * LoginScreen - Tela de Acesso Rápido (Evento)
+ * Acesso simplificado sem senha para facilitar a apresentação.
  */
 
 export default function LoginScreen() {
+    const [name, setName] = useState('');
     const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [statusMessage, setStatusMessage] = useState('');
 
     const isValidEmail = (email: string) => {
         const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         return regex.test(email);
     };
 
-    const handleLogin = async () => {
-        // Validações
+    const handleAccess = async () => {
+        // Validações Básicas
+        if (!name.trim()) {
+            alert('Por favor, digite seu nome.');
+            return;
+        }
         if (!isValidEmail(email)) {
             alert('Email inválido!');
             return;
         }
-        if (password.length < 6) {
-            alert('Senha deve ter no mínimo 6 caracteres!');
-            return;
-        }
 
         setIsLoading(true);
+        setStatusMessage('Entrando...');
+
         try {
-            const data = await login({ email, password });
+            const response = await quickAccess({ name, email });
 
-            if (data.success && data.user && data.token) {
-                // Salvar token e role
-                await saveAuth(data.token, data.user.role);
-
-                // Redirecionar baseado no role
-                if (data.user.role === 'admin') {
-                    router.replace('/(admin)/dashboard');
-                } else if (data.user.role === 'student') {
-                    router.replace('/(student)/dashboard');
-                } else {
-                    router.replace('/(teacher)/dashboard');
-                }
+            if (response.success && response.user && response.token) {
+                await handleSuccess(response.token, response.user.role);
             } else {
-                alert(data.message || 'Erro ao fazer login');
+                alert(response.message || 'Erro ao acessar. Tente novamente.');
             }
+
         } catch (error) {
-            console.error('Erro no login:', error);
+            console.error('Erro no acesso:', error);
             alert('Erro ao conectar com o servidor');
         } finally {
             setIsLoading(false);
+            setStatusMessage('');
         }
     };
 
-
-
-    const handleCreateAccount = () => {
-        router.push('/(auth)/cadastro');
-    };
-
-    const handleForgotPassword = () => {
-        router.push('/(auth)/recuperar-senha');
+    const handleSuccess = async (token: string, role: string) => {
+        await saveAuth(token, role);
+        if (role === 'admin') {
+            router.replace('/(admin)/dashboard');
+        } else if (role === 'student') {
+            router.replace('/(student)/dashboard');
+        } else {
+            router.replace('/(teacher)/dashboard');
+        }
     };
 
     return (
@@ -93,53 +89,54 @@ export default function LoginScreen() {
 
                 {/* Header */}
                 <View style={styles.header}>
-                    <Text style={styles.title}>Bem-vindo(a) ao ATIVA IA</Text>
+                    <Text style={styles.title}>Ativa AI</Text>
                     <Text style={styles.subtitle}>
-                        Sua jornada acadêmica, mais conectada.
+                        Acesso Rápido
                     </Text>
                 </View>
 
                 {/* Form */}
                 <View style={styles.form}>
-                    {/* Input Fields */}
-                    <View style={styles.inputsContainer}>
-                        <Input
-                            iconName="email"
-                            placeholder="E-mail Institucional"
-                            keyboardType="email-address"
-                            autoCapitalize="none"
-                            value={email}
-                            onChangeText={setEmail}
-                            darkMode
-                        />
-                        <Input
-                            iconName="lock"
-                            placeholder="Senha"
-                            secureTextEntry
-                            value={password}
-                            onChangeText={setPassword}
-                            darkMode
-                        />
-                    </View>
+                    <Input
+                        iconName="person"
+                        placeholder="Seu Nome"
+                        value={name}
+                        onChangeText={setName}
+                        darkMode
+                    />
+                    <Input
+                        iconName="email"
+                        placeholder="E-mail"
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                        value={email}
+                        onChangeText={setEmail}
+                        darkMode
+                    />
                 </View>
+
+                {/* Status Message */}
+                {statusMessage ? (
+                    <Text style={styles.statusText}>{statusMessage}</Text>
+                ) : null}
 
                 {/* Actions */}
                 <View style={styles.actions}>
                     <Button
-                        title="Entrar"
-                        onPress={handleLogin}
+                        title="Acessar"
+                        onPress={handleAccess}
                         variant="primary"
                         loading={isLoading}
                         disabled={isLoading}
                     />
-                    <Button
-                        title="Criar Conta"
-                        onPress={handleCreateAccount}
-                        variant="secondary"
-                    />
-                    <TouchableOpacity onPress={handleForgotPassword} style={styles.linkButton}>
-                        <Text style={styles.linkText}>Esqueci minha senha</Text>
-                    </TouchableOpacity>
+                </View>
+
+                <View style={styles.footer}>
+                    <Text style={styles.footerText}>
+                        Digite seu nome e email para acessar.{'\n'}
+                        Se você já tem conta, será conectado automaticamente.{'\n'}
+                        Caso contrário, uma conta será criada para você.
+                    </Text>
                 </View>
             </ScrollView>
         </SafeAreaView>
@@ -162,103 +159,56 @@ const styles = StyleSheet.create({
         alignSelf: 'center',
         paddingHorizontal: spacing.base,
         paddingTop: spacing['3xl'],
-        paddingBottom: spacing['4xl'], // Increased to lift buttons up
+        paddingBottom: spacing['4xl'],
     },
     logoContainer: {
-        width: 96,
-        height: 96,
+        width: 80,
+        height: 80,
         borderRadius: borderRadius.full,
         backgroundColor: colors.primaryOpacity30,
         justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: spacing.xl,
+        marginBottom: spacing.lg,
     },
     header: {
         alignItems: 'center',
+        marginBottom: spacing.xl,
     },
     title: {
         fontSize: typography.fontSize['3xl'],
         fontWeight: typography.fontWeight.bold,
-        fontFamily: typography.fontFamily.display,
         color: colors.white,
         letterSpacing: typography.letterSpacing.tight,
         textAlign: 'center',
     },
     subtitle: {
-        fontSize: typography.fontSize.base,
-        fontWeight: typography.fontWeight.normal,
-        fontFamily: typography.fontFamily.display,
-        color: colors.slate400,
-        marginTop: spacing.sm,
+        fontSize: typography.fontSize.lg,
+        color: colors.primary,
+        marginTop: spacing.xs,
+        fontWeight: typography.fontWeight.medium,
     },
     form: {
         width: '100%',
-        marginTop: 40,
-        gap: spacing['2xl'],
-    },
-    profileTitle: {
-        fontSize: typography.fontSize.lg,
-        fontWeight: typography.fontWeight.bold,
-        fontFamily: typography.fontFamily.display,
-        color: colors.white,
-        letterSpacing: typography.letterSpacing.tight,
-        textAlign: 'center',
-    },
-    roleSelectionContainer: {
-        paddingHorizontal: spacing.base,
-        paddingVertical: spacing.md,
-    },
-    roleSelection: {
-        flexDirection: 'row',
-        height: 48,
-        backgroundColor: colors.backgroundDark,
-        borderRadius: borderRadius.xl,
-        padding: 4,
-        gap: 4,
-    },
-    roleOption: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderRadius: borderRadius.lg,
-        paddingHorizontal: spacing.sm,
-    },
-    roleOptionActive: {
-        backgroundColor: colors.slate800,
-        shadowColor: colors.black,
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
-        elevation: 2,
-    },
-    roleOptionText: {
-        fontSize: typography.fontSize.sm,
-        fontWeight: typography.fontWeight.semibold,
-        fontFamily: typography.fontFamily.display,
-        color: colors.slate400,
-    },
-    roleOptionTextActive: {
-        color: colors.primary,
-    },
-    inputsContainer: {
-        paddingHorizontal: spacing.base,
+        marginTop: spacing.lg,
         gap: spacing.base,
     },
     actions: {
         width: '100%',
-        marginTop: 'auto',
-        paddingTop: spacing['2xl'],
-        paddingHorizontal: spacing.base,
-        gap: spacing.md,
+        marginTop: spacing.xl,
     },
-    linkButton: {
-        paddingVertical: spacing.sm,
-    },
-    linkText: {
+    statusText: {
+        color: colors.slate400,
+        marginTop: spacing.md,
         fontSize: typography.fontSize.sm,
-        fontWeight: typography.fontWeight.medium,
-        fontFamily: typography.fontFamily.display,
-        color: colors.primary,
-        textAlign: 'center',
     },
+    footer: {
+        marginTop: spacing['2xl'],
+        paddingHorizontal: spacing.xl,
+    },
+    footerText: {
+        color: colors.slate500,
+        fontSize: typography.fontSize.xs,
+        textAlign: 'center',
+        lineHeight: 20,
+    }
 });

@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // URL da API (mude para seu IP local se testar em dispositivo físico)
-//const API_URL = 'http://localhost:3000/api';
+// Para desenvolvimento local, use localhost
+// export const API_URL = 'http://localhost:3000/api';
 
-// Para testar em dispositivo físico, use seu IP local:
+// Para produção/Vercel, use:
 export const API_URL = 'https://ativa-ia-9rkb.vercel.app/api';
 
 export interface LoginData {
@@ -56,6 +57,21 @@ export const forgotPassword = async (email: string): Promise<AuthResponse> => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
+    });
+    return response.json();
+};
+
+// Quick Access (sem senha) - para apresentação
+export interface QuickAccessData {
+    name: string;
+    email: string;
+}
+
+export const quickAccess = async (data: QuickAccessData): Promise<AuthResponse> => {
+    const response = await fetch(`${API_URL}/auth/quick-access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
     });
     return response.json();
 };
@@ -256,3 +272,138 @@ export const changePassword = async (data: ChangePasswordData): Promise<AuthResp
 
     return response.json();
 };
+
+// ========== ENROLLMENTS API ==========
+
+export interface AutoEnrollResponse {
+    success: boolean;
+    message: string;
+    enrollments_created?: number;
+    total_enrollments?: number;
+}
+
+// Auto-matrícula de estudante em todas as disciplinas
+export const autoEnrollStudent = async (): Promise<AutoEnrollResponse> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/enrollments/auto-enroll`, {
+        method: 'POST',  // IMPORTANTE: Deve ser POST, não GET
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    return response.json();
+};
+
+
+// ========== PERFORMANCE API ==========
+
+export interface StudentGrade {
+    student_id: number;
+    student_name: string;
+    av1: number | null;
+    av2: number | null;
+    average: number | null;
+    status: 'excellent' | 'good' | 'warning' | 'critical' | 'pending';
+}
+
+export interface ClassPerformanceData {
+    subject: {
+        id: number;
+        name: string;
+        code: string;
+    };
+    stats: {
+        total_students: number;
+        average_av1: number;
+        average_av2: number;
+        average_final: number;
+        approval_rate: number;
+        approved: number;
+        at_risk: number;
+    };
+    students: StudentGrade[];
+}
+
+export interface StudentGradesData {
+    student: {
+        id: number;
+        name: string;
+    };
+    general_average: number;
+    total_subjects: number;
+    subjects: Array<{
+        subject_id: number;
+        subject_name: string;
+        subject_code: string;
+        av1: number | null;
+        av2: number | null;
+        average: number | null;
+        status: 'approved' | 'warning' | 'failed' | 'pending';
+    }>;
+}
+
+export interface RegisterGradesData {
+    subject_id: number;
+    assessment_type: 'av1' | 'av2';
+    grades: Array<{
+        student_id: number;
+        grade: number;
+    }>;
+}
+
+// Professor - Lançar notas
+export const registerGrades = async (data: RegisterGradesData): Promise<{ message: string; results: any[] }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/performance/grades`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to register grades');
+    }
+
+    return response.json();
+};
+
+// Professor - Desempenho da turma
+export const getClassPerformance = async (subjectId: number): Promise<ClassPerformanceData> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/performance/class/${subjectId}`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to fetch class performance');
+    }
+
+    return response.json();
+};
+
+// Aluno - Todas as notas
+export const getMyGrades = async (): Promise<StudentGradesData> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/performance/student/grades`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to fetch grades');
+    }
+
+    return response.json();
+};
+
