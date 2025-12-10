@@ -293,3 +293,231 @@ def get_student_grades_all(current_user):
         import traceback
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
+
+
+def get_student_performance(current_user, student_id, subject_id):
+    """Desempenho detalhado de um aluno específico em uma disciplina"""
+    try:
+        # Apenas professores
+        if current_user.role != 'teacher':
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        # Verificar se leciona a disciplina
+        teaching = Teaching.query.filter_by(
+            teacher_id=current_user.id,
+            subject_id=subject_id
+        ).first()
+        
+        if not teaching:
+            return jsonify({'error': 'You do not teach this subject'}), 403
+        
+        # Buscar aluno
+        student = User.query.get(student_id)
+        if not student or student.role != 'student':
+            return jsonify({'error': 'Student not found'}), 404
+        
+        # Buscar disciplina
+        subject = Subject.query.get(subject_id)
+        if not subject:
+            return jsonify({'error': 'Subject not found'}), 404
+        
+        # Verificar se o aluno está matriculado
+        enrollment = Enrollment.query.filter_by(
+            student_id=student_id,
+            subject_id=subject_id
+        ).first()
+        
+        if not enrollment:
+            return jsonify({'error': 'Student not enrolled in this subject'}), 404
+        
+        # Buscar notas
+        av1_grade = Grade.query.filter_by(
+            student_id=student_id,
+            subject_id=subject_id,
+            assessment_type='av1'
+        ).first()
+        
+        av2_grade = Grade.query.filter_by(
+            student_id=student_id,
+            subject_id=subject_id,
+            assessment_type='av2'
+        ).first()
+        
+        av1_value = av1_grade.grade if av1_grade else None
+        av2_value = av2_grade.grade if av2_grade else None
+        
+        # Calcular média
+        average = None
+        if av1_value is not None and av2_value is not None:
+            average = (av1_value + av2_value) / 2
+        elif av1_value is not None:
+            average = av1_value
+        elif av2_value is not None:
+            average = av2_value
+        
+        # Determinar status
+        status = 'pending'
+        if average is not None:
+            if average >= 9.0:
+                status = 'excellent'
+            elif average >= 7.0:
+                status = 'good'
+            elif average >= 5.0:
+                status = 'warning'
+            else:
+                status = 'critical'
+        
+        # Calcular média da turma para comparação
+        from app.models import QuizResponse
+        all_students = Enrollment.query.filter_by(subject_id=subject_id).all()
+        class_grades = []
+        for enr in all_students:
+            av1 = Grade.query.filter_by(
+                student_id=enr.student_id,
+                subject_id=subject_id,
+                assessment_type='av1'
+            ).first()
+            av2 = Grade.query.filter_by(
+                student_id=enr.student_id,
+                subject_id=subject_id,
+                assessment_type='av2'
+            ).first()
+            
+            if av1 and av2:
+                class_grades.append((av1.grade + av2.grade) / 2)
+        
+        # Calcular ranking do aluno
+        class_grades_with_ids = []
+        for enr in all_students:
+            av1 = Grade.query.filter_by(
+                student_id=enr.student_id,
+                subject_id=subject_id,
+                assessment_type='av1'
+            ).first()
+            av2 = Grade.query.filter_by(
+                student_id=enr.student_id,
+                subject_id=subject_id,
+                assessment_type='av2'
+            ).first()
+            
+            if av1 and av2:
+                student_avg = (av1.grade + av2.grade) / 2
+                class_grades.append(student_avg)
+                class_grades_with_ids.append({
+                    'student_id': enr.student_id,
+                    'average': student_avg
+                })
+        
+        class_average = sum(class_grades) / len(class_grades) if class_grades else 0
+        
+        # Calcular ranking
+        class_grades_with_ids.sort(key=lambda x: x['average'], reverse=True)
+        ranking = None
+        for idx, item in enumerate(class_grades_with_ids):
+            if item['student_id'] == student_id:
+                ranking = idx + 1
+                break
+        
+        # Calcular tendência (AV2 vs AV1)
+        trend = None
+        if av1_value is not None and av2_value is not None:
+            if av2_value > av1_value:
+                trend = 'improving'
+            elif av2_value < av1_value:
+                trend = 'declining'
+            else:
+                trend = 'stable'
+        
+        # Calcular nota necessária para aprovação (média 7.0)
+        required_grade = None
+        if av1_value is not None and av2_value is None:
+            # Só tem AV1, calcular quanto precisa na AV2
+            required_grade = (7.0 * 2) - av1_value
+            required_grade = max(0, min(10, required_grade))  # Entre 0 e 10
+        
+        # Buscar atividades
+        from app.models import Activity, ActivitySubmission
+        activities = Activity.query.filter_by(subject_id=subject_id).all()
+        activities_data = []
+        for activity in activities:
+            submission = ActivitySubmission.query.filter_by(
+                activity_id=activity.id,
+                student_id=student_id
+            ).first()
+            
+            if submission:
+                activities_data.append({
+                    'activity_id': activity.id,
+                    'title': activity.title,
+                    'type': activity.type,
+                    'status': submission.status,
+                    'grade': submission.grade,
+                    'submitted_at': submission.submitted_at.isoformat() if submission.submitted_at else None,
+                    'graded_at': submission.graded_at.isoformat() if submission.graded_at else None
+                })
+            else:
+                activities_data.append({
+                    'activity_id': activity.id,
+                    'title': activity.title,
+                    'type': activity.type,
+                    'status': 'pending',
+                    'grade': None,
+                    'submitted_at': None,
+                    'graded_at': None
+                })
+        
+        # Buscar quizzes do aluno nesta disciplina
+        from app.models import Quiz
+        quizzes = Quiz.query.filter_by(subject_id=subject_id).all()
+        quiz_data = []
+        for quiz in quizzes:
+            response = QuizResponse.query.filter_by(
+                quiz_id=quiz.id,
+                student_id=student_id
+            ).first()
+            
+            if response:
+                quiz_data.append({
+                    'quiz_id': quiz.id,
+                    'quiz_title': quiz.title,
+                    'score': response.score,
+                    'total': response.total,
+                    'percentage': response.percentage,
+                    'submitted_at': response.submitted_at.isoformat() if response.submitted_at else None
+                })
+        
+        return jsonify({
+            'student': {
+                'id': student.id,
+                'name': student.name,
+                'email': student.email
+            },
+            'subject': {
+                'id': subject.id,
+                'name': subject.name,
+                'code': subject.code
+            },
+            'grades': {
+                'av1': av1_value,
+                'av2': av2_value,
+                'average': round(average, 2) if average is not None else None,
+                'status': status
+            },
+            'class_average': round(class_average, 2),
+            'ranking': ranking,
+            'total_students': len(all_students),
+            'trend': trend,
+            'required_grade': round(required_grade, 1) if required_grade is not None else None,
+            'activities': activities_data,
+            'total_activities': len(activities),
+            'completed_activities': sum(1 for a in activities_data if a['status'] in ['submitted', 'graded']),
+            'quizzes': quiz_data,
+            'total_quizzes': len(quizzes),
+            'completed_quizzes': len(quiz_data)
+        }), 200
+        
+    except Exception as e:
+        print(f'❌ Error in get_student_performance: {str(e)}')
+        import traceback
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
