@@ -143,7 +143,7 @@ export default function StudentNotificationsScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: colors.background,
+        backgroundColor: colors.backgroundLight,
     },
     header: {
         flexDirection: 'row',
@@ -166,7 +166,7 @@ const styles = StyleSheet.create({
     },
     content: {
         flex: 1,
-        backgroundColor: colors.background,
+        backgroundColor: colors.backgroundLight,
         borderTopLeftRadius: borderRadius.xl,
         borderTopRightRadius: borderRadius.xl,
         marginTop: -spacing.md,
@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
     cardTitle: {
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
-        color: colors.text,
+        color: colors.slate800,
         fontFamily: typography.fontFamily.display,
     },
     cardDate: {

@@ -1,6 +1,9 @@
 from flask import request, jsonify
 from marshmallow import ValidationError
 from app.models.user import User
+from app.models.subject import Subject
+from app.models.enrollment import Enrollment
+from app.models.teaching import Teaching
 from app.utils.jwt_utils import generate_token
 from app.schemas.user_schema import register_schema, login_schema, forgot_password_schema
 from app import db
@@ -27,6 +30,9 @@ def register():
             role=data['role'],
             name=data['name']
         )
+        
+        # Criar usuário
+        db.session.commit()
         
         # Gerar token
         token = generate_token(user)
