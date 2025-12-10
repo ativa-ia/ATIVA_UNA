@@ -1,9 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // URL da API (mude para seu IP local se testar em dispositivo físico)
-//const API_URL = 'http://localhost:3000/api';
+// Para desenvolvimento local, use localhost
+// export const API_URL = 'http://localhost:3000/api';
 
-// Para testar em dispositivo físico, use seu IP local:
+// Para produção/Vercel, use:
 export const API_URL = 'https://ativa-ia-9rkb.vercel.app/api';
 
 export interface LoginData {
@@ -256,3 +257,28 @@ export const changePassword = async (data: ChangePasswordData): Promise<AuthResp
 
     return response.json();
 };
+
+// ========== ENROLLMENTS API ==========
+
+export interface AutoEnrollResponse {
+    success: boolean;
+    message: string;
+    enrollments_created?: number;
+    total_enrollments?: number;
+}
+
+// Auto-matrícula de estudante em todas as disciplinas
+export const autoEnrollStudent = async (): Promise<AutoEnrollResponse> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/enrollments/auto-enroll`, {
+        method: 'POST',  // IMPORTANTE: Deve ser POST, não GET
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    return response.json();
+};
+
+

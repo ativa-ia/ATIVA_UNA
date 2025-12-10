@@ -31,7 +31,35 @@ def register():
             name=data['name']
         )
         
-        # Criar usuário
+        # Auto-matrícula para estudantes
+        if user.role == 'student':
+            # Buscar todas as disciplinas disponíveis
+            all_subjects = Subject.query.all()
+            
+            if all_subjects:
+                # Buscar primeira turma disponível
+                from app.models.class_model import Class
+                default_class = Class.query.first()
+                
+                if default_class:
+                    # Criar matrículas para cada disciplina
+                    enrollments_created = 0
+                    for subject in all_subjects:
+                        enrollment = Enrollment(
+                            student_id=user.id,
+                            subject_id=subject.id,
+                            class_id=default_class.id  # Usar primeira turma disponível
+                        )
+                        db.session.add(enrollment)
+                        enrollments_created += 1
+                    
+                    print(f'✅ Auto-matrícula no registro: {enrollments_created} disciplinas para aluno {user.email}')
+                else:
+                    print(f'⚠️ Nenhuma turma disponível para auto-matrícula de {user.email}')
+            else:
+                print(f'⚠️ Nenhuma disciplina disponível para auto-matrícula de {user.email}')
+        
+        # Commit do usuário e matrículas
         db.session.commit()
         
         # Gerar token

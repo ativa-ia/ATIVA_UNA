@@ -39,10 +39,10 @@ def admin_required(f):
                 'message': 'Usuário não encontrado'
             }), 401
             
-        if current_user.role != 'admin':
+        if current_user.role not in ['admin', 'teacher']:
             return jsonify({
                 'success': False,
-                'message': 'Acesso não autorizado. Requer privilégios de administrador.'
+                'message': 'Acesso não autorizado. Requer privilégios de administrador ou professor.'
             }), 403
             
         return f(current_user, *args, **kwargs)
