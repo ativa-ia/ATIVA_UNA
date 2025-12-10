@@ -2,10 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // URL da API (mude para seu IP local se testar em dispositivo físico)
 // Para desenvolvimento local, use localhost
-// export const API_URL = 'http://localhost:3000/api';
+export const API_URL = 'http://localhost:3000/api';
 
 // Para produção/Vercel, use:
-export const API_URL = 'https://ativa-ia-9rkb.vercel.app/api';
+// export const API_URL = 'https://ativa-ia-9rkb.vercel.app/api';
 
 export interface LoginData {
     email: string;
@@ -402,6 +402,68 @@ export const getMyGrades = async (): Promise<StudentGradesData> => {
 
     if (!response.ok) {
         throw new Error('Failed to fetch grades');
+    }
+
+    return response.json();
+};
+
+// Professor - Desempenho individual do aluno
+export interface StudentPerformanceData {
+    student: {
+        id: number;
+        name: string;
+        email: string;
+    };
+    subject: {
+        id: number;
+        name: string;
+        code: string;
+    };
+    grades: {
+        av1: number | null;
+        av2: number | null;
+        average: number | null;
+        status: 'excellent' | 'good' | 'warning' | 'critical' | 'pending';
+    };
+    class_average: number;
+    ranking: number | null;
+    total_students: number;
+    trend: 'improving' | 'declining' | 'stable' | null;
+    required_grade: number | null;
+    activities: Array<{
+        activity_id: number;
+        title: string;
+        type: string;
+        status: 'pending' | 'submitted' | 'graded';
+        grade: number | null;
+        submitted_at: string | null;
+        graded_at: string | null;
+    }>;
+    total_activities: number;
+    completed_activities: number;
+    quizzes: Array<{
+        quiz_id: number;
+        quiz_title: string;
+        score: number;
+        total: number;
+        percentage: number;
+        submitted_at: string | null;
+    }>;
+    total_quizzes: number;
+    completed_quizzes: number;
+}
+
+export const getStudentPerformance = async (studentId: number, subjectId: number): Promise<StudentPerformanceData> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/performance/student/${studentId}/subject/${subjectId}`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to fetch student performance');
     }
 
     return response.json();
