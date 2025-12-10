@@ -27,3 +27,11 @@ def get_class_performance(current_user, subject_id):
 def get_student_grades_all(current_user):
     """Obter todas as notas do aluno"""
     return performance_controller.get_student_grades_all(current_user)
+
+
+# Professor - Desempenho individual do aluno
+@performance_bp.route('/student/<int:student_id>/subject/<int:subject_id>', methods=['GET'])
+@token_required
+def get_student_performance(current_user, student_id, subject_id):
+    """Obter desempenho detalhado de um aluno em uma disciplina"""
+    return performance_controller.get_student_performance(current_user, student_id, subject_id)
