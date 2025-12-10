@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     ScrollView,
     TouchableOpacity,
+    ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -12,17 +13,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
-
-interface StudentPerformance {
-    id: string;
-    name: string;
-    avatar: string;
-    grade: number;
-    attendance: number;
-    activitiesCompleted: number;
-    totalActivities: number;
-    status: 'excellent' | 'good' | 'warning' | 'critical';
-}
+import { getClassPerformance, ClassPerformanceData, StudentGrade } from '@/services/api';
 
 /**
  * ClassReportScreen - Relatório da Turma (Professor)
@@ -32,29 +23,31 @@ export default function ClassReportScreen() {
     const insets = useSafeAreaInsets();
     const params = useLocalSearchParams();
     const subjectName = params.subject as string || 'Disciplina';
+    const subjectId = params.subjectId as string;
 
     const [filter, setFilter] = useState<'all' | 'excellent' | 'warning'>('all');
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [performanceData, setPerformanceData] = useState<ClassPerformanceData | null>(null);
 
-    // Mock data - será substituído por dados reais do backend
-    const classStats = {
-        totalStudents: 35,
-        averageGrade: 7.2,
-        averageAttendance: 85,
-        atRiskStudents: 5,
+    // Buscar dados da API
+    useEffect(() => {
+        loadPerformanceData();
+    }, [subjectId]);
+
+    const loadPerformanceData = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+            const data = await getClassPerformance(parseInt(subjectId));
+            setPerformanceData(data);
+        } catch (err) {
+            console.error('Erro ao carregar desempenho:', err);
+            setError('Erro ao carregar dados de desempenho');
+        } finally {
+            setLoading(false);
+        }
     };
-
-    const students: StudentPerformance[] = [
-        { id: '1', name: 'Ana Carolina Silva', avatar: 'A', grade: 9.2, attendance: 95, activitiesCompleted: 12, totalActivities: 12, status: 'excellent' },
-        { id: '2', name: 'Bruno Costa Santos', avatar: 'B', grade: 8.5, attendance: 90, activitiesCompleted: 11, totalActivities: 12, status: 'excellent' },
-        { id: '3', name: 'Carlos Eduardo Mendes', avatar: 'C', grade: 7.8, attendance: 88, activitiesCompleted: 10, totalActivities: 12, status: 'good' },
-        { id: '4', name: 'Diana Oliveira Lima', avatar: 'D', grade: 7.0, attendance: 82, activitiesCompleted: 9, totalActivities: 12, status: 'good' },
-        { id: '5', name: 'Eduardo Santos Filho', avatar: 'E', grade: 6.5, attendance: 75, activitiesCompleted: 8, totalActivities: 12, status: 'warning' },
-        { id: '6', name: 'Fernanda Almeida', avatar: 'F', grade: 5.8, attendance: 70, activitiesCompleted: 7, totalActivities: 12, status: 'warning' },
-        { id: '7', name: 'Gabriel Rocha', avatar: 'G', grade: 4.5, attendance: 60, activitiesCompleted: 5, totalActivities: 12, status: 'critical' },
-        { id: '8', name: 'Helena Martins', avatar: 'H', grade: 8.8, attendance: 92, activitiesCompleted: 12, totalActivities: 12, status: 'excellent' },
-        { id: '9', name: 'Igor Pereira', avatar: 'I', grade: 7.5, attendance: 85, activitiesCompleted: 10, totalActivities: 12, status: 'good' },
-        { id: '10', name: 'Julia Fernandes', avatar: 'J', grade: 3.8, attendance: 55, activitiesCompleted: 4, totalActivities: 12, status: 'critical' },
-    ];
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -72,16 +65,72 @@ export default function ClassReportScreen() {
             case 'good': return 'Bom';
             case 'warning': return 'Atenção';
             case 'critical': return 'Crítico';
+            case 'pending': return 'Pendente';
             default: return '';
         }
     };
 
-    const filteredStudents = students.filter(student => {
+    const filteredStudents = performanceData?.students.filter(student => {
         if (filter === 'all') return true;
         if (filter === 'excellent') return student.status === 'excellent' || student.status === 'good';
         if (filter === 'warning') return student.status === 'warning' || student.status === 'critical';
         return true;
-    });
+    }) || [];
+
+    if (loading) {
+        return (
+            <View style={styles.safeArea}>
+                <View style={styles.container}>
+                    <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
+                        <TouchableOpacity
+                            style={styles.backButton}
+                            onPress={() => router.back()}
+                        >
+                            <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
+                        </TouchableOpacity>
+                        <View style={styles.headerTextContainer}>
+                            <Text style={styles.headerTitle}>Relatório da Turma</Text>
+                            <Text style={styles.headerSubtitle}>{subjectName}</Text>
+                        </View>
+                        <View style={styles.placeholder} />
+                    </View>
+                    <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="large" color={colors.primary} />
+                        <Text style={styles.loadingText}>Carregando desempenho...</Text>
+                    </View>
+                </View>
+            </View>
+        );
+    }
+
+    if (error || !performanceData) {
+        return (
+            <View style={styles.safeArea}>
+                <View style={styles.container}>
+                    <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
+                        <TouchableOpacity
+                            style={styles.backButton}
+                            onPress={() => router.back()}
+                        >
+                            <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
+                        </TouchableOpacity>
+                        <View style={styles.headerTextContainer}>
+                            <Text style={styles.headerTitle}>Relatório da Turma</Text>
+                            <Text style={styles.headerSubtitle}>{subjectName}</Text>
+                        </View>
+                        <View style={styles.placeholder} />
+                    </View>
+                    <View style={styles.errorContainer}>
+                        <MaterialIcons name="error-outline" size={64} color="#ef4444" />
+                        <Text style={styles.errorText}>{error || 'Erro ao carregar dados'}</Text>
+                        <TouchableOpacity style={styles.retryButton} onPress={loadPerformanceData}>
+                            <Text style={styles.retryButtonText}>Tentar Novamente</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </View>
+        );
+    }
 
     return (
         <View style={styles.safeArea}>
@@ -109,24 +158,24 @@ export default function ClassReportScreen() {
                     {/* Overall Stats */}
                     <View style={styles.statsGrid}>
                         <View style={styles.statCard}>
-                            <Text style={styles.statValue}>{classStats.totalStudents}</Text>
+                            <Text style={styles.statValue}>{performanceData.stats.total_students}</Text>
                             <Text style={styles.statLabel}>Alunos</Text>
                         </View>
                         <View style={styles.statCard}>
                             <Text style={[styles.statValue, { color: '#3B82F6' }]}>
-                                {classStats.averageGrade.toFixed(1)}
+                                {performanceData.stats.average_final.toFixed(1)}
                             </Text>
                             <Text style={styles.statLabel}>Média Geral</Text>
                         </View>
                         <View style={styles.statCard}>
                             <Text style={[styles.statValue, { color: '#10b981' }]}>
-                                {classStats.averageAttendance}%
+                                {performanceData.stats.approval_rate.toFixed(0)}%
                             </Text>
-                            <Text style={styles.statLabel}>Frequência</Text>
+                            <Text style={styles.statLabel}>Aprovação</Text>
                         </View>
                         <View style={styles.statCard}>
                             <Text style={[styles.statValue, { color: '#ef4444' }]}>
-                                {classStats.atRiskStudents}
+                                {performanceData.stats.at_risk}
                             </Text>
                             <Text style={styles.statLabel}>Em Risco</Text>
                         </View>
@@ -168,17 +217,17 @@ export default function ClassReportScreen() {
 
                         {filteredStudents.map((student) => (
                             <TouchableOpacity
-                                key={student.id}
+                                key={student.student_id}
                                 style={styles.studentCard}
                                 activeOpacity={0.7}
                             >
                                 <View style={styles.studentHeader}>
                                     <View style={[styles.avatar, { borderColor: getStatusColor(student.status) }]}>
-                                        <Text style={styles.avatarText}>{student.avatar}</Text>
+                                        <Text style={styles.avatarText}>{student.student_name.charAt(0).toUpperCase()}</Text>
                                     </View>
                                     <View style={styles.studentInfo}>
                                         <Text style={styles.studentName} numberOfLines={1}>
-                                            {student.name}
+                                            {student.student_name}
                                         </Text>
                                         <View style={[styles.statusBadge, { backgroundColor: getStatusColor(student.status) + '20' }]}>
                                             <View style={[styles.statusDot, { backgroundColor: getStatusColor(student.status) }]} />
@@ -192,44 +241,46 @@ export default function ClassReportScreen() {
 
                                 <View style={styles.metricsRow}>
                                     <View style={styles.metricItem}>
-                                        <MaterialIcons name="grade" size={18} color="#3B82F6" />
-                                        <Text style={styles.metricLabel}>Nota</Text>
+                                        <MaterialIcons name="looks-one" size={18} color="#3B82F6" />
+                                        <Text style={styles.metricLabel}>AV1</Text>
                                         <Text style={[styles.metricValue, { color: '#3B82F6' }]}>
-                                            {student.grade.toFixed(1)}
+                                            {student.av1 !== null ? student.av1.toFixed(1) : '-'}
                                         </Text>
                                     </View>
                                     <View style={styles.metricDivider} />
                                     <View style={styles.metricItem}>
-                                        <MaterialIcons name="event-available" size={18} color="#10b981" />
-                                        <Text style={styles.metricLabel}>Frequência</Text>
+                                        <MaterialIcons name="looks-two" size={18} color="#10b981" />
+                                        <Text style={styles.metricLabel}>AV2</Text>
                                         <Text style={[styles.metricValue, { color: '#10b981' }]}>
-                                            {student.attendance}%
+                                            {student.av2 !== null ? student.av2.toFixed(1) : '-'}
                                         </Text>
                                     </View>
                                     <View style={styles.metricDivider} />
                                     <View style={styles.metricItem}>
-                                        <MaterialIcons name="assignment-turned-in" size={18} color="#f59e0b" />
-                                        <Text style={styles.metricLabel}>Atividades</Text>
+                                        <MaterialIcons name="grade" size={18} color="#f59e0b" />
+                                        <Text style={styles.metricLabel}>Média</Text>
                                         <Text style={[styles.metricValue, { color: '#f59e0b' }]}>
-                                            {student.activitiesCompleted}/{student.totalActivities}
+                                            {student.average !== null ? student.average.toFixed(1) : '-'}
                                         </Text>
                                     </View>
                                 </View>
 
                                 {/* Progress Bar */}
-                                <View style={styles.progressContainer}>
-                                    <View style={styles.progressBar}>
-                                        <View
-                                            style={[
-                                                styles.progressFill,
-                                                {
-                                                    width: `${(student.grade / 10) * 100}%`,
-                                                    backgroundColor: getStatusColor(student.status)
-                                                }
-                                            ]}
-                                        />
+                                {student.average !== null && (
+                                    <View style={styles.progressContainer}>
+                                        <View style={styles.progressBar}>
+                                            <View
+                                                style={[
+                                                    styles.progressFill,
+                                                    {
+                                                        width: `${(student.average / 10) * 100}%`,
+                                                        backgroundColor: getStatusColor(student.status)
+                                                    }
+                                                ]}
+                                            />
+                                        </View>
                                     </View>
-                                </View>
+                                )}
                             </TouchableOpacity>
                         ))}
                     </View>
@@ -446,5 +497,42 @@ const styles = StyleSheet.create({
     progressFill: {
         height: '100%',
         borderRadius: 2,
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: spacing.md,
+    },
+    loadingText: {
+        fontSize: typography.fontSize.base,
+        fontFamily: typography.fontFamily.display,
+        color: colors.zinc400,
+    },
+    errorContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: spacing.md,
+        paddingHorizontal: spacing.xl,
+    },
+    errorText: {
+        fontSize: typography.fontSize.base,
+        fontFamily: typography.fontFamily.display,
+        color: '#ef4444',
+        textAlign: 'center',
+    },
+    retryButton: {
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.sm,
+        backgroundColor: colors.primary,
+        borderRadius: 8,
+        marginTop: spacing.sm,
+    },
+    retryButtonText: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: typography.fontWeight.semibold,
+        fontFamily: typography.fontFamily.display,
+        color: colors.white,
     },
 });

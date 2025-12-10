@@ -176,7 +176,7 @@ export default function TeacherSubjectDetailsScreen() {
                                         activeOpacity={0.8}
                                         onPress={() => router.push({
                                             pathname: '/(teacher)/class-report',
-                                            params: { subject: subjectName }
+                                            params: { subject: subjectName, subjectId: subjectId }
                                         })}
                                     >
                                         <MaterialIcons name="assessment" size={24} color={colors.white} />
@@ -280,7 +280,7 @@ export default function TeacherSubjectDetailsScreen() {
                                     activeOpacity={0.8}
                                     onPress={() => router.push({
                                         pathname: '/(teacher)/class-report',
-                                        params: { subject: subjectName }
+                                        params: { subject: subjectName, subjectId: subjectId }
                                     })}
                                 >
                                     <MaterialIcons name="assessment" size={24} color={colors.white} />
