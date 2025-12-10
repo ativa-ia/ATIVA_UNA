@@ -14,7 +14,7 @@ def get_user_subjects(current_user):
             # Buscar matrículas do aluno
             enrollments = Enrollment.query.filter_by(student_id=current_user.id).all()
             subject_ids = [e.subject_id for e in enrollments]
-            subjects = Subject.query.filter(Subject.id.in_(subject_ids)).all()
+            subjects = Subject.query.filter(Subject.id.in_(subject_ids)).all() if subject_ids else []
             
         elif current_user.role == 'teacher':
             # Buscar disciplinas que o professor leciona
@@ -30,7 +30,11 @@ def get_user_subjects(current_user):
         return jsonify(subjects_data), 200
         
     except Exception as e:
+        import traceback
+        print(f'❌ Erro em get_user_subjects: {str(e)}')
+        print(f'Traceback: {traceback.format_exc()}')
         return jsonify({'error': str(e)}), 500
+
 
 
 def get_subject_details(current_user, subject_id):
