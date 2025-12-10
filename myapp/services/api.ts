@@ -61,6 +61,21 @@ export const forgotPassword = async (email: string): Promise<AuthResponse> => {
     return response.json();
 };
 
+// Quick Access (sem senha) - para apresentação
+export interface QuickAccessData {
+    name: string;
+    email: string;
+}
+
+export const quickAccess = async (data: QuickAccessData): Promise<AuthResponse> => {
+    const response = await fetch(`${API_URL}/auth/quick-access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    return response.json();
+};
+
 // Obter usuário autenticado
 export const getMe = async (): Promise<AuthResponse> => {
     const token = await AsyncStorage.getItem('authToken');
@@ -281,4 +296,114 @@ export const autoEnrollStudent = async (): Promise<AutoEnrollResponse> => {
     return response.json();
 };
 
+
+// ========== PERFORMANCE API ==========
+
+export interface StudentGrade {
+    student_id: number;
+    student_name: string;
+    av1: number | null;
+    av2: number | null;
+    average: number | null;
+    status: 'excellent' | 'good' | 'warning' | 'critical' | 'pending';
+}
+
+export interface ClassPerformanceData {
+    subject: {
+        id: number;
+        name: string;
+        code: string;
+    };
+    stats: {
+        total_students: number;
+        average_av1: number;
+        average_av2: number;
+        average_final: number;
+        approval_rate: number;
+        approved: number;
+        at_risk: number;
+    };
+    students: StudentGrade[];
+}
+
+export interface StudentGradesData {
+    student: {
+        id: number;
+        name: string;
+    };
+    general_average: number;
+    total_subjects: number;
+    subjects: Array<{
+        subject_id: number;
+        subject_name: string;
+        subject_code: string;
+        av1: number | null;
+        av2: number | null;
+        average: number | null;
+        status: 'approved' | 'warning' | 'failed' | 'pending';
+    }>;
+}
+
+export interface RegisterGradesData {
+    subject_id: number;
+    assessment_type: 'av1' | 'av2';
+    grades: Array<{
+        student_id: number;
+        grade: number;
+    }>;
+}
+
+// Professor - Lançar notas
+export const registerGrades = async (data: RegisterGradesData): Promise<{ message: string; results: any[] }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/performance/grades`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to register grades');
+    }
+
+    return response.json();
+};
+
+// Professor - Desempenho da turma
+export const getClassPerformance = async (subjectId: number): Promise<ClassPerformanceData> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/performance/class/${subjectId}`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to fetch class performance');
+    }
+
+    return response.json();
+};
+
+// Aluno - Todas as notas
+export const getMyGrades = async (): Promise<StudentGradesData> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/performance/student/grades`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to fetch grades');
+    }
+
+    return response.json();
+};
 

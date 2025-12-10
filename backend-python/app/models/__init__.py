@@ -11,6 +11,8 @@ from app.models.announcement import Announcement
 from app.models.ai_session import AISession, AIMessage
 from app.models.quiz import Quiz, QuizQuestion, QuizResponse
 from app.models.chat import ChatMessage
+from app.models.grade import Grade
+from app.models.activity_submission import ActivitySubmission
 
 __all__ = [
     'User',
@@ -27,6 +29,8 @@ __all__ = [
     'Quiz',
     'QuizQuestion',
     'QuizResponse',
-    'ChatMessage'
+    'ChatMessage',
+    'Grade',
+    'ActivitySubmission'
 ]
 
