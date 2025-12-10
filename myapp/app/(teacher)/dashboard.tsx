@@ -29,6 +29,7 @@ export default function TeacherDashboardScreen() {
     const [error, setError] = useState<string | null>(null);
     const [userName, setUserName] = useState('Professor');
 
+
     // Formatar data atual
     const getCurrentDate = () => {
         const date = new Date();
@@ -107,6 +108,8 @@ export default function TeacherDashboardScreen() {
     };
 
 
+
+
     return (
         <SafeAreaView style={styles.safeArea}>
             <View style={styles.container}>
@@ -132,6 +135,8 @@ export default function TeacherDashboardScreen() {
                             </View>
                         </View>
                     </View>
+
+
 
                     {/* Minhas Disciplinas Section */}
                     <View style={styles.section}>
@@ -299,4 +304,5 @@ const styles = StyleSheet.create({
         color: colors.textSecondary,
         textAlign: 'center',
     },
+
 });

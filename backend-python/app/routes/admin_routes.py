@@ -140,3 +140,87 @@ def list_subjects(current_user):
         'success': True,
         'subjects': [s.to_dict() for s in subjects]
     }), 200
+
+@admin_bp.route('/enroll-all-students', methods=['POST'])
+@admin_required
+def enroll_all_students(current_user):
+    """
+    Matricula TODOS os alunos em TODAS as disciplinas
+    Perfeito para apresentações e testes
+    """
+    try:
+        # Buscar todos os alunos
+        all_students = User.query.filter_by(role='student').all()
+        
+        if not all_students:
+            return jsonify({
+                'success': False,
+                'message': 'Nenhum aluno encontrado no sistema'
+            }), 404
+        
+        # Buscar todas as disciplinas
+        all_subjects = Subject.query.all()
+        
+        if not all_subjects:
+            return jsonify({
+                'success': False,
+                'message': 'Nenhuma disciplina encontrada no sistema'
+            }), 404
+        
+        # Buscar primeira turma disponível
+        default_class = Class.query.first()
+        
+        if not default_class:
+            return jsonify({
+                'success': False,
+                'message': 'Nenhuma turma disponível no sistema'
+            }), 404
+        
+        # Matricular cada aluno em cada disciplina
+        enrollments_created = 0
+        enrollments_skipped = 0
+        
+        for student in all_students:
+            for subject in all_subjects:
+                # Verificar se já está matriculado
+                existing = Enrollment.query.filter_by(
+                    student_id=student.id,
+                    subject_id=subject.id
+                ).first()
+                
+                if not existing:
+                    enrollment = Enrollment(
+                        student_id=student.id,
+                        subject_id=subject.id,
+                        class_id=default_class.id
+                    )
+                    db.session.add(enrollment)
+                    enrollments_created += 1
+                else:
+                    enrollments_skipped += 1
+        
+        # Commit todas as matrículas
+        db.session.commit()
+        
+        print(f'✅ Matrícula em massa: {enrollments_created} matrículas criadas, {enrollments_skipped} já existiam')
+        
+        return jsonify({
+            'success': True,
+            'message': f'{enrollments_created} matrículas criadas com sucesso',
+            'enrollments_created': enrollments_created,
+            'enrollments_skipped': enrollments_skipped,
+            'total_students': len(all_students),
+            'total_subjects': len(all_subjects)
+        }), 201
+        
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f'❌ Erro em enroll_all_students: {str(e)}')
+        print(f'Traceback: {error_details}')
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': 'Erro ao criar matrículas em massa',
+            'error': str(e)
+        }), 500
