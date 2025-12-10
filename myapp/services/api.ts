@@ -61,6 +61,21 @@ export const forgotPassword = async (email: string): Promise<AuthResponse> => {
     return response.json();
 };
 
+// Quick Access (sem senha) - para apresentação
+export interface QuickAccessData {
+    name: string;
+    email: string;
+}
+
+export const quickAccess = async (data: QuickAccessData): Promise<AuthResponse> => {
+    const response = await fetch(`${API_URL}/auth/quick-access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    return response.json();
+};
+
 // Obter usuário autenticado
 export const getMe = async (): Promise<AuthResponse> => {
     const token = await AsyncStorage.getItem('authToken');

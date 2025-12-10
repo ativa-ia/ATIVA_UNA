@@ -267,3 +267,116 @@ def change_password(current_user):
             'success': False,
             'message': 'Erro ao alterar senha'
         }), 500
+
+
+def quick_access():
+    """Acesso rápido sem senha - para apresentação
+    
+    Aceita apenas nome e email:
+    - Se email existe: faz login automático
+    - Se email não existe: cria conta student com senha padrão
+    """
+    try:
+        data = request.json
+        
+        # Validar campos obrigatórios
+        if not data.get('email'):
+            return jsonify({
+                'success': False,
+                'message': 'Email é obrigatório'
+            }), 400
+        
+        if not data.get('name'):
+            return jsonify({
+                'success': False,
+                'message': 'Nome é obrigatório'
+            }), 400
+        
+        email = data['email'].strip().lower()
+        name = data['name'].strip()
+        
+        # Validar formato de email
+        import re
+        email_regex = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
+        if not re.match(email_regex, email):
+            return jsonify({
+                'success': False,
+                'message': 'Email inválido'
+            }), 400
+        
+        # Verificar se usuário já existe
+        existing_user = User.find_by_email(email)
+        
+        if existing_user:
+            # Usuário existe - fazer login automático
+            print(f'✅ Quick Access - Login automático: {email}')
+            token = generate_token(existing_user)
+            
+            return jsonify({
+                'success': True,
+                'message': 'Acesso realizado com sucesso',
+                'user': existing_user.to_dict(),
+                'token': token,
+                'is_new_user': False
+            }), 200
+        
+        else:
+            # Usuário não existe - criar conta student com senha padrão
+            print(f'✅ Quick Access - Criando novo aluno: {email}')
+            
+            # Senha padrão para acesso rápido
+            default_password = 'ativaai2024'
+            
+            # Criar usuário
+            user = User.create_user(
+                email=email,
+                password=default_password,
+                role='student',
+                name=name
+            )
+            
+            # Auto-matrícula em todas as disciplinas
+            all_subjects = Subject.query.all()
+            
+            if all_subjects:
+                from app.models.class_model import Class
+                default_class = Class.query.first()
+                
+                if default_class:
+                    enrollments_created = 0
+                    for subject in all_subjects:
+                        enrollment = Enrollment(
+                            student_id=user.id,
+                            subject_id=subject.id,
+                            class_id=default_class.id
+                        )
+                        db.session.add(enrollment)
+                        enrollments_created += 1
+                    
+                    print(f'✅ Auto-matrícula quick access: {enrollments_created} disciplinas para {email}')
+            
+            # Commit
+            db.session.commit()
+            
+            # Gerar token
+            token = generate_token(user)
+            
+            return jsonify({
+                'success': True,
+                'message': 'Conta criada e acesso realizado com sucesso',
+                'user': user.to_dict(),
+                'token': token,
+                'is_new_user': True
+            }), 201
+        
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f'❌ Erro no quick access: {str(e)}')
+        print(f'Detalhes: {error_details}')
+        db.session.rollback()
+        return jsonify({
+            'success': False,
+            'message': 'Erro ao processar acesso',
+            'error_detail': str(e)
+        }), 500

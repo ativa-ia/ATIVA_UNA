@@ -14,17 +14,16 @@ import { Input } from '@/components/common/Input';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
-import { login, register, saveAuth } from '@/services/api';
+import { quickAccess, saveAuth } from '@/services/api';
 
 /**
- * LoginScreen - Tela de Acesso Unificado (Evento)
- * Unifica Login e Cadastro para simplificar o acesso no evento.
+ * LoginScreen - Tela de Acesso Rápido (Evento)
+ * Acesso simplificado sem senha para facilitar a apresentação.
  */
 
 export default function LoginScreen() {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [statusMessage, setStatusMessage] = useState('');
 
@@ -43,47 +42,17 @@ export default function LoginScreen() {
             alert('Email inválido!');
             return;
         }
-        if (password.length < 6) {
-            alert('Senha deve ter no mínimo 6 caracteres!');
-            return;
-        }
 
         setIsLoading(true);
         setStatusMessage('Entrando...');
 
         try {
-            // 1. Tentar Login
-            try {
-                const loginData = await login({ email, password });
+            const response = await quickAccess({ name, email });
 
-                if (loginData.success && loginData.user && loginData.token) {
-                    await handleSuccess(loginData.token, loginData.user.role);
-                    return;
-                }
-            } catch (loginError) {
-                // Se der erro de conexão ou outro erro fatal, não tenta registrar
-                console.log('Tentativa de login falhou, tentando cadastro...', loginError);
-            }
-
-            // 2. Se login falhou (ou não retornou sucesso), Tentar Cadastro Automático
-            setStatusMessage('Criando seu acesso...');
-
-            const registerData = await register({
-                email,
-                password,
-                role: 'student', // Padrão para o evento
-                name,
-            });
-
-            if (registerData.success && registerData.user && registerData.token) {
-                await handleSuccess(registerData.token, registerData.user.role);
+            if (response.success && response.user && response.token) {
+                await handleSuccess(response.token, response.user.role);
             } else {
-                // Se falhou cadastro também (ex: senha errada para usuário existente)
-                if (registerData.message && registerData.message.includes('Email já cadastrado')) {
-                    alert('Este email já existe. Verifique sua senha.');
-                } else {
-                    alert(registerData.message || 'Erro ao acessar. Tente novamente.');
-                }
+                alert(response.message || 'Erro ao acessar. Tente novamente.');
             }
 
         } catch (error) {
@@ -144,14 +113,6 @@ export default function LoginScreen() {
                         onChangeText={setEmail}
                         darkMode
                     />
-                    <Input
-                        iconName="lock"
-                        placeholder="Senha"
-                        secureTextEntry
-                        value={password}
-                        onChangeText={setPassword}
-                        darkMode
-                    />
                 </View>
 
                 {/* Status Message */}
@@ -172,8 +133,9 @@ export default function LoginScreen() {
 
                 <View style={styles.footer}>
                     <Text style={styles.footerText}>
-                        Se já tiver conta, apenas preencha seus dados.
-                        Se não, uma conta aluno será criada automaticamente.
+                        Digite seu nome e email para acessar.{'\n'}
+                        Se você já tem conta, será conectado automaticamente.{'\n'}
+                        Caso contrário, uma conta será criada para você.
                     </Text>
                 </View>
             </ScrollView>
