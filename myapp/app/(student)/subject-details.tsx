@@ -132,10 +132,6 @@ export default function SubjectDetailsScreen() {
                 >
                     {/* Subject Info Card */}
                     <View style={styles.subjectCard}>
-                        <Image
-                            source={{ uri: subjectData.imageUrl }}
-                            style={styles.avatar}
-                        />
                         <View style={styles.subjectInfo}>
                             <Text style={styles.subjectName} numberOfLines={1}>
                                 {subjectData.name}
@@ -146,17 +142,7 @@ export default function SubjectDetailsScreen() {
                         </View>
                     </View>
 
-                    {/* Info Grid */}
-                    <View style={styles.infoGrid}>
-                        <View style={[styles.infoItem, styles.infoItemLeft]}>
-                            <Text style={styles.infoLabel}>Horário</Text>
-                            <Text style={styles.infoValue}>{subjectData.schedule}</Text>
-                        </View>
-                        <View style={[styles.infoItem, styles.infoItemRight]}>
-                            <Text style={styles.infoLabel}>Local</Text>
-                            <Text style={styles.infoValue}>{subjectData.location}</Text>
-                        </View>
-                    </View>
+
 
                     {/* Action Buttons */}
                     <View style={styles.buttonGroup}>

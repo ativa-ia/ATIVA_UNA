@@ -29,6 +29,19 @@ export default function TeacherDashboardScreen() {
     const [error, setError] = useState<string | null>(null);
     const [userName, setUserName] = useState('Professor');
 
+    // Formatar data atual
+    const getCurrentDate = () => {
+        const date = new Date();
+        const options: Intl.DateTimeFormatOptions = {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'short'
+        };
+        const formatted = date.toLocaleDateString('pt-BR', options);
+        // Capitalizar primeira letra
+        return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+    };
+
     // Buscar disciplinas da API
     useEffect(() => {
         loadData();
@@ -102,14 +115,23 @@ export default function TeacherDashboardScreen() {
                     contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
                 >
-                    {/* Header */}
-                    <Header
-                        userName={userName}
-                        avatarUri="https://i.pravatar.cc/150?img=33"
-                        darkMode
-                        showNotifications={false}
-                        onProfilePress={() => router.push('/(teacher)/settings')}
-                    />
+                    {/* Header Customizado */}
+                    <View style={styles.headerContainer}>
+                        <View style={styles.headerTop}>
+                            <View>
+                                <Text style={styles.greeting}>Olá, {userName}</Text>
+                                <Text style={styles.date}>{getCurrentDate()}</Text>
+                            </View>
+                            <View style={styles.headerButtons}>
+                                <TouchableOpacity
+                                    style={styles.headerButton}
+                                    onPress={() => router.push('/(teacher)/settings')}
+                                >
+                                    <MaterialIcons name="settings" size={24} color={colors.white} />
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
 
                     {/* Minhas Disciplinas Section */}
                     <View style={styles.section}>
@@ -172,6 +194,41 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         paddingBottom: spacing.base,
+    },
+    headerContainer: {
+        paddingHorizontal: spacing.base,
+        paddingTop: spacing.md,
+        paddingBottom: spacing.base,
+    },
+    headerTop: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    greeting: {
+        fontSize: typography.fontSize.xl,
+        fontWeight: typography.fontWeight.bold,
+        fontFamily: typography.fontFamily.display,
+        color: colors.white,
+    },
+    date: {
+        fontSize: typography.fontSize.sm,
+        fontFamily: typography.fontFamily.body,
+        color: colors.zinc400,
+        marginTop: 4,
+    },
+    headerButtons: {
+        flexDirection: 'row',
+        gap: spacing.sm,
+    },
+    headerButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        position: 'relative',
     },
     section: {
         marginTop: spacing.base,
