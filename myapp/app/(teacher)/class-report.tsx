@@ -221,14 +221,14 @@ export default function ClassReportScreen() {
                                 style={styles.studentCard}
                                 activeOpacity={0.7}
                                 onPress={() => router.push({
-                                    pathname: '/(teacher)/student-report',
+                                    pathname: './student-report',
                                     params: {
                                         studentId: student.student_id.toString(),
                                         subjectId: subjectId,
                                         studentName: student.student_name,
                                         subjectName: performanceData.subject.name
                                     }
-                                })}
+                                } as any)}
                             >
                                 <View style={styles.studentHeader}>
                                     <View style={[styles.avatar, { borderColor: getStatusColor(student.status) }]}>

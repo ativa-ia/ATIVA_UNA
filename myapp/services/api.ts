@@ -2,10 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // URL da API (mude para seu IP local se testar em dispositivo físico)
 // Para desenvolvimento local, use localhost
-// export const API_URL = 'http://localhost:3000/api';
+export const API_URL = 'http://localhost:3000/api';
 
 // Para produção/Vercel, use:
-export const API_URL = 'https://ativa-ia-9rkb.vercel.app/api';
+//export const API_URL = 'https://ativa-ia-9rkb.vercel.app/api';
 
 export interface LoginData {
     email: string;
@@ -465,6 +465,316 @@ export const getStudentPerformance = async (studentId: number, subjectId: number
     if (!response.ok) {
         throw new Error('Failed to fetch student performance');
     }
+
+    return response.json();
+};
+
+
+// ========== TRANSCRIPTION API ==========
+
+export interface TranscriptionSession {
+    id: number;
+    subject_id: number;
+    teacher_id: number;
+    title: string;
+    full_transcript: string;
+    word_count: number;
+    status: 'active' | 'paused' | 'ended';
+    started_at: string;
+    ended_at: string | null;
+    checkpoints?: TranscriptionCheckpoint[];
+    activities?: LiveActivity[];
+}
+
+export interface TranscriptionCheckpoint {
+    id: number;
+    session_id: number;
+    transcript_at_checkpoint: string;
+    word_count: number;
+    reason: string;
+    created_at: string;
+}
+
+export interface LiveActivity {
+    id: number;
+    session_id: number;
+    checkpoint_id: number;
+    activity_type: 'quiz' | 'summary' | 'open_question';
+    title: string;
+    content: any;
+    ai_generated_content: string | null;
+    shared_with_students: boolean;
+    status: 'waiting' | 'active' | 'ended';
+    time_limit: number;
+    time_remaining: number | null;
+    starts_at: string | null;
+    ends_at: string | null;
+    response_count: number;
+}
+
+export interface LiveActivityResponse {
+    id: number;
+    activity_id: number;
+    student_id: number;
+    student_name: string;
+    response_data: any;
+    is_correct: boolean | null;
+    score: number;
+    total: number;
+    percentage: number;
+    submitted_at: string;
+}
+
+export interface RankingData {
+    activity_status: string;
+    time_remaining: number;
+    enrolled_count: number;
+    response_count: number;
+    response_rate: number;
+    ranking: Array<{
+        position: number;
+        student_id: number;
+        student_name: string;
+        score: number;
+        total: number;
+        percentage: number;
+        is_correct: boolean;
+        submitted_at: string;
+    }>;
+}
+
+// Criar ou recuperar sessão de transcrição
+export const createTranscriptionSession = async (subjectId: number, title?: string): Promise<{ success: boolean; session: TranscriptionSession }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/sessions`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ subject_id: subjectId, title }),
+    });
+
+    return response.json();
+};
+
+// Obter sessão de transcrição
+export const getTranscriptionSession = async (sessionId: number): Promise<{ success: boolean; session: TranscriptionSession }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/sessions/${sessionId}`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    return response.json();
+};
+
+// Atualizar transcrição (auto-save)
+export const updateTranscription = async (sessionId: number, fullTranscript: string): Promise<{ success: boolean; word_count: number }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/sessions/${sessionId}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ full_transcript: fullTranscript }),
+    });
+
+    return response.json();
+};
+
+// Criar checkpoint
+export const createCheckpoint = async (sessionId: number, reason?: string): Promise<{ success: boolean; checkpoint: TranscriptionCheckpoint }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/sessions/${sessionId}/checkpoint`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reason }),
+    });
+
+    return response.json();
+};
+
+// Retomar sessão
+export const resumeSession = async (sessionId: number): Promise<{ success: boolean; session: TranscriptionSession }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/sessions/${sessionId}/resume`, {
+        method: 'PUT',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    return response.json();
+};
+
+// Encerrar sessão
+export const endTranscriptionSession = async (sessionId: number): Promise<{ success: boolean; session: TranscriptionSession }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/sessions/${sessionId}/end`, {
+        method: 'PUT',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    return response.json();
+};
+
+// Gerar Quiz via IA
+export const generateQuiz = async (sessionId: number, numQuestions: number = 5): Promise<{ success: boolean; activity: LiveActivity; checkpoint: TranscriptionCheckpoint }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/sessions/${sessionId}/generate-quiz`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ num_questions: numQuestions }),
+    });
+
+    return response.json();
+};
+
+// Gerar Resumo via IA
+export const generateSummary = async (sessionId: number): Promise<{ success: boolean; activity: LiveActivity; checkpoint: TranscriptionCheckpoint }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/sessions/${sessionId}/generate-summary`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    return response.json();
+};
+
+// Criar Pergunta Aberta
+export const createOpenQuestion = async (sessionId: number, question: 'doubts' | 'feedback', timeLimit: number = 120): Promise<{ success: boolean; activity: LiveActivity }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/sessions/${sessionId}/activities`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+            activity_type: 'open_question',
+            question,
+            time_limit: timeLimit,
+        }),
+    });
+
+    return response.json();
+};
+
+// Iniciar atividade para alunos
+export const broadcastActivity = async (activityId: number): Promise<{ success: boolean; activity: LiveActivity; enrolled_students?: number }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/activities/${activityId}/broadcast`, {
+        method: 'PUT',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    return response.json();
+};
+
+// Compartilhar resumo com alunos
+export const shareSummary = async (activityId: number): Promise<{ success: boolean; activity: LiveActivity }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/activities/${activityId}/share`, {
+        method: 'PUT',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    return response.json();
+};
+
+// Encerrar atividade
+export const endActivity = async (activityId: number): Promise<{ success: boolean; activity: LiveActivity }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/activities/${activityId}/end`, {
+        method: 'PUT',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    return response.json();
+};
+
+// Obter ranking em tempo real (polling)
+export const getActivityRanking = async (activityId: number): Promise<{ success: boolean } & RankingData> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/activities/${activityId}/ranking`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    return response.json();
+};
+
+// Aluno: verificar atividade ativa
+export const getActiveActivity = async (subjectId: number): Promise<{ success: boolean; active: boolean; activity?: LiveActivity; has_summary?: boolean; summary?: LiveActivity }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/subjects/${subjectId}/active`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    return response.json();
+};
+
+// Aluno: enviar resposta
+export const submitActivityResponse = async (activityId: number, data: { answers?: Record<string, number>; text?: string }): Promise<{ success: boolean; result: LiveActivityResponse }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/activities/${activityId}/respond`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+    });
+
+    return response.json();
+};
+
+// Listar sessões de uma disciplina
+export const getTranscriptionSessions = async (subjectId: number): Promise<{ success: boolean; sessions: TranscriptionSession[] }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/subjects/${subjectId}/sessions`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
 
     return response.json();
 };
