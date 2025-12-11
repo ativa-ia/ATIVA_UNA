@@ -197,7 +197,7 @@ def chat_stream(
         yield f"Erro: {str(e)}"
 
 
-def generate_quiz_from_text(text: str, num_questions: int = 5) -> dict:
+def generate_quiz_from_text(text: str, num_questions: int = 5, teacher: User = None, subject: Subject = None) -> dict:
     """
     Gera quiz de múltipla escolha baseado no texto da transcrição
     Retorna dict com formato:
@@ -212,42 +212,58 @@ def generate_quiz_from_text(text: str, num_questions: int = 5) -> dict:
     print(f"[AI-QUIZ] Comprimento do texto: {len(text)} caracteres")
     
     try:
-        print(f"[AI-QUIZ] Chamando Gemini API...")
-        model = genai.GenerativeModel(model_name='gemini-2.5-flash')
+        print(f"[AI-QUIZ] Chamando Gemini API (2.5-flash)...")
         
-        prompt = f"""Com base no seguinte texto de aula, gere {num_questions} perguntas de múltipla escolha para testar a compreensão dos alunos.
+        sys_instruction = None
+        if teacher and subject:
+            sys_instruction = get_system_prompt(teacher, subject)
+            sys_instruction += "\n\nTAREFA ESPECÍFICA: Gere um quiz técnico e desafiador baseado APENAS no texto fornecido."
+        
+        model = genai.GenerativeModel(
+            model_name='gemini-2.5-flash',
+            system_instruction=sys_instruction
+        )
+        
+        prompt = f"""Com base no texto da aula abaixo, crie um quiz com {num_questions} perguntas de múltipla escolha.
 
 TEXTO DA AULA:
 {text}
 
-REGRAS:
-1. Cada pergunta deve ter 4 opções (A, B, C, D)
-2. Apenas uma opção deve estar correta
-3. As perguntas devem ser claras e objetivas
-4. Responda APENAS com JSON válido, sem markdown
+REGRAS OBRIGATÓRIAS:
+1. Gere EXATAMENTE {num_questions} perguntas.
+2. Cada pergunta deve ter 4 opções (strings) e 1 resposta correta (índice 0-3).
+3. Use linguagem acadêmica adequada.
+4. Responda APENAS com JSON válido. NÃO use markdown (```json). NÃO adicione texto extra.
 
-FORMATO DE RESPOSTA (JSON puro):
+FORMATO JSON ESPERADO:
 {{
     "questions": [
-        {{"question": "Pergunta aqui?", "options": ["Opção A", "Opção B", "Opção C", "Opção D"], "correct": 0}},
-        ...
+        {{
+            "question": "Enunciado da pergunta?",
+            "options": ["Opção 1", "Opção 2", "Opção 3", "Opção 4"],
+            "correct": 0
+        }}
     ]
-}}
-
-O campo "correct" é o índice (0-3) da opção correta."""
+}}"""
 
         response = model.generate_content(prompt)
         response_text = response.text.strip()
         print(f"[AI-QUIZ] Resposta bruta: {response_text[:200]}...")
         
-        # Limpar possíveis marcadores de código
-        if response_text.startswith('```'):
-            response_text = response_text.split('```')[1]
-            if response_text.startswith('json'):
+        # Limpeza robusta de markdown
+        if "```" in response_text:
+            response_text = response_text.split("```")[1]
+            if response_text.startswith("json"):
                 response_text = response_text[4:]
         
         import json
-        quiz_data = json.loads(response_text)
+        try:
+            quiz_data = json.loads(response_text)
+        except json.JSONDecodeError:
+            # Tentar limpar caracteres invisíveis ou vírgulas extras
+            response_text = response_text.strip()
+            quiz_data = json.loads(response_text)
+
         print(f"[AI-QUIZ] Quiz gerado com sucesso! {len(quiz_data.get('questions', []))} perguntas")
         return quiz_data
         
@@ -258,43 +274,47 @@ O campo "correct" é o índice (0-3) da opção correta."""
         return {
             "questions": [
                 {
-                    "question": "Qual é o tema principal da aula?",
-                    "options": ["Tema A", "Tema B", "Tema C", "Tema D"],
+                    "question": "Não foi possível gerar o quiz automaticamente. Tente novamente.",
+                    "options": ["Erro na IA", "Tente Repetir", "Verifique o Texto", "Erro de Conexão"],
                     "correct": 0
                 }
             ]
         }
 
 
-def generate_summary_from_text(text: str) -> str:
+def generate_summary_from_text(text: str, teacher: User = None, subject: Subject = None) -> str:
     """
     Gera resumo estruturado baseado no texto da transcrição
     """
     try:
-        model = genai.GenerativeModel(model_name='gemini-2.5-flash')
+        sys_instruction = None
+        if teacher and subject:
+            sys_instruction = get_system_prompt(teacher, subject)
+            sys_instruction += "\n\nTAREFA ESPECÍFICA: Crie um resumo executivo didático desta aula."
+
+        model = genai.GenerativeModel(
+            model_name='gemini-2.5-flash',
+            system_instruction=sys_instruction
+        )
         
-        prompt = f"""Crie um resumo estruturado e didático do seguinte texto de aula.
+        prompt = f"""Analise a transcrição da aula abaixo e crie um resumo estruturado.
 
 TEXTO DA AULA:
 {text}
 
-REGRAS:
-1. O resumo deve ser claro e objetivo
-2. Destaque os pontos principais
-3. Use tópicos quando apropriado
-4. Mantenha o resumo conciso (máximo 500 palavras)
-5. Escreva em português brasileiro
-
-FORMATO:
-- Comece com uma visão geral
-- Liste os conceitos principais
-- Conclua com os pontos-chave para lembrar"""
+DIRETRIZES:
+1. Comece com "Nesta aula sobre [Tópico], abordamos..."
+2. Use bullet points para conceitos principais.
+3. Destaque definições importantes em negrito.
+4. Finalize com sugestão de estudo prático.
+5. Mantenha tom professoral e encorajador.
+"""
 
         response = model.generate_content(prompt)
         return response.text.strip()
         
     except Exception as e:
         print(f"Erro ao gerar resumo: {e}")
-        words = text.split()[:100]
-        return f"Resumo automático: {' '.join(words)}..."
+        words = text.split()[:50]
+        return f"Resumo indisponível no momento. Início do texto: {' '.join(words)}..."
 
