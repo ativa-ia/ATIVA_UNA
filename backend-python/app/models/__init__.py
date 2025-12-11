@@ -13,6 +13,12 @@ from app.models.quiz import Quiz, QuizQuestion, QuizResponse
 from app.models.chat import ChatMessage
 from app.models.grade import Grade
 from app.models.activity_submission import ActivitySubmission
+from app.models.transcription_session import (
+    TranscriptionSession,
+    TranscriptionCheckpoint,
+    LiveActivity,
+    LiveActivityResponse
+)
 
 __all__ = [
     'User',
@@ -31,6 +37,10 @@ __all__ = [
     'QuizResponse',
     'ChatMessage',
     'Grade',
-    'ActivitySubmission'
+    'ActivitySubmission',
+    'TranscriptionSession',
+    'TranscriptionCheckpoint',
+    'LiveActivity',
+    'LiveActivityResponse'
 ]
 

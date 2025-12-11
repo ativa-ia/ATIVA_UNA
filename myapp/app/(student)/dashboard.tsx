@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -6,6 +6,7 @@ import {
     ScrollView,
     SafeAreaView,
     TouchableOpacity,
+    Animated,
 } from 'react-native';
 import { router } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -15,8 +16,8 @@ import { SubjectCard } from '@/components/cards/SubjectCard';
 import { Subject, Activity } from '@/types';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
-import { spacing } from '@/constants/spacing';
-import { getSubjects, Subject as APISubject, getMe } from '@/services/api';
+import { spacing, borderRadius } from '@/constants/spacing';
+import { getSubjects, Subject as APISubject, getMe, getActiveActivity, LiveActivity } from '@/services/api';
 
 /**
  * StudentDashboardScreen - Dashboard do Aluno
@@ -28,6 +29,11 @@ export default function StudentDashboardScreen() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [userName, setUserName] = useState('Aluno');
+
+    // Estado para atividade ao vivo
+    const [liveActivity, setLiveActivity] = useState<LiveActivity | null>(null);
+    const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const pulseAnim = useRef(new Animated.Value(1)).current;
 
     // Formatar data atual
     const getCurrentDate = () => {
@@ -45,7 +51,59 @@ export default function StudentDashboardScreen() {
     // Buscar disciplinas da API
     useEffect(() => {
         loadData();
+        return () => {
+            if (pollingRef.current) clearInterval(pollingRef.current);
+        };
     }, []);
+
+    // Polling para atividades ativas
+    useEffect(() => {
+        if (subjects.length === 0) return;
+
+        const checkActivities = async () => {
+            for (const subject of subjects) {
+                try {
+                    const result = await getActiveActivity(parseInt(subject.id));
+                    if (result.success && result.active && result.activity) {
+                        setLiveActivity(result.activity);
+                        return; // Encontrou uma atividade ativa
+                    }
+                } catch (error) {
+                    console.error('Erro ao verificar atividade:', error);
+                }
+            }
+            setLiveActivity(null);
+        };
+
+        checkActivities();
+        pollingRef.current = setInterval(checkActivities, 5000); // Poll a cada 5s
+
+        return () => {
+            if (pollingRef.current) clearInterval(pollingRef.current);
+        };
+    }, [subjects]);
+
+    // Animação do banner de atividade
+    useEffect(() => {
+        if (liveActivity) {
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(pulseAnim, {
+                        toValue: 1.05,
+                        duration: 800,
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(pulseAnim, {
+                        toValue: 1,
+                        duration: 800,
+                        useNativeDriver: true,
+                    }),
+                ])
+            ).start();
+        } else {
+            pulseAnim.setValue(1);
+        }
+    }, [liveActivity]);
 
     const loadData = async () => {
         try {
@@ -74,6 +132,15 @@ export default function StudentDashboardScreen() {
             setError('Erro ao carregar disciplinas');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleActivityPress = () => {
+        if (liveActivity) {
+            router.push({
+                pathname: './live-activity',
+                params: { activity: JSON.stringify(liveActivity) }
+            } as any);
         }
     };
 
@@ -137,6 +204,34 @@ export default function StudentDashboardScreen() {
                             </View>
                         </View>
                     </View>
+
+                    {/* Banner de Atividade Ao Vivo */}
+                    {liveActivity && (
+                        <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
+                            <TouchableOpacity
+                                style={styles.liveActivityBanner}
+                                onPress={handleActivityPress}
+                                activeOpacity={0.9}
+                            >
+                                <View style={styles.liveActivityIcon}>
+                                    <MaterialIcons
+                                        name={liveActivity.activity_type === 'quiz' ? 'quiz' : 'help-outline'}
+                                        size={24}
+                                        color={colors.white}
+                                    />
+                                </View>
+                                <View style={styles.liveActivityInfo}>
+                                    <Text style={styles.liveActivityTitle}>
+                                        {liveActivity.activity_type === 'quiz' ? '🎯 Quiz ao Vivo!' : '💬 Pergunta do Professor!'}
+                                    </Text>
+                                    <Text style={styles.liveActivityDesc}>
+                                        Toque para responder agora
+                                    </Text>
+                                </View>
+                                <MaterialIcons name="arrow-forward-ios" size={18} color={colors.white} />
+                            </TouchableOpacity>
+                        </Animated.View>
+                    )}
 
                     {/* Minhas Disciplinas Section */}
                     <View style={styles.section}>
@@ -321,5 +416,36 @@ const styles = StyleSheet.create({
         fontFamily: typography.fontFamily.display,
         color: colors.zinc400,
         textAlign: 'center',
+    },
+    // Live Activity Banner
+    liveActivityBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginHorizontal: spacing.base,
+        marginTop: spacing.md,
+        padding: spacing.md,
+        backgroundColor: '#8b5cf6',
+        borderRadius: borderRadius.xl,
+        gap: spacing.md,
+    },
+    liveActivityIcon: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    liveActivityInfo: {
+        flex: 1,
+    },
+    liveActivityTitle: {
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.bold,
+        color: colors.white,
+    },
+    liveActivityDesc: {
+        fontSize: typography.fontSize.sm,
+        color: 'rgba(255,255,255,0.8)',
     },
 });

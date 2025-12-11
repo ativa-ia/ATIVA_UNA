@@ -195,3 +195,115 @@ def chat_stream(
 
     except Exception as e:
         yield f"Erro: {str(e)}"
+
+
+def generate_quiz_from_text(text: str, num_questions: int = 5) -> dict:
+    """
+    Gera quiz de múltipla escolha baseado no texto da transcrição
+    Retorna dict com formato:
+    {
+        "questions": [
+            {"question": "...", "options": ["A", "B", "C", "D"], "correct": 0},
+            ...
+        ]
+    }
+    """
+    if not HAS_GEMINI or not GEMINI_API_KEY:
+        # Fallback: quiz de exemplo
+        return {
+            "questions": [
+                {
+                    "question": "Pergunta de exemplo baseada no conteúdo",
+                    "options": ["Opção A", "Opção B", "Opção C", "Opção D"],
+                    "correct": 0
+                }
+            ]
+        }
+    
+    try:
+        model = genai.GenerativeModel(model_name='gemini-2.0-flash')
+        
+        prompt = f"""Com base no seguinte texto de aula, gere {num_questions} perguntas de múltipla escolha para testar a compreensão dos alunos.
+
+TEXTO DA AULA:
+{text}
+
+REGRAS:
+1. Cada pergunta deve ter 4 opções (A, B, C, D)
+2. Apenas uma opção deve estar correta
+3. As perguntas devem ser claras e objetivas
+4. Responda APENAS com JSON válido, sem markdown
+
+FORMATO DE RESPOSTA (JSON puro):
+{{
+    "questions": [
+        {{"question": "Pergunta aqui?", "options": ["Opção A", "Opção B", "Opção C", "Opção D"], "correct": 0}},
+        ...
+    ]
+}}
+
+O campo "correct" é o índice (0-3) da opção correta."""
+
+        response = model.generate_content(prompt)
+        response_text = response.text.strip()
+        
+        # Limpar possíveis marcadores de código
+        if response_text.startswith('```'):
+            response_text = response_text.split('```')[1]
+            if response_text.startswith('json'):
+                response_text = response_text[4:]
+        
+        import json
+        quiz_data = json.loads(response_text)
+        return quiz_data
+        
+    except Exception as e:
+        print(f"Erro ao gerar quiz: {e}")
+        return {
+            "questions": [
+                {
+                    "question": "Qual é o tema principal da aula?",
+                    "options": ["Tema A", "Tema B", "Tema C", "Tema D"],
+                    "correct": 0
+                }
+            ]
+        }
+
+
+def generate_summary_from_text(text: str) -> str:
+    """
+    Gera resumo estruturado baseado no texto da transcrição
+    """
+    if not HAS_GEMINI or not GEMINI_API_KEY:
+        # Fallback: resumo simples
+        words = text.split()[:100]
+        return f"Resumo: {' '.join(words)}..."
+    
+    try:
+        model = genai.GenerativeModel(model_name='gemini-2.0-flash')
+        
+        prompt = f"""Crie um resumo estruturado e didático do seguinte texto de aula.
+
+TEXTO DA AULA:
+{text}
+
+REGRAS:
+1. O resumo deve ser claro e objetivo
+2. Destaque os pontos principais
+3. Use tópicos quando apropriado
+4. Mantenha o resumo conciso (máximo 500 palavras)
+5. Escreva em português brasileiro
+
+FORMATO:
+- Comece com uma visão geral
+- Liste os conceitos principais
+- Conclua com os pontos-chave para lembrar"""
+
+        response = model.generate_content(prompt)
+        return response.text.strip()
+        
+    except Exception as e:
+        print(f"Erro ao gerar resumo: {e}")
+        words = text.split()[:100]
+        return f"Resumo automático: {' '.join(words)}..."
+
