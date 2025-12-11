@@ -10,18 +10,48 @@ import requests
 import json
 import time
 
-BASE_URL = "https://ativa-ia-backend.vercel.app/api"
+BASE_URL = "https://ativa-ia-9rkb.vercel.app/api"
 
 # Credenciais
-PROFESSOR_EMAIL = "maria@escola.com"
-PROFESSOR_SENHA = "prof123"
-ALUNO_EMAIL = "aluno1@escola.com"
-ALUNO_SENHA = "aluno123"
+PROFESSOR_EMAIL = "maria.silva@edu.br"
+PROFESSOR_SENHA = "password123"
+ALUNO_EMAIL = "joao.souza@edu.br" # Usando um aluno do seed também
+ALUNO_SENHA = "password123"
+
+def register(name, email, password, role):
+    resp = requests.post(f"{BASE_URL}/auth/register", json={
+        "name": name, 
+        "email": email, 
+        "password": password,
+        "role": role,
+        "registration_code": "PROF123456" if role == 'teacher' else "ABC12345"
+    })
+    return resp.json()
 
 def login(email, senha):
+    print(f"   Tentando login com {email}...")
     resp = requests.post(f"{BASE_URL}/auth/login", json={"email": email, "password": senha})
     data = resp.json()
+    
+    if not data.get('success'):
+        # Tentar registrar se falhar login
+        print(f"   Login falhou, tentando registrar...")
+        role = 'teacher' if 'prof' in email else 'student'
+        reg_data = register(f"Test User {role}", email, senha, role)
+        if reg_data.get('success'):
+            print(f"   [OK] Registrado com sucesso!")
+            # Login novamente
+            resp = requests.post(f"{BASE_URL}/auth/login", json={"email": email, "password": senha})
+            data = resp.json()
+            
     return data.get('token'), data.get('user', {}).get('name')
+
+def enroll_student(student_token, subject_id):
+    headers = {"Authorization": f"Bearer {student_token}"}
+    # Auto matricular
+    requests.post(f"{BASE_URL}/enrollments/enroll", 
+                 json={"subject_id": subject_id}, 
+                 headers=headers)
 
 def test_flow():
     print("=" * 60)
@@ -43,6 +73,7 @@ def test_flow():
         print("   [ERRO] Falha no login do aluno")
         return
     print(f"   [OK] Logado como: {aluno_name}")
+    enroll_student(aluno_token, 1) # Matricular na disciplina 1
     
     # 3. Professor cria sessão de transcrição
     print("\n3. Professor cria sessão...")
