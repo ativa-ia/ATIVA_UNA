@@ -374,6 +374,7 @@ export const registerGrades = async (data: RegisterGradesData): Promise<{ messag
 };
 
 // Professor - Desempenho da turma
+// Professor - Desempenho da turma
 export const getClassPerformance = async (subjectId: number): Promise<ClassPerformanceData> => {
     const token = await AsyncStorage.getItem('authToken');
 
@@ -389,6 +390,8 @@ export const getClassPerformance = async (subjectId: number): Promise<ClassPerfo
 
     return response.json();
 };
+
+
 
 // Aluno - Todas as notas
 export const getMyGrades = async (): Promise<StudentGradesData> => {
@@ -778,4 +781,6 @@ export const getTranscriptionSessions = async (subjectId: number): Promise<{ suc
 
     return response.json();
 };
+
+
 
