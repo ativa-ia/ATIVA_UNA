@@ -39,11 +39,13 @@ def generate_summary(text: str, subject_name: str = "Aula") -> str:
             system_instruction=f"""Você é um assistente educacional especializado em criar resumos.
             
 Sua tarefa é criar um resumo claro, objetivo e bem estruturado do conteúdo fornecido.
+Se o texto for curto ou apenas um título, use seu conhecimento para explicar o TEMA principal.
 O resumo deve:
 - Destacar os pontos principais
 - Ser organizado em tópicos
 - Usar linguagem clara e didática
 - Ter entre 200-400 palavras
+- Não usar markdown
 
 Responda sempre em português brasileiro."""
         )
@@ -61,7 +63,7 @@ Resumo:"""
         return f"Erro ao gerar resumo: {str(e)}"
 
 
-def generate_quiz(text: str, subject_name: str = "Aula", num_questions: int = 5) -> str:
+def generate_quiz(text: str, subject_name: str = "Aula", num_questions: int = 10) -> str:
     """
     Gera um quiz baseado no texto transcrito
     
@@ -81,22 +83,23 @@ def generate_quiz(text: str, subject_name: str = "Aula", num_questions: int = 5)
             model_name='gemini-2.5-flash',
             system_instruction=f"""Você é um assistente educacional especializado em criar quizzes.
             
-Sua tarefa é criar questões de múltipla escolha baseadas no conteúdo fornecido.
+Sua tarefa é criar questões de múltipla escolha sobre o tema abordado.
+Se o texto for curto ou apenas um título, use seu conhecimento para criar perguntas relevantes sobre o TEMA.
+Mescle seu conhecimento junto ao texto para criar perguntas relevantes.
 Cada questão deve:
 - Ter 4 alternativas (A, B, C, D)
 - Ter apenas uma resposta correta
 - Ser clara e objetiva
-- Testar compreensão do conteúdo
-- NÃO crie perguntas sobre palavras fora de contexto
+- Testar compreensão do assunto
 
 Formate as questões assim:
 
-**Questão 1:** [pergunta]
+Questão 1: [pergunta]
 A) [alternativa]
 B) [alternativa]
 C) [alternativa]
 D) [alternativa]
-**Resposta correta:** [letra]
+Resposta correta: [letra]
 
 Responda sempre em português brasileiro."""
         )
