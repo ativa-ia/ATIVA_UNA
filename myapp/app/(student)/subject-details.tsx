@@ -16,6 +16,7 @@ import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { checkActiveQuiz, Quiz } from '@/services/quiz';
+import { getActiveActivity, LiveActivity } from '@/services/api';
 
 
 /**
@@ -28,67 +29,95 @@ export default function SubjectDetailsScreen() {
     const subjectName = params.subject as string || 'Disciplina';
     const subjectId = parseInt(params.subjectId as string) || 1;
 
-    // Quiz ao vivo state
+    // Quiz ao vivo state (sistema de Quiz)
     const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
     const [showQuizPopup, setShowQuizPopup] = useState(false);
     const [alreadyAnswered, setAlreadyAnswered] = useState(false);
-    const [quizStarted, setQuizStarted] = useState(false); // Novo estado para controlar início local
+    const [quizStarted, setQuizStarted] = useState(false);
+
+    // LiveActivity state (sistema de Transcrição)
+    const [liveActivity, setLiveActivity] = useState<LiveActivity | null>(null);
+    const [showActivityPopup, setShowActivityPopup] = useState(false);
+    const [activityStarted, setActivityStarted] = useState(false);
+
     const pollingRef = useRef<any>(null);
 
-    // Polling para verificar quiz ativo
+    // Polling para verificar quiz E liveActivity ativos
     useEffect(() => {
-        const checkForQuiz = async () => {
-            // Se já começou o quiz, não precisa verificar ou mostrar popup
-            if (quizStarted) return;
+        const checkForActivities = async () => {
+            // Se já começou alguma atividade, não precisa verificar
+            if (quizStarted || activityStarted) return;
 
             try {
-                console.log(`[Quiz Poll] Checking for quiz in subject ${subjectId}...`);
-                const result = await checkActiveQuiz(subjectId);
-                console.log('[Quiz Poll] Result:', JSON.stringify(result, null, 2));
+                // 1. Verificar Quiz (sistema de Quiz)
+                console.log(`[Activity Poll] Checking for activities in subject ${subjectId}...`);
+                const quizResult = await checkActiveQuiz(subjectId);
 
-                if (result.success && result.active && result.quiz) {
-                    console.log('[Quiz Poll] Quiz ATIVO encontrado:', result.quiz.title);
-                    setActiveQuiz(result.quiz);
-                    setAlreadyAnswered(result.already_answered || false);
-
-                    // Só mostra popup se não respondeu E não começou ainda
-                    if (!result.already_answered && !quizStarted) {
-                        console.log('[Quiz Poll] Mostrando popup...');
+                if (quizResult.success && quizResult.active && quizResult.quiz) {
+                    console.log('[Activity Poll] Quiz ATIVO encontrado:', quizResult.quiz.title);
+                    setActiveQuiz(quizResult.quiz);
+                    setAlreadyAnswered(quizResult.already_answered || false);
+                    if (!quizResult.already_answered) {
                         setShowQuizPopup(true);
                     }
+                    return; // Quiz tem prioridade
                 } else {
-                    console.log('[Quiz Poll] Nenhum quiz ativo');
                     setActiveQuiz(null);
                     setShowQuizPopup(false);
                 }
+
+                // 2. Verificar LiveActivity (sistema de Transcrição)
+                const activityResult = await getActiveActivity(subjectId);
+                console.log('[Activity Poll] LiveActivity result:', JSON.stringify(activityResult, null, 2));
+
+                if (activityResult.success && activityResult.active && activityResult.activity) {
+                    console.log('[Activity Poll] LiveActivity ATIVA encontrada:', activityResult.activity.title);
+                    setLiveActivity(activityResult.activity);
+                    setShowActivityPopup(true);
+                } else {
+                    console.log('[Activity Poll] Nenhuma atividade ativa');
+                    setLiveActivity(null);
+                    setShowActivityPopup(false);
+                }
             } catch (error) {
-                console.log('[Quiz Poll] Erro ao verificar quiz:', error);
+                console.log('[Activity Poll] Erro ao verificar atividades:', error);
             }
         };
 
         // Verificar imediatamente
-        checkForQuiz();
+        checkForActivities();
 
         // Polling a cada 5 segundos
-        pollingRef.current = setInterval(checkForQuiz, 5000);
+        pollingRef.current = setInterval(checkForActivities, 5000);
 
         return () => {
             if (pollingRef.current) clearInterval(pollingRef.current);
         };
-    }, [subjectId, quizStarted]); // Adicionado quizStarted nas dependências
+    }, [subjectId, quizStarted, activityStarted]);
 
     const handleStartQuiz = () => {
         if (activeQuiz) {
-            setQuizStarted(true); // Marca como iniciado
+            setQuizStarted(true);
             setShowQuizPopup(false);
-
-            // Limpa o intervalo para garantir
             if (pollingRef.current) clearInterval(pollingRef.current);
 
             router.push({
                 pathname: '/(student)/live-quiz',
                 params: { quiz: JSON.stringify(activeQuiz) }
             });
+        }
+    };
+
+    const handleStartActivity = () => {
+        if (liveActivity) {
+            setActivityStarted(true);
+            setShowActivityPopup(false);
+            if (pollingRef.current) clearInterval(pollingRef.current);
+
+            router.push({
+                pathname: './live-activity',
+                params: { activity: JSON.stringify(liveActivity) }
+            } as any);
         }
     };
 
@@ -222,6 +251,58 @@ export default function SubjectDetailsScreen() {
                             onPress={handleStartQuiz}
                         >
                             <Text style={styles.startQuizButtonText}>Começar Quiz</Text>
+                            <MaterialIcons name="arrow-forward" size={24} color={colors.white} />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* LiveActivity Popup (sistema de Transcrição) */}
+            <Modal
+                visible={showActivityPopup}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowActivityPopup(false)}
+            >
+                <View style={styles.quizModalOverlay}>
+                    <View style={styles.quizPopup}>
+                        <View style={styles.quizPopupIcon}>
+                            <Text style={styles.quizPopupEmoji}>
+                                {liveActivity?.activity_type === 'quiz' ? '🎯' :
+                                    liveActivity?.activity_type === 'summary' ? '📝' : '💬'}
+                            </Text>
+                        </View>
+
+                        <Text style={styles.quizPopupTitle}>
+                            {liveActivity?.activity_type === 'quiz' ? 'Quiz ao Vivo!' :
+                                liveActivity?.activity_type === 'summary' ? 'Resumo Disponível!' : 'Atividade ao Vivo!'}
+                        </Text>
+                        <Text style={styles.quizPopupSubtitle}>
+                            {liveActivity?.title}
+                        </Text>
+
+                        <View style={styles.quizInfo}>
+                            <View style={styles.quizInfoItem}>
+                                <MaterialIcons
+                                    name={liveActivity?.activity_type === 'quiz' ? 'quiz' : 'assignment'}
+                                    size={20}
+                                    color="#10b981"
+                                />
+                                <Text style={styles.quizInfoText}>
+                                    {liveActivity?.activity_type === 'quiz'
+                                        ? `${liveActivity?.content?.questions?.length || 0} perguntas`
+                                        : 'Clique para ver'}
+                                </Text>
+                            </View>
+                        </View>
+
+                        <TouchableOpacity
+                            style={styles.startQuizButton}
+                            onPress={handleStartActivity}
+                        >
+                            <Text style={styles.startQuizButtonText}>
+                                {liveActivity?.activity_type === 'quiz' ? 'Começar Quiz' : 'Ver Atividade'}
+                            </Text>
                             <MaterialIcons name="arrow-forward" size={24} color={colors.white} />
                         </TouchableOpacity>
                     </View>
