@@ -252,8 +252,14 @@ def generate_quiz(current_user, session_id):
     db.session.flush()
     
     try:
-        # Gerar quiz via IA
-        quiz_data = generate_quiz_from_text(session.full_transcript, num_questions)
+        # Gerar quiz via IA com contexto
+        subject = Subject.query.get(session.subject_id)
+        quiz_data = generate_quiz_from_text(
+            session.full_transcript, 
+            num_questions, 
+            teacher=current_user, 
+            subject=subject
+        )
         
         # Criar atividade
         activity = LiveActivity(
@@ -311,7 +317,12 @@ def generate_summary(current_user, session_id):
     
     try:
         # Gerar resumo via IA
-        summary_text = generate_summary_from_text(session.full_transcript)
+        subject = Subject.query.get(session.subject_id)
+        summary_text = generate_summary_from_text(
+            session.full_transcript,
+            teacher=current_user,
+            subject=subject
+        )
         
         # Criar atividade
         activity = LiveActivity(
