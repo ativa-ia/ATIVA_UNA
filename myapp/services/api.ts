@@ -537,7 +537,7 @@ export const generateQuiz = async (sessionId: number, numQuestions: number = 5):
 };
 
 // Gerar Resumo via IA
-export const generateSummary = async (sessionId: number): Promise<{ success: boolean; activity: LiveActivity; checkpoint: TranscriptionCheckpoint }> => {
+export const generateSummary = async (sessionId: number): Promise<{ success: boolean; activity: LiveActivity; checkpoint: TranscriptionCheckpoint; error?: string }> => {
     const token = await AsyncStorage.getItem('authToken');
 
     const response = await fetch(`${API_URL}/transcription/sessions/${sessionId}/generate-summary`, {

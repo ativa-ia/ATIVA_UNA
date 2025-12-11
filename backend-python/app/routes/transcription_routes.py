@@ -225,7 +225,7 @@ def generate_quiz(current_user, session_id):
         "num_questions": int (1-10, default 5)
     }
     """
-    from app.services.ai_service import generate_quiz_from_text
+    from app.services.ai_service import generate_quiz
     
     session = TranscriptionSession.query.get(session_id)
     
@@ -235,8 +235,8 @@ def generate_quiz(current_user, session_id):
     if session.teacher_id != current_user.id:
         return jsonify({'success': False, 'error': 'Não autorizado'}), 403
     
-    if not session.full_transcript or len(session.full_transcript.strip()) < 10:
-        return jsonify({'success': False, 'error': 'Transcrição muito curta para gerar quiz'}), 400
+    if not session.full_transcript or len(session.full_transcript.strip()) < 5:
+        return jsonify({'success': False, 'error': f'Transcrição muito curta para gerar quiz. Atual: {len(session.full_transcript.strip()) if session.full_transcript else 0} caracteres, mínimo: 5'}), 400
     
     data = request.get_json() or {}
     num_questions = min(max(data.get('num_questions', 5), 1), 10)
@@ -252,8 +252,8 @@ def generate_quiz(current_user, session_id):
     db.session.flush()
     
     try:
-        # Gerar quiz via IA
-        quiz_data = generate_quiz_from_text(session.full_transcript, num_questions)
+        # Gerar quiz via IA (retorna string formatada)
+        quiz_text = generate_quiz(session.full_transcript, session.title, num_questions)
         
         # Criar atividade
         activity = LiveActivity(
@@ -261,8 +261,8 @@ def generate_quiz(current_user, session_id):
             checkpoint_id=checkpoint.id,
             activity_type='quiz',
             title=f'Quiz - {session.title}',
-            content=quiz_data,
-            ai_generated_content=json.dumps(quiz_data, ensure_ascii=False),
+            content={'text': quiz_text},
+            ai_generated_content=quiz_text,
             status='waiting'
         )
         db.session.add(activity)
@@ -272,7 +272,7 @@ def generate_quiz(current_user, session_id):
         
         return jsonify({
             'success': True,
-            'message': f'Quiz com {len(quiz_data.get("questions", []))} perguntas gerado',
+            'message': 'Quiz gerado com sucesso',
             'activity': activity.to_dict(),
             'checkpoint': checkpoint.to_dict()
         }), 201
@@ -286,7 +286,7 @@ def generate_quiz(current_user, session_id):
 @token_required
 def generate_summary(current_user, session_id):
     """Gera resumo via IA baseado na transcrição"""
-    from app.services.ai_service import generate_summary_from_text
+    from app.services.ai_service import generate_summary
     
     session = TranscriptionSession.query.get(session_id)
     
@@ -296,8 +296,8 @@ def generate_summary(current_user, session_id):
     if session.teacher_id != current_user.id:
         return jsonify({'success': False, 'error': 'Não autorizado'}), 403
     
-    if not session.full_transcript or len(session.full_transcript.strip()) < 50:
-        return jsonify({'success': False, 'error': 'Transcrição muito curta para gerar resumo'}), 400
+    if not session.full_transcript or len(session.full_transcript.strip()) < 5:
+        return jsonify({'success': False, 'error': f'Transcrição muito curta para gerar resumo. Atual: {len(session.full_transcript.strip()) if session.full_transcript else 0} caracteres, mínimo: 5'}), 400
     
     # Criar checkpoint
     checkpoint = TranscriptionCheckpoint(
@@ -310,8 +310,8 @@ def generate_summary(current_user, session_id):
     db.session.flush()
     
     try:
-        # Gerar resumo via IA
-        summary_text = generate_summary_from_text(session.full_transcript)
+        # Gerar resumo via IA (retorna string)
+        summary_text = generate_summary(session.full_transcript, session.title)
         
         # Criar atividade
         activity = LiveActivity(
