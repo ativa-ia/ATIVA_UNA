@@ -14,30 +14,28 @@ import { typography } from '@/constants/typography';
 import { spacing } from '@/constants/spacing';
 
 /**
- * CalendarScreen - Calendário (Aluno)
- * Tela placeholder para calendário acadêmico
+ * ReportsScreen - Relatórios (Professor)
+ * Tela placeholder para visualização de relatórios
  */
-export default function CalendarScreen() {
-    const [activeNavId, setActiveNavId] = useState('calendar');
+export default function ReportsScreen() {
+    const [activeNavId, setActiveNavId] = useState('reports');
 
     const navItems: NavItem[] = [
         { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
-        { id: 'calendar', label: 'Calendário', iconName: 'calendar-today' },
-        { id: 'grades', label: 'Notas', iconName: 'school' },
+        { id: 'materials', label: 'Materiais', iconName: 'folder' },
+        { id: 'reports', label: 'Relatórios', iconName: 'assessment' },
     ];
 
     const handleNavPress = (id: string) => {
         setActiveNavId(id);
-
         switch (id) {
             case 'dashboard':
-                router.push('./dashboard');
+                router.replace('/(teacher)/dashboard');
                 break;
-            case 'calendar':
-                // Already on calendar, do nothing
+            case 'materials':
+                router.replace('/(teacher)/materials');
                 break;
-            case 'grades':
-                router.push('./grades');
+            case 'reports':
                 break;
         }
     };
@@ -53,20 +51,19 @@ export default function CalendarScreen() {
                     >
                         <MaterialIcons name="arrow-back" size={24} color={colors.white} />
                     </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Calendário</Text>
+                    <Text style={styles.headerTitle}>Relatórios</Text>
                     <View style={styles.placeholder} />
                 </View>
 
                 {/* Content */}
                 <View style={styles.content}>
-                    <MaterialIcons name="calendar-today" size={80} color={colors.zinc700} />
+                    <MaterialIcons name="assessment" size={80} color={colors.zinc700} />
                     <Text style={styles.title}>Em Desenvolvimento</Text>
                     <Text style={styles.description}>
-                        O calendário acadêmico estará disponível em breve.
+                        Os relatórios de desempenho estarão disponíveis em breve.
                     </Text>
                 </View>
 
-                {/* Bottom Navigation */}
                 <BottomNav
                     items={navItems}
                     activeId={activeNavId}

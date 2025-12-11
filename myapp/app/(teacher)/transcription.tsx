@@ -61,6 +61,7 @@ export default function TranscriptionScreen() {
     const [currentActivity, setCurrentActivity] = useState<LiveActivity | null>(null);
     const [showRankingModal, setShowRankingModal] = useState(false);
     const [ranking, setRanking] = useState<any[]>([]);
+    const [showQuizOptions, setShowQuizOptions] = useState(false); // Submenu de quiz
 
     // Estado do conteúdo gerado (exibido no painel esquerdo)
     const [generatedSummary, setGeneratedSummary] = useState<string | null>(null);
@@ -293,6 +294,7 @@ export default function TranscriptionScreen() {
 
         // Verificar se tem texto
         if (!transcribedText || transcribedText.trim().length === 0) {
+            console.log('[QUIZ] Erro: sem texto transcrito');
             Alert.alert(
                 'Sem Texto',
                 'Grave algum conteúdo antes de gerar um quiz.'
@@ -300,26 +302,39 @@ export default function TranscriptionScreen() {
             return;
         }
 
+        console.log('[QUIZ] Iniciando geração de quiz...');
+        console.log('[QUIZ] Session ID:', session.id);
+        console.log('[QUIZ] Texto transcrito:', transcribedText.substring(0, 100), '...');
+        console.log('[QUIZ] Comprimento do texto:', transcribedText.length, 'caracteres');
+
         setIsGenerating(true);
         setDisplayMode('quiz');
         setGeneratedQuiz(null); // Limpar quiz anterior
         try {
             // Forçar salvamento antes de gerar
+            console.log('[QUIZ] Salvando transcrição no backend...');
             await updateTranscription(session.id, transcribedText);
+            console.log('[QUIZ] Transcrição salva.');
 
+            console.log('[QUIZ] Chamando API generateQuiz...');
             const result = await generateQuiz(session.id, numQuestions);
+            console.log('[QUIZ] Resposta da API:', JSON.stringify(result, null, 2));
+
             if (result.success && result.activity) {
+                console.log('[QUIZ] Quiz gerado com sucesso! ID:', result.activity.id);
+                console.log('[QUIZ] Perguntas:', result.activity.content?.questions?.length || 0);
                 setCurrentActivity(result.activity);
                 // Backend agora retorna { text: "..." } ou o conteúdo direto em ai_generated_content
                 const quizContent = result.activity.content?.text || result.activity.ai_generated_content || '';
                 setGeneratedQuiz(quizContent);
                 console.log('Quiz gerado:', quizContent);
             } else {
+                console.log('[QUIZ] Erro da API:', result.error);
                 Alert.alert('Erro', result.error || 'Não foi possível gerar o quiz.');
                 setDisplayMode('none');
             }
         } catch (error) {
-            console.error('Erro ao gerar quiz:', error);
+            console.error('[QUIZ] Exceção ao gerar quiz:', error);
             Alert.alert('Erro', 'Erro ao gerar quiz. Verifique sua conexão.');
             setDisplayMode('none');
         }
@@ -392,18 +407,29 @@ export default function TranscriptionScreen() {
 
     // Iniciar atividade para alunos
     const startActivity = async (activityId: number) => {
+        console.log('[BROADCAST] Iniciando atividade para alunos...');
+        console.log('[BROADCAST] Activity ID:', activityId);
         try {
             const result = await broadcastActivity(activityId);
+            console.log('[BROADCAST] Resposta da API:', JSON.stringify(result, null, 2));
+
             if (result.success) {
+                console.log('[BROADCAST] Atividade iniciada com sucesso!');
+                console.log('[BROADCAST] Alunos matriculados:', result.enrolled_students);
                 setCurrentActivity(result.activity);
                 Alert.alert('Atividade Iniciada!', `Enviada para ${result.enrolled_students || 0} alunos.`);
                 // Se for quiz, abrir ranking
-                if (result.activity.activity_type === 'quiz') {
+                if (result.activity?.activity_type === 'quiz') {
+                    console.log('[BROADCAST] Tipo é quiz, abrindo modal de ranking...');
                     setShowRankingModal(true);
                     startRankingPolling(activityId);
                 }
+            } else {
+                console.log('[BROADCAST] Erro no broadcast:', result);
+                Alert.alert('Erro', 'Não foi possível iniciar a atividade.');
             }
         } catch (error) {
+            console.error('[BROADCAST] Exceção ao iniciar atividade:', error);
             Alert.alert('Erro', 'Erro ao iniciar atividade.');
         }
     };
@@ -690,12 +716,48 @@ Pressione o botão do microfone para começar a falar."
                                 <ActivityIndicator size="large" color={colors.primary} />
                                 <Text style={styles.generatingText}>Gerando com IA...</Text>
                             </View>
+                        ) : showQuizOptions ? (
+                            /* Submenu de opções do Quiz */
+                            <>
+                                <Text style={styles.quizOptionsTitle}>Quantas perguntas?</Text>
+
+                                <TouchableOpacity
+                                    style={styles.quizOptionButton}
+                                    onPress={() => { setShowQuizOptions(false); handleGenerateQuiz(3); }}
+                                >
+                                    <Text style={styles.quizOptionText}>3 Perguntas</Text>
+                                    <Text style={styles.quizOptionDesc}>Quiz rápido</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.quizOptionButton}
+                                    onPress={() => { setShowQuizOptions(false); handleGenerateQuiz(5); }}
+                                >
+                                    <Text style={styles.quizOptionText}>5 Perguntas</Text>
+                                    <Text style={styles.quizOptionDesc}>Padrão</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.quizOptionButton}
+                                    onPress={() => { setShowQuizOptions(false); handleGenerateQuiz(10); }}
+                                >
+                                    <Text style={styles.quizOptionText}>10 Perguntas</Text>
+                                    <Text style={styles.quizOptionDesc}>Quiz completo</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.backButton}
+                                    onPress={() => setShowQuizOptions(false)}
+                                >
+                                    <Text style={styles.backButtonText}>← Voltar</Text>
+                                </TouchableOpacity>
+                            </>
                         ) : (
                             <>
                                 {/* Quiz */}
                                 <TouchableOpacity
                                     style={styles.activityOption}
-                                    onPress={() => handleGenerateQuiz(5)}
+                                    onPress={() => setShowQuizOptions(true)}
                                 >
                                     <View style={[styles.activityIcon, { backgroundColor: '#8b5cf6' }]}>
                                         <MaterialIcons name="quiz" size={24} color={colors.white} />
@@ -1356,5 +1418,35 @@ const styles = StyleSheet.create({
         color: colors.white,
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
+    },
+    // Estilos para submenu de quiz
+    quizOptionsTitle: {
+        fontSize: typography.fontSize.lg,
+        fontWeight: typography.fontWeight.bold,
+        color: colors.white,
+        textAlign: 'center',
+        marginBottom: spacing.md,
+    },
+    quizOptionButton: {
+        backgroundColor: colors.zinc800,
+        borderRadius: borderRadius.lg,
+        padding: spacing.md,
+        marginBottom: spacing.sm,
+        alignItems: 'center',
+    },
+    quizOptionText: {
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.semibold,
+        color: colors.white,
+    },
+    quizOptionDesc: {
+        fontSize: typography.fontSize.sm,
+        color: colors.zinc400,
+        marginTop: 4,
+    },
+    backButtonText: {
+        color: colors.zinc400,
+        fontSize: typography.fontSize.base,
+        textAlign: 'center',
     },
 });
