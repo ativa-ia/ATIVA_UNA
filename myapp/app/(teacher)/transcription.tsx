@@ -61,6 +61,7 @@ export default function TranscriptionScreen() {
     const [currentActivity, setCurrentActivity] = useState<LiveActivity | null>(null);
     const [showRankingModal, setShowRankingModal] = useState(false);
     const [ranking, setRanking] = useState<any[]>([]);
+    const [showQuizOptions, setShowQuizOptions] = useState(false); // Submenu de quiz
 
     // Estado do resumo gerado
     const [generatedSummary, setGeneratedSummary] = useState<string | null>(null);
@@ -611,12 +612,48 @@ Pressione o botão do microfone para começar a falar."
                                 <ActivityIndicator size="large" color={colors.primary} />
                                 <Text style={styles.generatingText}>Gerando com IA...</Text>
                             </View>
+                        ) : showQuizOptions ? (
+                            /* Submenu de opções do Quiz */
+                            <>
+                                <Text style={styles.quizOptionsTitle}>Quantas perguntas?</Text>
+
+                                <TouchableOpacity
+                                    style={styles.quizOptionButton}
+                                    onPress={() => { setShowQuizOptions(false); handleGenerateQuiz(3); }}
+                                >
+                                    <Text style={styles.quizOptionText}>3 Perguntas</Text>
+                                    <Text style={styles.quizOptionDesc}>Quiz rápido</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.quizOptionButton}
+                                    onPress={() => { setShowQuizOptions(false); handleGenerateQuiz(5); }}
+                                >
+                                    <Text style={styles.quizOptionText}>5 Perguntas</Text>
+                                    <Text style={styles.quizOptionDesc}>Padrão</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.quizOptionButton}
+                                    onPress={() => { setShowQuizOptions(false); handleGenerateQuiz(10); }}
+                                >
+                                    <Text style={styles.quizOptionText}>10 Perguntas</Text>
+                                    <Text style={styles.quizOptionDesc}>Quiz completo</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={styles.backButton}
+                                    onPress={() => setShowQuizOptions(false)}
+                                >
+                                    <Text style={styles.backButtonText}>← Voltar</Text>
+                                </TouchableOpacity>
+                            </>
                         ) : (
                             <>
                                 {/* Quiz */}
                                 <TouchableOpacity
                                     style={styles.activityOption}
-                                    onPress={() => handleGenerateQuiz(5)}
+                                    onPress={() => setShowQuizOptions(true)}
                                 >
                                     <View style={[styles.activityIcon, { backgroundColor: '#8b5cf6' }]}>
                                         <MaterialIcons name="quiz" size={24} color={colors.white} />
@@ -1111,5 +1148,35 @@ const styles = StyleSheet.create({
         color: colors.white,
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
+    },
+    // Estilos para submenu de quiz
+    quizOptionsTitle: {
+        fontSize: typography.fontSize.lg,
+        fontWeight: typography.fontWeight.bold,
+        color: colors.white,
+        textAlign: 'center',
+        marginBottom: spacing.md,
+    },
+    quizOptionButton: {
+        backgroundColor: colors.zinc800,
+        borderRadius: borderRadius.lg,
+        padding: spacing.md,
+        marginBottom: spacing.sm,
+        alignItems: 'center',
+    },
+    quizOptionText: {
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.semibold,
+        color: colors.white,
+    },
+    quizOptionDesc: {
+        fontSize: typography.fontSize.sm,
+        color: colors.zinc400,
+        marginTop: 4,
+    },
+    backButtonText: {
+        color: colors.zinc400,
+        fontSize: typography.fontSize.base,
+        textAlign: 'center',
     },
 });
