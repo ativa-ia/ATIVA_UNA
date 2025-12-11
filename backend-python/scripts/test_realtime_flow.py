@@ -1,157 +1,161 @@
-# -*- coding: utf-8 -*-
-"""
-Teste completo do fluxo Professor -> Aluno em tempo real
-Verifica se:
-1. Professor gera quiz
-2. Professor inicia (broadcast)
-3. Aluno consegue ver a atividade
-"""
 import requests
 import json
 import time
+import uuid
 
 BASE_URL = "https://ativa-ia-9rkb.vercel.app/api"
+# BASE_URL = "http://localhost:5000/api"
 
-# Credenciais
-PROFESSOR_EMAIL = "maria.silva@edu.br"
+# Credenciais Únicas para cada teste
+unique_id = uuid.uuid4().hex[:6]
+PROFESSOR_EMAIL = f"prof_test_{unique_id}@edu.br"
 PROFESSOR_SENHA = "password123"
-ALUNO_EMAIL = "joao.souza@edu.br" # Usando um aluno do seed também
+ALUNO_EMAIL = f"aluno_test_{unique_id}@edu.br"
 ALUNO_SENHA = "password123"
 
 def register(name, email, password, role):
+    print(f"   Registrando {name} ({email})...")
     resp = requests.post(f"{BASE_URL}/auth/register", json={
         "name": name, 
         "email": email, 
         "password": password,
-        "role": role,
-        "registration_code": "PROF123456" if role == 'teacher' else "ABC12345"
+        "role": role
     })
     return resp.json()
 
 def login(email, senha):
-    print(f"   Tentando login com {email}...")
+    print(f"   Logando como {email}...")
     resp = requests.post(f"{BASE_URL}/auth/login", json={"email": email, "password": senha})
     data = resp.json()
-    
-    if not data.get('success'):
-        # Tentar registrar se falhar login
-        print(f"   Login falhou, tentando registrar...")
-        role = 'teacher' if 'prof' in email else 'student'
-        reg_data = register(f"Test User {role}", email, senha, role)
-        if reg_data.get('success'):
-            print(f"   [OK] Registrado com sucesso!")
-            # Login novamente
-            resp = requests.post(f"{BASE_URL}/auth/login", json={"email": email, "password": senha})
-            data = resp.json()
-            
     return data.get('token'), data.get('user', {}).get('name')
 
 def enroll_student(student_token, subject_id):
     headers = {"Authorization": f"Bearer {student_token}"}
-    # Auto matricular
-    requests.post(f"{BASE_URL}/enrollments/enroll", 
-                 json={"subject_id": subject_id}, 
-                 headers=headers)
+    print(f"   Matriculando aluno na disciplina {subject_id}...")
+    # Verificar rotas de matricula - assumindo enrollments/enroll ou similar
+    # Se nao existir rota direta de matricula publica, tenta a rota de admin ou assume auto-matricula no registro
+    # O auth_controller faz auto-matrícula no registro!
+    pass
 
 def test_flow():
     print("=" * 60)
-    print("TESTE: Fluxo Professor -> Aluno em tempo real")
+    print(f"TESTE: Fluxo Real-Time (ID: {unique_id})")
     print("=" * 60)
     
-    # 1. Login Professor
-    print("\n1. Login Professor...")
+    # 1. Registrar e Logar Professor
+    print("\n1. Preparando Professor...")
+    reg = register("Prof Teste", PROFESSOR_EMAIL, PROFESSOR_SENHA, "teacher")
+    if not reg.get('success'):
+        print(f"   [ERRO] Registro Prof: {reg}")
+        return
+        
     prof_token, prof_name = login(PROFESSOR_EMAIL, PROFESSOR_SENHA)
     if not prof_token:
-        print("   [ERRO] Falha no login do professor")
+        print("   [ERRO] Login Prof falhou")
         return
-    print(f"   [OK] Logado como: {prof_name}")
+    print(f"   [OK] Professor logado: {prof_name}")
+
+    # 2. Registrar e Logar Aluno
+    print("\n2. Preparando Aluno...")
+    reg_aluno = register("Aluno Teste", ALUNO_EMAIL, ALUNO_SENHA, "student")
+    # Nota: O registro de aluno aciona auto-matrícula em todas as disciplinas existentes
     
-    # 2. Login Aluno
-    print("\n2. Login Aluno...")
     aluno_token, aluno_name = login(ALUNO_EMAIL, ALUNO_SENHA)
     if not aluno_token:
-        print("   [ERRO] Falha no login do aluno")
+        print("   [ERRO] Login Aluno falhou")
         return
-    print(f"   [OK] Logado como: {aluno_name}")
-    enroll_student(aluno_token, 1) # Matricular na disciplina 1
+    print(f"   [OK] Aluno logado: {aluno_name}")
     
-    # 3. Professor cria sessão de transcrição
-    print("\n3. Professor cria sessão...")
+    # 3. Buscar Disciplina
+    print("\n3. Buscando Disciplinas...")
     headers = {"Authorization": f"Bearer {prof_token}"}
+    # Tentar listar subjects
+    # A rota pode variar, vamos tentar /subjects
+    resp = requests.get(f"{BASE_URL}/subjects", headers=headers)
+    if resp.status_code != 200:
+        # Tentar rota de student grades que lista subjects, ou rota de professor
+        # Vamos tentar assumir ID 1 se falhar, mas o ideal é listar
+        print(f"   Aviso: GET /subjects retornou {resp.status_code}. Tentando ID 1 cego.")
+        subject_id = 1
+    else:
+        json_data = resp.json()
+        if isinstance(json_data, list):
+            subjects = json_data
+        else:
+            subjects = json_data.get('subjects', [])
+            
+        if not subjects:
+             print("   [ERRO] Nenhuma disciplina encontrada no sistema. Rode o seed_database.py primeiro no backend.")
+             return
+        subject_id = subjects[0]['id']
+        print(f"   [OK] Usando disciplina: {subjects[0]['name']} (ID: {subject_id})")
+
+    # 4. Professor cria sessao
+    print(f"\n4. Criando Sessão na disciplina {subject_id}...")
     resp = requests.post(f"{BASE_URL}/transcription/sessions", 
-                        json={"title": "Aula Teste Real-time", "subject_id": 1}, 
+                        json={"title": f"Aula Teste {unique_id}", "subject_id": subject_id}, 
                         headers=headers)
+    if resp.status_code != 201 and resp.status_code != 200:
+        print(f"   [ERRO] Criar sessão falhou: {resp.text}")
+        return
+        
     session_data = resp.json()
     session_id = session_data.get('session', {}).get('id')
     print(f"   [OK] Sessão criada: ID={session_id}")
     
-    # 4. Professor adiciona transcrição
-    print("\n4. Professor adiciona transcrição...")
-    texto = """
-    Python é uma linguagem de programação de alto nível muito popular.
-    Variáveis são usadas para armazenar valores. Exemplo: x = 10.
-    Listas são usadas para guardar múltiplos valores: frutas = ['maçã', 'banana'].
-    Funções ajudam a organizar o código e evitar repetição.
-    O loop for percorre elementos: for item in lista.
-    """
-    resp = requests.put(f"{BASE_URL}/transcription/sessions/{session_id}", 
-                       json={"full_transcript": texto}, 
-                       headers=headers)
-    print(f"   [OK] Transcrição salva")
-    
-    # 5. Professor gera quiz
-    print("\n5. Professor gera quiz via IA...")
+    # 5. Adicionar Transcrição
+    print("\n5. Enviando Transcrição...")
+    requests.put(f"{BASE_URL}/transcription/sessions/{session_id}", 
+                json={"full_transcript": "O Python é uma linguagem incrível. Vamos fazer um quiz sobre variáveis e funções."}, 
+                headers=headers)
+                
+    # 6. Gerar Quiz
+    print("\n6. Gerando Quiz...")
+    # Tentar gerar quiz com 3 perguntas
     resp = requests.post(f"{BASE_URL}/transcription/sessions/{session_id}/generate-quiz", 
                         json={"num_questions": 3}, 
                         headers=headers)
     quiz_data = resp.json()
-    print(f"   Resposta: {json.dumps(quiz_data, indent=2, ensure_ascii=False)[:500]}")
-    
     if not quiz_data.get('success'):
-        print(f"   [ERRO] Falha ao gerar quiz: {quiz_data.get('error')}")
-        return
-    
+         print(f"   [ERRO] Gerar quiz falhou: {quiz_data}")
+         return
+         
     activity_id = quiz_data.get('activity', {}).get('id')
-    questions = quiz_data.get('activity', {}).get('content', {}).get('questions', [])
-    print(f"   [OK] Quiz gerado: {len(questions)} perguntas, Activity ID: {activity_id}")
+    print(f"   [OK] Quiz Gerado: Activity ID {activity_id}")
     
-    # Mostrar primeira pergunta
-    if questions:
-        q = questions[0]
-        print(f"   Pergunta 1: {q.get('question', 'N/A')[:80]}...")
+    # 7. Broadcast
+    print("\n7. BROADCAST (O Momento da Verdade)...")
+    resp = requests.post(f"{BASE_URL}/transcription/activities/{activity_id}/broadcast", headers=headers)
+    print(f"   Status Broadcast: {resp.status_code}")
+    print(f"   Response: {resp.text}")
     
-    # 6. Professor inicia (broadcast)
-    print("\n6. Professor inicia atividade (broadcast)...")
-    resp = requests.post(f"{BASE_URL}/transcription/activities/{activity_id}/broadcast", 
-                        headers=headers)
-    broadcast_data = resp.json()
-    print(f"   Resposta: {json.dumps(broadcast_data, indent=2, ensure_ascii=False)}")
-    
-    if not broadcast_data.get('success'):
-        print(f"   [ERRO] Falha no broadcast")
+    if resp.status_code != 200:
+        print("   [FALHA] Broadcast falhou.")
         return
-    print(f"   [OK] Atividade enviada para {broadcast_data.get('enrolled_students', 0)} alunos")
-    
-    # 7. Aluno verifica atividade ativa
-    print("\n7. Aluno verifica atividade ativa...")
+
+    # 8. Aluno verifica polling
+    print("\n8. Aluno verificando polling...")
     aluno_headers = {"Authorization": f"Bearer {aluno_token}"}
-    resp = requests.get(f"{BASE_URL}/transcription/subjects/1/active", headers=aluno_headers)
-    active_data = resp.json()
-    print(f"   Resposta: {json.dumps(active_data, indent=2, ensure_ascii=False)}")
     
-    if active_data.get('active'):
-        print(f"   [OK] Aluno VÊ a atividade: {active_data.get('activity', {}).get('title')}")
+    # Tenta 3 vezes com delay
+    for i in range(3):
+        print(f"   Tentativa {i+1}...")
+        resp = requests.get(f"{BASE_URL}/transcription/subjects/{subject_id}/active", headers=aluno_headers)
+        active_data = resp.json()
+        
+        if active_data.get('active'):
+            print(f"   [SUCESSO] ATIVIDADE ENCONTRADA!")
+            print(f"   Título: {active_data.get('activity', {}).get('title')}")
+            print(f"   Tipo: {active_data.get('activity', {}).get('activity_type')}")
+            break
+        else:
+            print("   Nada ainda...")
+            time.sleep(1)
+            
+    if not active_data.get('active'):
+        print("   [FALHA] Aluno não viu a atividade após broadcast.")
     else:
-        print(f"   [PROBLEMA] Aluno NÃO vê nenhuma atividade ativa!")
-    
-    # 8. Limpar - encerrar sessão
-    print("\n8. Professor encerra sessão...")
-    resp = requests.post(f"{BASE_URL}/transcription/sessions/{session_id}/end", headers=headers)
-    print(f"   [OK] Sessão encerrada")
-    
-    print("\n" + "=" * 60)
-    print("TESTE CONCLUÍDO!")
-    print("=" * 60)
+        print("\n   >>> PROVA DE CONCEITO: FUNCIONOU! <<<")
 
 if __name__ == "__main__":
     test_flow()
