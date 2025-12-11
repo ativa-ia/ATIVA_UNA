@@ -633,7 +633,7 @@ export const endTranscriptionSession = async (sessionId: number): Promise<{ succ
 };
 
 // Gerar Quiz via IA
-export const generateQuiz = async (sessionId: number, numQuestions: number = 5): Promise<{ success: boolean; activity: LiveActivity; checkpoint: TranscriptionCheckpoint }> => {
+export const generateQuiz = async (sessionId: number, numQuestions: number = 5): Promise<{ success: boolean; activity?: LiveActivity; checkpoint?: TranscriptionCheckpoint; error?: string }> => {
     const token = await AsyncStorage.getItem('authToken');
 
     const response = await fetch(`${API_URL}/transcription/sessions/${sessionId}/generate-quiz`, {
