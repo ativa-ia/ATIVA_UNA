@@ -283,10 +283,23 @@ export default function TranscriptionScreen() {
     // Gerar Quiz
     const handleGenerateQuiz = async (numQuestions: number) => {
         if (!session) return;
+
+        // Verificar se tem texto
+        if (!transcribedText || transcribedText.trim().length === 0) {
+            Alert.alert(
+                'Sem Texto',
+                'Grave algum conteúdo antes de gerar um quiz.'
+            );
+            return;
+        }
+
         setIsGenerating(true);
         try {
+            // Forçar salvamento antes de gerar
+            await updateTranscription(session.id, transcribedText);
+
             const result = await generateQuiz(session.id, numQuestions);
-            if (result.success) {
+            if (result.success && result.activity) {
                 setCurrentActivity(result.activity);
                 setShowActivityModal(false);
                 Alert.alert(
@@ -296,15 +309,16 @@ export default function TranscriptionScreen() {
                         { text: 'Revisar depois', style: 'cancel' },
                         {
                             text: 'Iniciar Quiz',
-                            onPress: () => startActivity(result.activity.id)
+                            onPress: () => startActivity(result.activity!.id)
                         }
                     ]
                 );
             } else {
-                Alert.alert('Erro', 'Não foi possível gerar o quiz.');
+                Alert.alert('Erro', result.error || 'Não foi possível gerar o quiz.');
             }
         } catch (error) {
-            Alert.alert('Erro', 'Erro ao gerar quiz.');
+            console.error('Erro ao gerar quiz:', error);
+            Alert.alert('Erro', 'Erro ao gerar quiz. Verifique sua conexão.');
         }
         setIsGenerating(false);
     };

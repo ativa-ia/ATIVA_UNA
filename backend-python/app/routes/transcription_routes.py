@@ -235,7 +235,7 @@ def generate_quiz(current_user, session_id):
     if session.teacher_id != current_user.id:
         return jsonify({'success': False, 'error': 'Não autorizado'}), 403
     
-    if not session.full_transcript or len(session.full_transcript.strip()) < 50:
+    if not session.full_transcript or len(session.full_transcript.strip()) < 10:
         return jsonify({'success': False, 'error': 'Transcrição muito curta para gerar quiz'}), 400
     
     data = request.get_json() or {}

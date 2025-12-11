@@ -2,10 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // URL da API (mude para seu IP local se testar em dispositivo físico)
 // Para desenvolvimento local, use localhost
-export const API_URL = 'http://localhost:3000/api';
+//export const API_URL = 'http://localhost:3000/api';
 
 // Para produção/Vercel, use:
-//export const API_URL = 'https://ativa-ia-9rkb.vercel.app/api';
+export const API_URL = 'https://ativa-ia-9rkb.vercel.app/api';
 
 export interface LoginData {
     email: string;
@@ -633,7 +633,7 @@ export const endTranscriptionSession = async (sessionId: number): Promise<{ succ
 };
 
 // Gerar Quiz via IA
-export const generateQuiz = async (sessionId: number, numQuestions: number = 5): Promise<{ success: boolean; activity: LiveActivity; checkpoint: TranscriptionCheckpoint }> => {
+export const generateQuiz = async (sessionId: number, numQuestions: number = 5): Promise<{ success: boolean; activity?: LiveActivity; checkpoint?: TranscriptionCheckpoint; error?: string }> => {
     const token = await AsyncStorage.getItem('authToken');
 
     const response = await fetch(`${API_URL}/transcription/sessions/${sessionId}/generate-quiz`, {
