@@ -286,6 +286,7 @@ export default function TranscriptionScreen() {
 
         // Verificar se tem texto
         if (!transcribedText || transcribedText.trim().length === 0) {
+            console.log('[QUIZ] Erro: sem texto transcrito');
             Alert.alert(
                 'Sem Texto',
                 'Grave algum conteúdo antes de gerar um quiz.'
@@ -293,13 +294,25 @@ export default function TranscriptionScreen() {
             return;
         }
 
+        console.log('[QUIZ] Iniciando geração de quiz...');
+        console.log('[QUIZ] Session ID:', session.id);
+        console.log('[QUIZ] Texto transcrito:', transcribedText.substring(0, 100), '...');
+        console.log('[QUIZ] Comprimento do texto:', transcribedText.length, 'caracteres');
+
         setIsGenerating(true);
         try {
             // Forçar salvamento antes de gerar
+            console.log('[QUIZ] Salvando transcrição no backend...');
             await updateTranscription(session.id, transcribedText);
+            console.log('[QUIZ] Transcrição salva.');
 
+            console.log('[QUIZ] Chamando API generateQuiz...');
             const result = await generateQuiz(session.id, numQuestions);
+            console.log('[QUIZ] Resposta da API:', JSON.stringify(result, null, 2));
+
             if (result.success && result.activity) {
+                console.log('[QUIZ] Quiz gerado com sucesso! ID:', result.activity.id);
+                console.log('[QUIZ] Perguntas:', result.activity.content?.questions?.length || 0);
                 setCurrentActivity(result.activity);
                 setShowActivityModal(false);
                 Alert.alert(
@@ -314,10 +327,11 @@ export default function TranscriptionScreen() {
                     ]
                 );
             } else {
+                console.log('[QUIZ] Erro da API:', result.error);
                 Alert.alert('Erro', result.error || 'Não foi possível gerar o quiz.');
             }
         } catch (error) {
-            console.error('Erro ao gerar quiz:', error);
+            console.error('[QUIZ] Exceção ao gerar quiz:', error);
             Alert.alert('Erro', 'Erro ao gerar quiz. Verifique sua conexão.');
         }
         setIsGenerating(false);
@@ -372,18 +386,29 @@ export default function TranscriptionScreen() {
 
     // Iniciar atividade para alunos
     const startActivity = async (activityId: number) => {
+        console.log('[BROADCAST] Iniciando atividade para alunos...');
+        console.log('[BROADCAST] Activity ID:', activityId);
         try {
             const result = await broadcastActivity(activityId);
+            console.log('[BROADCAST] Resposta da API:', JSON.stringify(result, null, 2));
+
             if (result.success) {
+                console.log('[BROADCAST] Atividade iniciada com sucesso!');
+                console.log('[BROADCAST] Alunos matriculados:', result.enrolled_students);
                 setCurrentActivity(result.activity);
                 Alert.alert('Atividade Iniciada!', `Enviada para ${result.enrolled_students || 0} alunos.`);
                 // Se for quiz, abrir ranking
-                if (result.activity.activity_type === 'quiz') {
+                if (result.activity?.activity_type === 'quiz') {
+                    console.log('[BROADCAST] Tipo é quiz, abrindo modal de ranking...');
                     setShowRankingModal(true);
                     startRankingPolling(activityId);
                 }
+            } else {
+                console.log('[BROADCAST] Erro no broadcast:', result);
+                Alert.alert('Erro', 'Não foi possível iniciar a atividade.');
             }
         } catch (error) {
+            console.error('[BROADCAST] Exceção ao iniciar atividade:', error);
             Alert.alert('Erro', 'Erro ao iniciar atividade.');
         }
     };

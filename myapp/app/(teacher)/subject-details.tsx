@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -25,6 +25,13 @@ export default function TeacherSubjectDetailsScreen() {
     const params = useLocalSearchParams();
     const subjectName = params.subject as string || 'Disciplina';
     const subjectId = params.subjectId as string || '1';
+
+    // Estado para evitar hydration mismatch (SSR vs Client)
+    const [isWeb, setIsWeb] = useState(false);
+
+    useEffect(() => {
+        setIsWeb(Platform.OS === 'web');
+    }, []);
 
     // Mock data - será substituído por dados reais do backend
     const subjectData = {
@@ -75,7 +82,7 @@ export default function TeacherSubjectDetailsScreen() {
 
                     {/* Action Buttons - Two Column Layout on Web */}
                     <View style={styles.buttonGroup}>
-                        {Platform.OS === 'web' ? (
+                        {isWeb ? (
                             // Web: Two columns
                             <View style={styles.twoColumnContainer}>
                                 {/* Left Column - AI Features */}
