@@ -154,6 +154,16 @@ export default function SubjectDetailsScreen() {
                     <View style={styles.placeholder} />
                 </View>
 
+                {/* Debug Info - Remover depois */}
+                <View style={{ padding: 5, alignItems: 'center', backgroundColor: '#333' }}>
+                    <Text style={{ color: '#fff', fontSize: 10 }}>
+                        Poll: {quizStarted ? 'Started' : 'Checking'} |
+                        ActiveQuiz: {activeQuiz ? 'Yes' : 'No'} |
+                        LiveAct: {liveActivity ? liveActivity.status : 'None'} |
+                        SubjID: {subjectId}
+                    </Text>
+                </View>
+
                 <ScrollView
                     style={styles.scrollView}
                     contentContainerStyle={styles.scrollContent}
