@@ -659,7 +659,7 @@ Pressione o botão do microfone para começar a falar."
                         disabled={isGenerating}
                     >
                         <LinearGradient
-                            colors={['#8b5cf6', '#a855f7']}
+                            colors={['#f59e0b', '#d97706']}
                             style={styles.quizButtonGradient}
                         >
                             <MaterialIcons name="quiz" size={24} color={colors.white} />
@@ -697,7 +697,7 @@ Pressione o botão do microfone para começar a falar."
                                     style={styles.activityOption}
                                     onPress={() => handleGenerateQuiz(5)}
                                 >
-                                    <View style={[styles.activityIcon, { backgroundColor: '#8b5cf6' }]}>
+                                    <View style={[styles.activityIcon, { backgroundColor: '#f59e0b' }]}>
                                         <MaterialIcons name="quiz" size={24} color={colors.white} />
                                     </View>
                                     <View style={styles.activityInfo}>
@@ -1140,7 +1140,7 @@ const styles = StyleSheet.create({
         gap: 2,
     },
     quizButton: {
-        shadowColor: '#8b5cf6',
+        shadowColor: '#f59e0b',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,
