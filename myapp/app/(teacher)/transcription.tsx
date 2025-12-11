@@ -63,9 +63,11 @@ export default function TranscriptionScreen() {
     const [ranking, setRanking] = useState<any[]>([]);
     const [showQuizOptions, setShowQuizOptions] = useState(false); // Submenu de quiz
 
-    // Estado do resumo gerado
+    // Estado do conteúdo gerado (exibido no painel esquerdo)
     const [generatedSummary, setGeneratedSummary] = useState<string | null>(null);
+    const [generatedQuiz, setGeneratedQuiz] = useState<any>(null);
     const [showSummaryModal, setShowSummaryModal] = useState(false);
+    const [displayMode, setDisplayMode] = useState<'none' | 'summary' | 'quiz'>('none');
 
     // Refs
     const recognitionRef = useRef<any>(null);
@@ -255,10 +257,15 @@ export default function TranscriptionScreen() {
             setIsRecording(true);
             try {
                 recognitionRef.current.start();
-            } catch (e) {
+            } catch (e: any) {
                 console.error('Erro ao iniciar:', e);
-                isRecordingRef.current = false;
-                setIsRecording(false);
+                // Se já estiver iniciado, consideramos sucesso
+                if (e?.name === 'InvalidStateError' || e?.message?.includes('already started')) {
+                    console.log('Reconhecimento já estava iniciado');
+                } else {
+                    isRecordingRef.current = false;
+                    setIsRecording(false);
+                }
             }
         }
     };
@@ -301,6 +308,8 @@ export default function TranscriptionScreen() {
         console.log('[QUIZ] Comprimento do texto:', transcribedText.length, 'caracteres');
 
         setIsGenerating(true);
+        setDisplayMode('quiz');
+        setGeneratedQuiz(null); // Limpar quiz anterior
         try {
             // Forçar salvamento antes de gerar
             console.log('[QUIZ] Salvando transcrição no backend...');
@@ -315,25 +324,19 @@ export default function TranscriptionScreen() {
                 console.log('[QUIZ] Quiz gerado com sucesso! ID:', result.activity.id);
                 console.log('[QUIZ] Perguntas:', result.activity.content?.questions?.length || 0);
                 setCurrentActivity(result.activity);
-                setShowActivityModal(false);
-                Alert.alert(
-                    'Quiz Gerado!',
-                    `${result.activity.content?.questions?.length || 0} perguntas criadas. Deseja iniciar agora?`,
-                    [
-                        { text: 'Revisar depois', style: 'cancel' },
-                        {
-                            text: 'Iniciar Quiz',
-                            onPress: () => startActivity(result.activity!.id)
-                        }
-                    ]
-                );
+                // Backend agora retorna { text: "..." } ou o conteúdo direto em ai_generated_content
+                const quizContent = result.activity.content?.text || result.activity.ai_generated_content || '';
+                setGeneratedQuiz(quizContent);
+                console.log('Quiz gerado:', quizContent);
             } else {
                 console.log('[QUIZ] Erro da API:', result.error);
                 Alert.alert('Erro', result.error || 'Não foi possível gerar o quiz.');
+                setDisplayMode('none');
             }
         } catch (error) {
             console.error('[QUIZ] Exceção ao gerar quiz:', error);
             Alert.alert('Erro', 'Erro ao gerar quiz. Verifique sua conexão.');
+            setDisplayMode('none');
         }
         setIsGenerating(false);
     };
@@ -341,19 +344,36 @@ export default function TranscriptionScreen() {
     // Gerar Resumo
     const handleGenerateSummary = async () => {
         if (!session) return;
+
+        // Verificar se tem texto
+        if (!transcribedText || transcribedText.trim().length === 0) {
+            Alert.alert(
+                'Sem Texto',
+                'Grave algum conteúdo antes de gerar um resumo.'
+            );
+            return;
+        }
+
         setIsGenerating(true);
+        setDisplayMode('summary');
+        setGeneratedSummary(null); // Limpar resumo anterior
         try {
+            // Forçar salvamento antes de gerar
+            await updateTranscription(session.id, transcribedText);
+
             const result = await generateSummary(session.id);
             if (result.success) {
                 setCurrentActivity(result.activity);
                 setGeneratedSummary(result.activity.ai_generated_content || '');
-                setShowActivityModal(false);
-                setShowSummaryModal(true);
+                console.log('Resumo gerado:', result.activity.ai_generated_content);
             } else {
-                Alert.alert('Erro', 'Não foi possível gerar o resumo.');
+                Alert.alert('Erro', result.error || 'Não foi possível gerar o resumo.');
+                setDisplayMode('none');
             }
-        } catch (error) {
-            Alert.alert('Erro', 'Erro ao gerar resumo.');
+        } catch (error: any) {
+            console.error('Erro ao gerar resumo:', error);
+            Alert.alert('Erro', error?.message || 'Erro ao gerar resumo. Verifique sua conexão.');
+            setDisplayMode('none');
         }
         setIsGenerating(false);
     };
@@ -523,38 +543,120 @@ export default function TranscriptionScreen() {
                 </View>
             )}
 
-            {/* Transcribed Text Area */}
-            <ScrollView
-                style={styles.scrollView}
-                contentContainerStyle={styles.scrollContent}
-                keyboardShouldPersistTaps="handled"
-            >
-                <View style={styles.textContainer}>
-                    <TextInput
-                        style={styles.textInput}
-                        multiline
-                        value={transcribedText + (interimText ? ' ' + interimText : '')}
-                        onChangeText={handleTextChange}
-                        placeholder="O texto transcrito aparecerá aqui...
+            {/* Transcribed Text Area - Split Screen */}
+            <View style={styles.contentContainer}>
+                {/* Painel Esquerdo - Conteúdo Gerado */}
+                <View style={styles.leftPanel}>
+                    <View style={styles.panelHeader}>
+                        <MaterialIcons
+                            name={displayMode === 'quiz' ? 'quiz' : 'summarize'}
+                            size={20}
+                            color={displayMode === 'quiz' ? '#8b5cf6' : '#22c55e'}
+                        />
+                        <Text style={styles.panelTitle}>
+                            {displayMode === 'quiz' ? 'Quiz Gerado' : displayMode === 'summary' ? 'Resumo Gerado' : 'Aguardando...'}
+                        </Text>
+                    </View>
+
+                    <ScrollView
+                        style={styles.panelScroll}
+                        contentContainerStyle={styles.panelScrollContent}
+                    >
+                        {isGenerating && displayMode !== 'none' ? (
+                            <View style={styles.loadingContainer}>
+                                <ActivityIndicator size="large" color={displayMode === 'quiz' ? '#8b5cf6' : '#22c55e'} />
+                                <Text style={styles.loadingText}>Gerando com IA...</Text>
+                            </View>
+                        ) : displayMode === 'summary' && generatedSummary ? (
+                            <View style={styles.summaryContent}>
+                                <Text style={styles.generatedText}>{generatedSummary}</Text>
+                                {currentActivity && (
+                                    <TouchableOpacity
+                                        style={styles.sendButton}
+                                        onPress={() => shareSummary(currentActivity.id)}
+                                    >
+                                        <MaterialIcons name="send" size={18} color={colors.white} />
+                                        <Text style={styles.sendButtonText}>Enviar para Alunos</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        ) : displayMode === 'quiz' && generatedQuiz ? (
+                            <View style={styles.quizContent}>
+                                <Text style={styles.generatedText}>{generatedQuiz}</Text>
+                                {currentActivity && (
+                                    <TouchableOpacity
+                                        style={styles.sendButton}
+                                        onPress={() => startActivity(currentActivity.id)}
+                                    >
+                                        <MaterialIcons name="send" size={18} color={colors.white} />
+                                        <Text style={styles.sendButtonText}>Enviar Quiz para Alunos</Text>
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                        ) : (
+                            <View style={styles.emptyState}>
+                                <MaterialIcons name="auto-awesome" size={48} color={colors.zinc600} />
+                                <Text style={styles.emptyStateText}>
+                                    Clique em "Resumo" ou "Quiz" para gerar conteúdo com IA
+                                </Text>
+                            </View>
+                        )}
+                    </ScrollView>
+                </View>
+
+                {/* Painel Direito - Transcrição */}
+                <View style={styles.rightPanel}>
+                    <View style={styles.panelHeader}>
+                        <MaterialIcons name="mic" size={20} color="#8b5cf6" />
+                        <Text style={styles.panelTitle}>Transcrição</Text>
+                        <Text style={styles.wordCount}>{wordCount} palavras</Text>
+                    </View>
+
+                    <ScrollView
+                        style={styles.panelScroll}
+                        contentContainerStyle={styles.panelScrollContent}
+                        keyboardShouldPersistTaps="handled"
+                    >
+                        <TextInput
+                            style={styles.textInput}
+                            multiline
+                            value={transcribedText + (interimText ? ' ' + interimText : '')}
+                            onChangeText={handleTextChange}
+                            placeholder="O texto transcrito aparecerá aqui...
 
 Pressione o botão do microfone para começar a falar."
-                        placeholderTextColor={colors.zinc500}
-                        editable={!isRecording}
-                    />
-                </View>
+                            placeholderTextColor={colors.zinc500}
+                            editable={!isRecording}
+                        />
+                    </ScrollView>
 
-                {/* Info */}
-                <View style={styles.infoRow}>
-                    <Text style={styles.wordCount}>{wordCount} palavras</Text>
-                    <Text style={styles.infoText}>
-                        {isRecording ? '🎤 Ditando...' : '📝 Pronto para editar'}
-                    </Text>
+                    <View style={styles.transcriptionInfo}>
+                        <Text style={styles.infoText}>
+                            {isRecording ? '🎤 Ditando...' : '📝 Pronto para editar'}
+                        </Text>
+                    </View>
                 </View>
-            </ScrollView>
+            </View>
 
             {/* Footer */}
             <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
                 <View style={styles.footerButtons}>
+                    {/* Botão de Resumo */}
+                    <TouchableOpacity
+                        style={styles.summaryButton}
+                        onPress={handleGenerateSummary}
+                        activeOpacity={0.8}
+                        disabled={isGenerating}
+                    >
+                        <LinearGradient
+                            colors={['#22c55e', '#16a34a']}
+                            style={styles.summaryButtonGradient}
+                        >
+                            <MaterialIcons name="summarize" size={24} color={colors.white} />
+                            <Text style={styles.buttonLabel}>Resumo</Text>
+                        </LinearGradient>
+                    </TouchableOpacity>
+
                     {/* Botão de Gravação */}
                     <Animated.View style={isRecording ? { transform: [{ scale: pulseAnim }] } : undefined}>
                         <TouchableOpacity
@@ -575,23 +677,25 @@ Pressione o botão do microfone para começar a falar."
                         </TouchableOpacity>
                     </Animated.View>
 
-                    {/* Botão de Atividade */}
+                    {/* Botão de Quiz */}
                     <TouchableOpacity
-                        style={styles.activityButton}
-                        onPress={handlePauseForActivity}
+                        style={styles.quizButton}
+                        onPress={() => handleGenerateQuiz(5)}
                         activeOpacity={0.8}
+                        disabled={isGenerating}
                     >
                         <LinearGradient
-                            colors={['#f59e0b', '#d97706']}
-                            style={styles.activityButtonGradient}
+                            colors={['#8b5cf6', '#a855f7']}
+                            style={styles.quizButtonGradient}
                         >
-                            <MaterialIcons name="bolt" size={28} color={colors.white} />
+                            <MaterialIcons name="quiz" size={24} color={colors.white} />
+                            <Text style={styles.buttonLabel}>Quiz</Text>
                         </LinearGradient>
                     </TouchableOpacity>
                 </View>
 
                 <Text style={styles.footerHint}>
-                    {isRecording ? 'Toque para parar' : 'Gravar | Criar Atividade'}
+                    {isGenerating ? 'Gerando com IA...' : isRecording ? 'Gravando...' : 'Resumo | Gravar | Quiz'}
                 </Text>
             </View>
 
@@ -923,6 +1027,136 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.sm,
         color: colors.zinc400,
     },
+    // Split-screen layout
+    contentContainer: {
+        flex: 1,
+        flexDirection: 'row',
+        gap: spacing.md,
+        paddingHorizontal: spacing.base,
+    },
+    leftPanel: {
+        flex: 1,
+        backgroundColor: colors.zinc900,
+        borderRadius: borderRadius.xl,
+        overflow: 'hidden',
+    },
+    rightPanel: {
+        flex: 1,
+        backgroundColor: colors.zinc900,
+        borderRadius: borderRadius.xl,
+        overflow: 'hidden',
+    },
+    panelHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+        padding: spacing.md,
+        backgroundColor: colors.zinc800,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.zinc700,
+    },
+    panelTitle: {
+        flex: 1,
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.semibold,
+        color: colors.white,
+    },
+    panelScroll: {
+        flex: 1,
+    },
+    panelScrollContent: {
+        padding: spacing.lg,
+        flexGrow: 1,
+    },
+    transcriptionInfo: {
+        padding: spacing.md,
+        borderTopWidth: 1,
+        borderTopColor: colors.zinc800,
+        alignItems: 'center',
+    },
+    // Generated content styles
+    emptyState: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: spacing.md,
+    },
+    emptyStateText: {
+        fontSize: typography.fontSize.base,
+        color: colors.zinc500,
+        textAlign: 'center',
+        maxWidth: 250,
+    },
+    summaryContent: {
+        gap: spacing.lg,
+    },
+    generatedText: {
+        fontSize: typography.fontSize.base,
+        color: colors.white,
+        lineHeight: 24,
+    },
+    quizContent: {
+        gap: spacing.lg,
+    },
+    quizQuestion: {
+        backgroundColor: colors.zinc800,
+        borderRadius: borderRadius.lg,
+        padding: spacing.md,
+        gap: spacing.sm,
+    },
+    questionNumber: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: typography.fontWeight.bold,
+        color: '#8b5cf6',
+        marginBottom: spacing.xs,
+    },
+    questionText: {
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.semibold,
+        color: colors.white,
+        marginBottom: spacing.sm,
+    },
+    questionOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+        padding: spacing.sm,
+        backgroundColor: colors.zinc700,
+        borderRadius: borderRadius.default,
+        marginTop: spacing.xs,
+    },
+    correctOption: {
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        borderWidth: 1,
+        borderColor: '#22c55e',
+    },
+    optionLetter: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: typography.fontWeight.bold,
+        color: colors.zinc400,
+        width: 20,
+    },
+    optionText: {
+        flex: 1,
+        fontSize: typography.fontSize.sm,
+        color: colors.white,
+    },
+    sendButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: spacing.sm,
+        backgroundColor: '#8b5cf6',
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.lg,
+        borderRadius: borderRadius.lg,
+        marginTop: spacing.md,
+    },
+    sendButtonText: {
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.semibold,
+        color: colors.white,
+    },
     footer: {
         paddingHorizontal: spacing.base,
         paddingTop: spacing.lg,
@@ -951,6 +1185,42 @@ const styles = StyleSheet.create({
         borderRadius: 35,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    summaryButton: {
+        shadowColor: '#22c55e',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
+    },
+    summaryButtonGradient: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 2,
+    },
+    quizButton: {
+        shadowColor: '#8b5cf6',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
+    },
+    quizButtonGradient: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 2,
+    },
+    buttonLabel: {
+        fontSize: 10,
+        fontWeight: typography.fontWeight.semibold,
+        color: colors.white,
+        marginTop: -2,
     },
     activityButton: {
         shadowColor: '#f59e0b',
