@@ -182,119 +182,7 @@ export const getSubjectDetails = async (subjectId: number): Promise<SubjectDetai
     };
 };
 
-// Buscar materiais de uma disciplina
-export const getSubjectMaterials = async (subjectId: number): Promise<Material[]> => {
-    const token = await AsyncStorage.getItem('authToken');
 
-    const response = await fetch(`${API_URL}/subjects/${subjectId}/materials`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-        },
-    });
-
-    return response.json();
-};
-
-// ========== TEACHER API ==========
-
-export interface TeacherClass {
-    id: number;
-    name: string;
-    code: string;
-    schedule?: string;
-    location?: string;
-    student_count?: number;
-}
-
-// Buscar turmas/disciplinas do professor
-export const getTeacherClasses = async (): Promise<TeacherClass[]> => {
-    const token = await AsyncStorage.getItem('authToken');
-
-    const response = await fetch(`${API_URL}/subjects`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-        },
-    });
-
-    const subjects = await response.json();
-
-    // Mapear para o formato esperado pelo dashboard
-    return subjects.map((subject: any) => ({
-        id: subject.id,
-        name: subject.name,
-        code: subject.code,
-        schedule: subject.schedule || 'Seg/Qua 14h-16h',
-        location: subject.location,
-        student_count: subject.student_count || 0,
-    }));
-};
-
-// ========== ACCOUNT MANAGEMENT ==========
-
-export interface UpdateProfileData {
-    name?: string;
-    email?: string;
-}
-
-export interface ChangePasswordData {
-    current_password: string;
-    new_password: string;
-}
-
-// Atualizar perfil do usuário
-export const updateProfile = async (data: UpdateProfileData): Promise<AuthResponse> => {
-    const token = await AsyncStorage.getItem('authToken');
-
-    const response = await fetch(`${API_URL}/auth/update-profile`, {
-        method: 'PUT',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(data),
-    });
-
-    return response.json();
-};
-
-// Alterar senha do usuário
-export const changePassword = async (data: ChangePasswordData): Promise<AuthResponse> => {
-    const token = await AsyncStorage.getItem('authToken');
-
-    const response = await fetch(`${API_URL}/auth/change-password`, {
-        method: 'PUT',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(data),
-    });
-
-    return response.json();
-};
-
-// ========== ENROLLMENTS API ==========
-
-export interface AutoEnrollResponse {
-    success: boolean;
-    message: string;
-    enrollments_created?: number;
-    total_enrollments?: number;
-}
-
-// Auto-matrícula de estudante em todas as disciplinas
-export const autoEnrollStudent = async (): Promise<AutoEnrollResponse> => {
-    const token = await AsyncStorage.getItem('authToken');
-
-    const response = await fetch(`${API_URL}/enrollments/auto-enroll`, {
-        method: 'POST',  // IMPORTANTE: Deve ser POST, não GET
-        headers: {
-            'Authorization': `Bearer ${token}`,
-        },
-    });
-
-    return response.json();
-};
 
 
 // ========== PERFORMANCE API ==========
@@ -778,4 +666,5 @@ export const getTranscriptionSessions = async (subjectId: number): Promise<{ suc
 
     return response.json();
 };
+
 

@@ -146,14 +146,7 @@ export default function SubjectDetailsScreen() {
 
                     {/* Action Buttons */}
                     <View style={styles.buttonGroup}>
-                        <TouchableOpacity
-                            style={styles.primaryButton}
-                            activeOpacity={0.8}
-                            onPress={() => console.log('Registrar presença')}
-                        >
-                            <MaterialIcons name="how-to-reg" size={24} color={colors.white} />
-                            <Text style={styles.primaryButtonText}>Registrar Minha Presença</Text>
-                        </TouchableOpacity>
+
 
                         <TouchableOpacity
                             style={styles.secondaryButton}
