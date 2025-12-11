@@ -1,0 +1,42 @@
+﻿============================================================
+TESTE: Verificar se IA esta gerando quiz
+============================================================
+
+1. Login...
+   [OK] Logado como: Prof¬ Maria Silva
+
+2. Criar sessao...
+   [OK] Sessao criada: ID=18
+
+3. Adicionar transcricao...
+   [OK] Transcricao salva
+
+4. Gerando Quiz via IA...
+
+============================================================
+RESPOSTA DO QUIZ:
+============================================================
+
+Total de perguntas: 1
+
+--- PERGUNTA 1 ---
+Texto: Qual Ú o tema principal da aula?
+Opcoes: ['Tema A', 'Tema B', 'Tema C', 'Tema D']
+Correta: 0
+
+[ALERTA] Parece ser FALLBACK! IA nao esta funcionando!
+
+============================================================
+5. Gerando Resumo via IA...
+
+Resumo gerado:
+Resumo automßtico: Hoje vamos estudar sobre Python, uma linguagem de programacao muito popular. Variaveis sao usadas para armazenar valores. Por exemplo: x = 10. Listas sao usadas para guardar multiplos valores: frutas = ['maca', 'banana']. Funcoes ajudam a organizar o codigo e evitar repeticao....
+
+[OK] IA parece estar gerando resumo real!
+
+6. Encerrando...
+   [OK] Sessao encerrada
+
+============================================================
+TESTE CONCLUIDO!
+============================================================

@@ -208,20 +208,12 @@ def generate_quiz_from_text(text: str, num_questions: int = 5) -> dict:
         ]
     }
     """
-    if not HAS_GEMINI or not GEMINI_API_KEY:
-        # Fallback: quiz de exemplo
-        return {
-            "questions": [
-                {
-                    "question": "Pergunta de exemplo baseada no conteúdo",
-                    "options": ["Opção A", "Opção B", "Opção C", "Opção D"],
-                    "correct": 0
-                }
-            ]
-        }
+    print(f"[AI-QUIZ] Iniciando geração de quiz...")
+    print(f"[AI-QUIZ] Comprimento do texto: {len(text)} caracteres")
     
     try:
-        model = genai.GenerativeModel(model_name='gemini-2.0-flash')
+        print(f"[AI-QUIZ] Chamando Gemini API...")
+        model = genai.GenerativeModel(model_name='gemini-2.5-flash')
         
         prompt = f"""Com base no seguinte texto de aula, gere {num_questions} perguntas de múltipla escolha para testar a compreensão dos alunos.
 
@@ -246,6 +238,7 @@ O campo "correct" é o índice (0-3) da opção correta."""
 
         response = model.generate_content(prompt)
         response_text = response.text.strip()
+        print(f"[AI-QUIZ] Resposta bruta: {response_text[:200]}...")
         
         # Limpar possíveis marcadores de código
         if response_text.startswith('```'):
@@ -255,10 +248,13 @@ O campo "correct" é o índice (0-3) da opção correta."""
         
         import json
         quiz_data = json.loads(response_text)
+        print(f"[AI-QUIZ] Quiz gerado com sucesso! {len(quiz_data.get('questions', []))} perguntas")
         return quiz_data
         
     except Exception as e:
-        print(f"Erro ao gerar quiz: {e}")
+        print(f"[AI-QUIZ] ERRO ao gerar quiz: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             "questions": [
                 {
@@ -274,13 +270,8 @@ def generate_summary_from_text(text: str) -> str:
     """
     Gera resumo estruturado baseado no texto da transcrição
     """
-    if not HAS_GEMINI or not GEMINI_API_KEY:
-        # Fallback: resumo simples
-        words = text.split()[:100]
-        return f"Resumo: {' '.join(words)}..."
-    
     try:
-        model = genai.GenerativeModel(model_name='gemini-2.0-flash')
+        model = genai.GenerativeModel(model_name='gemini-2.5-flash')
         
         prompt = f"""Crie um resumo estruturado e didático do seguinte texto de aula.
 
