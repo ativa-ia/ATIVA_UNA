@@ -80,7 +80,7 @@ export default function StudentDashboardScreen() {
     const navItems: NavItem[] = [
         { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
         { id: 'calendar', label: 'Calendário', iconName: 'calendar-today' },
-        { id: 'grades', label: 'Notas', iconName: 'school' },
+
     ];
 
     const handleNavPress = (id: string) => {
@@ -92,9 +92,7 @@ export default function StudentDashboardScreen() {
             case 'calendar':
                 router.push('./calendar');
                 break;
-            case 'grades':
-                router.push('./grades');
-                break;
+
         }
     };
 

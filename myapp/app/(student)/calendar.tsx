@@ -23,7 +23,7 @@ export default function CalendarScreen() {
     const navItems: NavItem[] = [
         { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
         { id: 'calendar', label: 'Calendário', iconName: 'calendar-today' },
-        { id: 'grades', label: 'Notas', iconName: 'school' },
+
     ];
 
     const handleNavPress = (id: string) => {
@@ -36,9 +36,7 @@ export default function CalendarScreen() {
             case 'calendar':
                 // Already on calendar, do nothing
                 break;
-            case 'grades':
-                router.push('./grades');
-                break;
+
         }
     };
 
