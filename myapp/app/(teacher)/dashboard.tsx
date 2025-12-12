@@ -81,7 +81,6 @@ export default function TeacherDashboardScreen() {
     const navItems: NavItem[] = [
         { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
         { id: 'materials', label: 'Materiais', iconName: 'folder' },
-        { id: 'reports', label: 'Relatórios', iconName: 'assessment' },
     ];
 
     const handleNavPress = (id: string) => {

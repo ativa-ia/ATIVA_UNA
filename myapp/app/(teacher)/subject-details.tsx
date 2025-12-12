@@ -104,7 +104,7 @@ export default function TeacherSubjectDetailsScreen() {
                                             <MaterialIcons name="auto-awesome" size={24} color={colors.white} />
                                             <View style={styles.aiTextContainer}>
                                                 <Text style={styles.aiButtonText}>Assistente de IA</Text>
-                                                <Text style={styles.aiButtonSubtext}>Gerar conteúdo, quizzes e mais</Text>
+                                                <Text style={styles.aiButtonSubtext}>Gerar conteúdo com documentos</Text>
                                             </View>
                                             <MaterialIcons name="arrow-forward-ios" size={18} color="rgba(255,255,255,0.7)" />
                                         </LinearGradient>
@@ -136,29 +136,7 @@ export default function TeacherSubjectDetailsScreen() {
 
                                 {/* Right Column - Other Actions */}
                                 <View style={styles.rightColumn}>
-                                    <TouchableOpacity
-                                        style={styles.primaryButton}
-                                        activeOpacity={0.8}
-                                        onPress={() => router.push({
-                                            pathname: '/(teacher)/attendance',
-                                            params: { subject: subjectName }
-                                        })}
-                                    >
-                                        <MaterialIcons name="how-to-reg" size={24} color={colors.white} />
-                                        <Text style={styles.primaryButtonText}>Fazer Chamada</Text>
-                                    </TouchableOpacity>
 
-                                    <TouchableOpacity
-                                        style={styles.secondaryButton}
-                                        activeOpacity={0.8}
-                                        onPress={() => router.push({
-                                            pathname: '/(teacher)/materials',
-                                            params: { subject: subjectName }
-                                        })}
-                                    >
-                                        <MaterialIcons name="folder" size={24} color={colors.white} />
-                                        <Text style={styles.secondaryButtonText}>Materiais de Aula</Text>
-                                    </TouchableOpacity>
 
                                     <TouchableOpacity
                                         style={styles.secondaryButton}
@@ -169,26 +147,7 @@ export default function TeacherSubjectDetailsScreen() {
                                         <Text style={styles.secondaryButtonText}>Atividades e Quizzes</Text>
                                     </TouchableOpacity>
 
-                                    <TouchableOpacity
-                                        style={styles.secondaryButton}
-                                        activeOpacity={0.8}
-                                        onPress={() => console.log('Notas')}
-                                    >
-                                        <MaterialIcons name="grade" size={24} color={colors.white} />
-                                        <Text style={styles.secondaryButtonText}>Lançar Notas</Text>
-                                    </TouchableOpacity>
 
-                                    <TouchableOpacity
-                                        style={styles.secondaryButton}
-                                        activeOpacity={0.8}
-                                        onPress={() => router.push({
-                                            pathname: '/(teacher)/class-report',
-                                            params: { subject: subjectName, subjectId: subjectId }
-                                        })}
-                                    >
-                                        <MaterialIcons name="assessment" size={24} color={colors.white} />
-                                        <Text style={styles.secondaryButtonText}>Relatórios da Turma</Text>
-                                    </TouchableOpacity>
                                 </View>
                             </View>
                         ) : (
@@ -240,29 +199,7 @@ export default function TeacherSubjectDetailsScreen() {
                                     </LinearGradient>
                                 </TouchableOpacity>
 
-                                <TouchableOpacity
-                                    style={styles.primaryButton}
-                                    activeOpacity={0.8}
-                                    onPress={() => router.push({
-                                        pathname: '/(teacher)/attendance',
-                                        params: { subject: subjectName }
-                                    })}
-                                >
-                                    <MaterialIcons name="how-to-reg" size={24} color={colors.white} />
-                                    <Text style={styles.primaryButtonText}>Fazer Chamada</Text>
-                                </TouchableOpacity>
 
-                                <TouchableOpacity
-                                    style={styles.secondaryButton}
-                                    activeOpacity={0.8}
-                                    onPress={() => router.push({
-                                        pathname: '/(teacher)/materials',
-                                        params: { subject: subjectName }
-                                    })}
-                                >
-                                    <MaterialIcons name="folder" size={24} color={colors.white} />
-                                    <Text style={styles.secondaryButtonText}>Materiais de Aula</Text>
-                                </TouchableOpacity>
 
                                 <TouchableOpacity
                                     style={styles.secondaryButton}
@@ -273,26 +210,7 @@ export default function TeacherSubjectDetailsScreen() {
                                     <Text style={styles.secondaryButtonText}>Atividades e Quizzes</Text>
                                 </TouchableOpacity>
 
-                                <TouchableOpacity
-                                    style={styles.secondaryButton}
-                                    activeOpacity={0.8}
-                                    onPress={() => console.log('Notas')}
-                                >
-                                    <MaterialIcons name="grade" size={24} color={colors.white} />
-                                    <Text style={styles.secondaryButtonText}>Lançar Notas</Text>
-                                </TouchableOpacity>
 
-                                <TouchableOpacity
-                                    style={styles.secondaryButton}
-                                    activeOpacity={0.8}
-                                    onPress={() => router.push({
-                                        pathname: '/(teacher)/class-report',
-                                        params: { subject: subjectName, subjectId: subjectId }
-                                    })}
-                                >
-                                    <MaterialIcons name="assessment" size={24} color={colors.white} />
-                                    <Text style={styles.secondaryButtonText}>Relatórios da Turma</Text>
-                                </TouchableOpacity>
                             </>
                         )}
                     </View>

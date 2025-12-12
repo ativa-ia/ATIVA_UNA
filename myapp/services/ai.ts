@@ -38,6 +38,8 @@ export const sendAIMessage = async (subjectId: number, message: string): Promise
     return data;
 };
 
+
+
 // Buscar histórico de mensagens
 export const getAIMessages = async (sessionId: number): Promise<{ success: boolean; messages: AIMessageType[] }> => {
     const token = await AsyncStorage.getItem('authToken');
