@@ -1,11 +1,12 @@
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // URL da API (mude para seu IP local se testar em dispositivo físico)
 // Para desenvolvimento local, use localhost
-//export const API_URL = 'http://localhost:3000/api';
+export const API_URL = 'http://localhost:3000/api';
 
 // Para produção/Vercel, use:
-export const API_URL = 'https://ativa-ia-9rkb.vercel.app/api';
+//export const API_URL = 'https://ativa-ia-9rkb.vercel.app/api';
 
 export interface LoginData {
     email: string;
@@ -271,6 +272,88 @@ export const changePassword = async (data: ChangePasswordData): Promise<AuthResp
     });
 
     return response.json();
+};
+
+
+// ========== AI CONTEXT API ==========
+
+export const uploadContextFile = async (subjectId: number, file: any) => {
+    try {
+        const formData = new FormData();
+
+        if (Platform.OS === 'web' && file.file) {
+            formData.append('file', file.file);
+        } else {
+            formData.append('file', {
+                uri: file.uri,
+                name: file.name,
+                type: file.mimeType || 'application/pdf'
+            } as any);
+        }
+
+        formData.append('subject_id', subjectId.toString());
+
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/ai/upload-context`, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Upload error:', error);
+        return { success: false, error: 'Erro no upload' };
+    }
+};
+
+// Gerar sugestões de perguntas baseadas no contexto (novo arquivo)
+export const generateSuggestions = async (subjectId: number) => {
+    const token = await AsyncStorage.getItem('authToken');
+    try {
+        const response = await fetch(`${API_URL}/ai/generate-suggestions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ subject_id: subjectId }),
+        });
+        return response.json();
+    } catch (error) {
+        return { success: false, error: 'Erro ao gerar sugestões' };
+    }
+};
+
+export const getContextFiles = async (subjectId: number) => {
+    const token = await AsyncStorage.getItem('authToken');
+    try {
+        const response = await fetch(`${API_URL}/ai/context-files/${subjectId}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+        return response.json();
+    } catch (error) {
+        return { success: false, error: 'Erro ao listar arquivos' };
+    }
+};
+
+export const deleteContextFile = async (fileId: number) => {
+    const token = await AsyncStorage.getItem('authToken');
+    try {
+        const response = await fetch(`${API_URL}/ai/context-files/${fileId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Erro detalhado ao deletar:', error);
+        return { success: false, error: 'Erro ao deletar arquivo' };
+    }
 };
 
 // ========== ENROLLMENTS API ==========

@@ -50,3 +50,29 @@ class AIMessage(db.Model):
             'content': self.content,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
+
+
+class AIContextFile(db.Model):
+    """Arquivo de contexto enviado pelo professor"""
+    __tablename__ = 'ai_context_files'
+
+    id = db.Column(db.Integer, primary_key=True)
+    session_id = db.Column(db.Integer, db.ForeignKey('ai_sessions.id'), nullable=True) # Pode ser ligado a sessão ou disciplina (vamos ligar a session por enquanto ou subject?)
+    # Melhor ligar ao subject para persistir entre sessões
+    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    content = db.Column(db.Text, nullable=False) # Texto extraído do PDF
+    file_type = db.Column(db.String(50), default='pdf') # pdf, text, etc
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relacionamento
+    subject = db.relationship('Subject', backref=db.backref('context_files', lazy=True))
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'subject_id': self.subject_id,
+            'filename': self.filename,
+            'content_snippet': self.content[:100] + '...' if self.content else '',
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }

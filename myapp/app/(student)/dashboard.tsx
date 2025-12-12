@@ -147,7 +147,6 @@ export default function StudentDashboardScreen() {
     const navItems: NavItem[] = [
         { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
         { id: 'calendar', label: 'Calendário', iconName: 'calendar-today' },
-        { id: 'grades', label: 'Notas', iconName: 'school' },
     ];
 
     const handleNavPress = (id: string) => {

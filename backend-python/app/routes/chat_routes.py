@@ -77,7 +77,21 @@ def clear_chat(current_user, subject_id):
     Limpa todo o histórico de chat do usuário para uma disciplina
     """
     try:
+        # Limpar ChatMessage (Histórico UI)
         ChatMessage.clear_history(current_user.id, subject_id)
+        
+        # Limpar AIMessage (Memória IA)
+        from app.models.ai_session import AISession, AIMessage
+        
+        # Encontrar sessão da AI para esta matéria
+        ai_session = AISession.query.filter_by(
+            teacher_id=current_user.id,
+            subject_id=subject_id
+        ).first()
+        
+        if ai_session:
+            AIMessage.query.filter_by(session_id=ai_session.id).delete()
+            db.session.commit()
         
         return jsonify({
             'success': True,
