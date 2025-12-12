@@ -16,10 +16,7 @@ import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { checkActiveQuiz, Quiz } from '@/services/quiz';
-import { getActiveActivity, LiveActivity } from '@/services/api';
-
 import { getActiveActivity, LiveActivity, isActivitySubmitted } from '@/services/api';
-import { useCallback } from 'react';
 
 /**
  * SubjectDetailsScreen - Detalhes da Disciplina (Aluno)
@@ -346,7 +343,7 @@ export default function SubjectDetailsScreen() {
 
                         <TouchableOpacity
                             style={styles.startQuizButton}
-                            onPress={handleStartActivity}
+                            onPress={handleStartLiveActivity}
                         >
                             <Text style={styles.startQuizButtonText}>
                                 {liveActivity?.activity_type === 'quiz' ? 'Começar Quiz' : 'Ver Atividade'}
