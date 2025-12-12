@@ -8,7 +8,7 @@ import {
     TouchableOpacity,
     Animated,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Header } from '@/components/navigation/Header';
 import { BottomNav, NavItem } from '@/components/navigation/BottomNav';
@@ -17,7 +17,8 @@ import { Subject, Activity } from '@/types';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
-import { getSubjects, Subject as APISubject, getMe, getActiveActivity, LiveActivity } from '@/services/api';
+import { getSubjects, Subject as APISubject, getMe, getActiveActivity, LiveActivity, isActivitySubmitted } from '@/services/api';
+import { useCallback } from 'react';
 
 /**
  * StudentDashboardScreen - Dashboard do Aluno
@@ -56,32 +57,34 @@ export default function StudentDashboardScreen() {
         };
     }, []);
 
-    // Polling para atividades ativas
-    useEffect(() => {
-        if (subjects.length === 0) return;
+    // Polling para atividades ativas (atualiza ao focar)
+    useFocusEffect(
+        useCallback(() => {
+            if (subjects.length === 0) return;
 
-        const checkActivities = async () => {
-            for (const subject of subjects) {
-                try {
-                    const result = await getActiveActivity(parseInt(subject.id));
-                    if (result.success && result.active && result.activity) {
-                        setLiveActivity(result.activity);
-                        return; // Encontrou uma atividade ativa
+            const checkActivities = async () => {
+                for (const subject of subjects) {
+                    try {
+                        const result = await getActiveActivity(parseInt(subject.id));
+                        if (result.success && result.active && result.activity) {
+                            setLiveActivity(result.activity);
+                            return; // Encontrou uma atividade ativa
+                        }
+                    } catch (error) {
+                        console.error('Erro ao verificar atividade:', error);
                     }
-                } catch (error) {
-                    console.error('Erro ao verificar atividade:', error);
                 }
-            }
-            setLiveActivity(null);
-        };
+                setLiveActivity(null);
+            };
 
-        checkActivities();
-        pollingRef.current = setInterval(checkActivities, 5000); // Poll a cada 5s
+            checkActivities(); // Check imediato ao focar
+            const interval = setInterval(checkActivities, 5000); // Continua polling
 
-        return () => {
-            if (pollingRef.current) clearInterval(pollingRef.current);
-        };
-    }, [subjects]);
+            return () => {
+                clearInterval(interval);
+            };
+        }, [subjects])
+    );
 
     // Animação do banner de atividade
     useEffect(() => {
@@ -205,7 +208,7 @@ export default function StudentDashboardScreen() {
                     </View>
 
                     {/* Banner de Atividade Ao Vivo */}
-                    {liveActivity && (
+                    {liveActivity && !isActivitySubmitted(liveActivity.id) && (
                         <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
                             <TouchableOpacity
                                 style={styles.liveActivityBanner}
@@ -221,7 +224,9 @@ export default function StudentDashboardScreen() {
                                 </View>
                                 <View style={styles.liveActivityInfo}>
                                     <Text style={styles.liveActivityTitle}>
-                                        {liveActivity.activity_type === 'quiz' ? '🎯 Quiz ao Vivo!' : '💬 Pergunta do Professor!'}
+                                        {liveActivity.activity_type === 'quiz'
+                                            ? `🎯 Quiz: ${liveActivity.subject_name || 'Nova Atividade'}`
+                                            : '💬 Pergunta do Professor!'}
                                     </Text>
                                     <Text style={styles.liveActivityDesc}>
                                         Toque para responder agora

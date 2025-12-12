@@ -2,6 +2,7 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
+    "jsx": "react-native",
     "paths": {
       "@/*": [
         "./*"
@@ -12,6 +13,13 @@
     "**/*.ts",
     "**/*.tsx",
     ".expo/types/**/*.ts",
-    "expo-env.d.ts"
+    "expo-env.d.ts",
+    "../deprecated_files/grades.tsx",
+    "../deprecated_files/reports.tsx",
+    "../deprecated_files/materials.tsx",
+    "../deprecated_files/attendance.tsx",
+    "../deprecated_files/class-report.tsx",
+    "../deprecated_files/student-report.tsx",
+    "../deprecated_files/upload-material.tsx"
   ]
 }

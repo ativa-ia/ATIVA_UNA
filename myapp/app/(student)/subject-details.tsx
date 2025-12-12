@@ -10,14 +10,13 @@ import {
     ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { checkActiveQuiz, Quiz } from '@/services/quiz';
-import { getActiveActivity, LiveActivity } from '@/services/api';
-
+import { getActiveActivity, LiveActivity, isActivitySubmitted } from '@/services/api';
 
 /**
  * SubjectDetailsScreen - Detalhes da Disciplina (Aluno)
@@ -41,6 +40,7 @@ export default function SubjectDetailsScreen() {
     const [activityStarted, setActivityStarted] = useState(false);
 
     const pollingRef = useRef<any>(null);
+    const liveActivityPollingRef = useRef<any>(null);
 
     // Polling para verificar quiz E liveActivity ativos
     // Função de verificação (agora acessível para botão de refresh)
@@ -98,14 +98,38 @@ export default function SubjectDetailsScreen() {
         return () => {
             if (pollingRef.current) clearInterval(pollingRef.current);
         };
-    }, [checkForActivities]);
+    }, [subjectId, quizStarted]);
+
+    // Polling para verificar Live Activity (Transcrição)
+    useFocusEffect(
+        useCallback(() => {
+            const checkLiveActivity = async () => {
+                try {
+                    const result = await getActiveActivity(subjectId);
+                    if (result.success && result.active && result.activity) {
+                        setLiveActivity(result.activity);
+                    } else {
+                        setLiveActivity(null);
+                    }
+                } catch (error) {
+                    console.error('Erro ao verificar live activity:', error);
+                }
+            };
+
+            checkLiveActivity();
+            const interval = setInterval(checkLiveActivity, 5000);
+
+            return () => {
+                clearInterval(interval);
+            };
+        }, [subjectId])
+    );
 
     const handleStartQuiz = () => {
         if (activeQuiz) {
             setQuizStarted(true);
             setShowQuizPopup(false);
             if (pollingRef.current) clearInterval(pollingRef.current);
-
             router.push({
                 pathname: '/(student)/live-quiz',
                 params: { quiz: JSON.stringify(activeQuiz) }
@@ -113,16 +137,12 @@ export default function SubjectDetailsScreen() {
         }
     };
 
-    const handleStartActivity = () => {
+    const handleStartLiveActivity = () => {
         if (liveActivity) {
-            setActivityStarted(true);
-            setShowActivityPopup(false);
-            if (pollingRef.current) clearInterval(pollingRef.current);
-
             router.push({
-                pathname: './live-activity',
+                pathname: '/(student)/live-activity',
                 params: { activity: JSON.stringify(liveActivity) }
-            } as any);
+            });
         }
     };
 
@@ -175,6 +195,32 @@ export default function SubjectDetailsScreen() {
                     contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
                 >
+                    {/* Live Activity Banner (New) */}
+                    {liveActivity && !isActivitySubmitted(liveActivity.id) && (
+                        <TouchableOpacity
+                            style={styles.liveActivityBanner}
+                            onPress={handleStartLiveActivity}
+                            activeOpacity={0.9}
+                        >
+                            <View style={styles.liveActivityIcon}>
+                                <MaterialIcons
+                                    name={liveActivity.activity_type === 'quiz' ? 'quiz' : 'help-outline'}
+                                    size={24}
+                                    color={colors.white}
+                                />
+                            </View>
+                            <View style={styles.liveActivityInfo}>
+                                <Text style={styles.liveActivityTitle}>
+                                    {liveActivity.activity_type === 'quiz' ? '🎯 Quiz em Andamento!' : '💬 Pergunta Disponível!'}
+                                </Text>
+                                <Text style={styles.liveActivityDesc}>
+                                    Toque para participar agora
+                                </Text>
+                            </View>
+                            <MaterialIcons name="arrow-forward-ios" size={18} color={colors.white} />
+                        </TouchableOpacity>
+                    )}
+
                     {/* Subject Info Card */}
                     <View style={styles.subjectCard}>
                         <View style={styles.subjectInfo}>
@@ -297,7 +343,7 @@ export default function SubjectDetailsScreen() {
 
                         <TouchableOpacity
                             style={styles.startQuizButton}
-                            onPress={handleStartActivity}
+                            onPress={handleStartLiveActivity}
                         >
                             <Text style={styles.startQuizButtonText}>
                                 {liveActivity?.activity_type === 'quiz' ? 'Começar Quiz' : 'Ver Atividade'}
@@ -573,5 +619,36 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.display,
         color: '#10b981',
+    },
+    // Live Activity Banner
+    liveActivityBanner: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginHorizontal: spacing.base,
+        marginTop: spacing.md,
+        padding: spacing.md,
+        backgroundColor: '#8b5cf6',
+        borderRadius: borderRadius.xl,
+        gap: spacing.md,
+    },
+    liveActivityIcon: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    liveActivityInfo: {
+        flex: 1,
+    },
+    liveActivityTitle: {
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.bold,
+        color: colors.white,
+    },
+    liveActivityDesc: {
+        fontSize: typography.fontSize.sm,
+        color: 'rgba(255,255,255,0.8)',
     },
 });

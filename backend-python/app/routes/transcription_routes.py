@@ -11,6 +11,7 @@ from app.models.transcription_session import (
 )
 from app.models.enrollment import Enrollment
 from app.models.subject import Subject
+from app.models.user import User
 from app import db
 from datetime import datetime
 import json
@@ -252,8 +253,21 @@ def generate_quiz(current_user, session_id):
     db.session.flush()
     
     try:
-        # Gerar quiz via IA (retorna string formatada)
+        # Gerar quiz via IA (retorna JSON string)
         quiz_text = generate_quiz(session.full_transcript, session.title, num_questions)
+        
+        # Tentar fazer parse do JSON
+        import json
+        import re
+        
+        try:
+            # Limpar markdown code blocks se houver
+            clean_text = re.sub(r'```json\s*|\s*```', '', quiz_text).strip()
+            quiz_content = json.loads(clean_text)
+        except Exception as parse_error:
+            # Fallback se falhar parse (tenta extrair ou salva como texto)
+            print(f"Erro parse quiz: {str(parse_error)}")
+            quiz_content = {'questions': [], 'raw_text': quiz_text}
         
         # Criar atividade
         activity = LiveActivity(
@@ -261,7 +275,7 @@ def generate_quiz(current_user, session_id):
             checkpoint_id=checkpoint.id,
             activity_type='quiz',
             title=f'Quiz - {session.title}',
-            content={'text': quiz_text},
+            content=quiz_content,
             ai_generated_content=quiz_text,
             status='waiting'
         )
@@ -516,7 +530,7 @@ def end_activity(current_user, activity_id):
 def get_ranking(current_user, activity_id):
     """
     Obtém ranking em tempo real para quiz (polling)
-    Retorna status de cada aluno: respondeu, acertos/erros
+    Retorna lista COMPLETA de alunos matriculados e seus status
     """
     activity = LiveActivity.query.get(activity_id)
     
@@ -526,37 +540,75 @@ def get_ranking(current_user, activity_id):
     if activity.session.teacher_id != current_user.id:
         return jsonify({'success': False, 'error': 'Não autorizado'}), 403
     
-    responses = LiveActivityResponse.query.filter_by(activity_id=activity_id)\
-        .order_by(LiveActivityResponse.percentage.desc(), LiveActivityResponse.submitted_at.asc())\
-        .all()
-    
-    # Contar matriculados
-    enrolled_count = Enrollment.query.filter_by(
+    # 1. Buscar todos os alunos matriculados
+    enrollments = Enrollment.query.filter_by(
         subject_id=activity.session.subject_id
-    ).count()
+    ).join(Enrollment.student).all()
     
-    # Calcular estatísticas
-    ranking = []
-    for i, resp in enumerate(responses):
-        ranking.append({
-            'position': i + 1,
-            'student_id': resp.student_id,
-            'student_name': resp.student.name if resp.student else 'Aluno',
-            'score': resp.score,
-            'total': resp.total,
-            'percentage': resp.percentage,
-            'is_correct': resp.is_correct,
-            'submitted_at': resp.submitted_at.isoformat() if resp.submitted_at else None
-        })
+    # 2. Buscar todas as respostas existentes
+    responses = LiveActivityResponse.query.filter_by(activity_id=activity_id).all()
+    response_map = {r.student_id: r for r in responses}
+    
+    # 3. Construir lista combinada
+    full_ranking = []
+    
+    for enrollment in enrollments:
+        student = enrollment.student
+        resp = response_map.get(student.id)
+        
+        if resp:
+            # Aluno já respondeu
+            full_ranking.append({
+                'student_id': student.id,
+                'student_name': student.name,
+                'status': 'submitted',
+                'score': resp.score,
+                'total': resp.total,
+                'percentage': resp.percentage,
+                'is_correct': resp.is_correct,
+                'submitted_at': resp.submitted_at.isoformat() if resp.submitted_at else None
+            })
+        else:
+            # Aluno ainda não respondeu (Waiting Room)
+            full_ranking.append({
+                'student_id': student.id,
+                'student_name': student.name,
+                'status': 'waiting',
+                'score': 0,
+                'total': 0,
+                'percentage': 0,
+                'is_correct': None,
+                'submitted_at': None
+            })
+            
+    # 4. Ordenar: Quem respondeu primeiro (por nota), depois quem tá esperando (alfabético)
+    def sort_key(item):
+        if item['status'] == 'submitted':
+            # Prioridade 0 (topo), ordena por percentage decrescente
+            return (0, -item['percentage'], -item['score'])
+        else:
+            # Prioridade 1 (fundo), ordena por nome
+            return (1, item['student_name'])
+            
+    full_ranking.sort(key=sort_key)
+    
+    # Adicionar posição apenas para quem já respondeu
+    current_rank = 1
+    for item in full_ranking:
+        if item['status'] == 'submitted':
+            item['position'] = current_rank
+            current_rank += 1
+        else:
+            item['position'] = None
     
     return jsonify({
         'success': True,
         'activity_status': activity.status,
         'time_remaining': activity.time_remaining if activity.is_active else 0,
-        'enrolled_count': enrolled_count,
+        'enrolled_count': len(enrollments),
         'response_count': len(responses),
-        'response_rate': (len(responses) / enrolled_count * 100) if enrolled_count > 0 else 0,
-        'ranking': ranking
+        'response_rate': (len(responses) / len(enrollments) * 100) if len(enrollments) > 0 else 0,
+        'ranking': full_ranking
     })
 
 
@@ -584,6 +636,32 @@ def get_active_activity(current_user, subject_id):
             LiveActivity.status == 'active',
             LiveActivity.shared_with_students == True
         ).order_by(LiveActivity.created_at.desc()).first()
+    
+    if activity:
+        # Verificar se já respondeu
+        existing_response = LiveActivityResponse.query.filter_by(
+            activity_id=activity.id,
+            student_id=current_user.id
+        ).first()
+
+        if not existing_response:
+            activity_data = activity.to_dict(include_responses=False)
+            # Adicionar nome da disciplina
+            activity_data['subject_name'] = activity.session.subject.name if activity.session.subject else "Disciplina"
+            
+            return jsonify({
+                'success': True,
+                'active': True,
+                'activity': activity_data
+            })
+        else:
+            # Se já respondeu, não mostra como ativo para este aluno
+            return jsonify({
+                'success': True,
+                'active': False,
+                'already_answered': True,
+                'activity': None
+            })
     
     if not activity:
         # Verificar resumo compartilhado (não precisa estar ativo)
@@ -628,6 +706,9 @@ def get_active_activity(current_user, subject_id):
         'already_answered': existing_response is not None,
         'activity': activity.to_dict()
     })
+
+
+
 
 
 @transcription_bp.route('/activities/<int:activity_id>/respond', methods=['POST'])
@@ -685,7 +766,7 @@ def submit_response(current_user, activity_id):
     db.session.add(response)
     db.session.commit()
     
-    # Se for quiz, calcular pontuação
+    # Se for quiz, calcular pontuação básica
     if activity.activity_type == 'quiz':
         response.calculate_quiz_score()
     
@@ -694,6 +775,154 @@ def submit_response(current_user, activity_id):
         'message': 'Resposta enviada!',
         'result': response.to_dict()
     })
+
+
+@transcription_bp.route('/activities/<int:activity_id>/report', methods=['GET'])
+@token_required
+def get_activity_report(current_user, activity_id):
+    """
+    Professor obtém relatório detalhado da atividade (paridade com Quiz)
+    """
+    activity = LiveActivity.query.get(activity_id)
+    
+    if not activity:
+        return jsonify({'success': False, 'error': 'Atividade não encontrada'}), 404
+    
+    if activity.session.teacher_id != current_user.id:
+        return jsonify({'success': False, 'error': 'Não autorizado'}), 403
+    
+    # Buscar todas as respostas
+    responses = LiveActivityResponse.query.filter_by(activity_id=activity_id)\
+        .order_by(LiveActivityResponse.percentage.desc())\
+        .all()
+    
+    # Contar matriculados
+    enrolled_count = Enrollment.query.filter_by(
+        subject_id=activity.session.subject_id
+    ).count()
+    
+    # Calcular estatísticas
+    total_responses = len(responses)
+    avg_score = sum(r.percentage for r in responses) / total_responses if total_responses > 0 else 0
+    
+    # Top 3
+    top_students = [r.to_dict() for r in responses[:3]]
+    
+    # Estatísticas por pergunta (apenas para quiz)
+    worst_question = None
+    if activity.activity_type == 'quiz' and activity.content and 'questions' in activity.content:
+        questions = activity.content['questions']
+        question_stats = {}
+        
+        for i, question in enumerate(questions):
+            correct_count = 0
+            for response in responses:
+                answers = response.response_data.get('answers', {})
+                # Respostas salvas como strings "0", "1"...
+                student_answer = answers.get(str(i))
+                if student_answer is not None and student_answer == question.get('correct'):
+                    correct_count += 1
+            
+            question_stats[str(i)] = {
+                'question': question.get('question', f'Questão {i+1}'),
+                'correct_rate': (correct_count / total_responses * 100) if total_responses > 0 else 0
+            }
+        
+        # Encontrar a pior
+        lowest_rate = 100
+        for q_id, stats in question_stats.items():
+            if stats['correct_rate'] < lowest_rate:
+                lowest_rate = stats['correct_rate']
+                worst_question = stats
+
+    return jsonify({
+        'success': True,
+        'report': {
+            'quiz': {
+                'id': activity.id,
+                'title': activity.title,
+                'status': activity.status,
+                'question_count': len(activity.content.get('questions', [])) if activity.content else 0
+            },
+            'enrolled_count': enrolled_count,
+            'response_count': total_responses,
+            'response_rate': (total_responses / enrolled_count * 100) if enrolled_count > 0 else 0,
+            'average_score': round(avg_score, 1),
+            'top_students': top_students,
+            'worst_question': worst_question,
+            'all_responses': [r.to_dict() for r in responses]
+        }
+    })
+
+
+@transcription_bp.route('/activities/\u003cint:activity_id\u003e/export-pdf', methods=['GET'])
+@token_required
+def export_activity_pdf(current_user, activity_id):
+    """
+    Gera e retorna PDF do relatório da atividade ao vivo
+    """
+    from flask import send_file
+    from app.services.pdf_service import generate_activity_report_pdf
+    import tempfile
+    
+    activity = LiveActivity.query.get(activity_id)
+    
+    if not activity:
+        return jsonify({'success': False, 'error': 'Atividade não encontrada'}), 404
+    
+    if activity.session.teacher_id != current_user.id:
+        return jsonify({'success': False, 'error': 'Não autorizado'}), 403
+    
+    # Buscar ranking
+    responses = LiveActivityResponse.query.filter_by(activity_id=activity_id)\
+        .order_by(LiveActivityResponse.percentage.desc(), LiveActivityResponse.submitted_at.asc())\
+        .all()
+    
+    enrolled_count = Enrollment.query.filter_by(subject_id=activity.session.subject_id).count()
+    
+    # Preparar dados do ranking
+    ranking = []
+    for i, response in enumerate(responses):
+        ranking.append({
+            'position': i + 1,
+            'student_id': response.student_id,
+            'student_name': response.student.name if response.student else 'Desconhecido',
+            'points': response.points if hasattr(response, 'points') and response.points else int(response.percentage),
+            'score': response.score,
+            'total': response.total,
+            'percentage': response.percentage,
+            'time_taken': response.time_taken if hasattr(response, 'time_taken') else 0,
+        })
+    
+    ranking_data = {
+        'enrolled_count': enrolled_count,
+        'response_count': len(responses),
+        'ranking': ranking
+    }
+    
+    # Preparar dados da atividade
+    activity_data = {
+        'title': activity.title,
+        'activity_type': activity.activity_type,
+        'status': activity.status,
+        'time_limit': activity.time_limit,
+    }
+    
+    # Gerar PDF em arquivo temporário
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+    pdf_path = generate_activity_report_pdf(
+        activity_data,
+        ranking_data,
+        temp_file.name
+    )
+    
+    # Enviar arquivo
+    return send_file(
+        pdf_path,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f'relatorio_atividade_{activity_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+    )
 
 
 # ==================== LISTAGEM ====================
@@ -710,4 +939,22 @@ def list_sessions(current_user, subject_id):
     return jsonify({
         'success': True,
         'sessions': [s.to_dict() for s in sessions]
+    })
+
+
+# ==================== GAMIFICAÇÃO ====================
+
+
+
+
+@transcription_bp.route('/badges', methods=['GET'])
+def get_badges():
+    """
+    Lista todos os badges disponíveis
+    """
+    badges = Badge.query.all()
+    
+    return jsonify({
+        'success': True,
+        'badges': [b.to_dict() for b in badges]
     })
