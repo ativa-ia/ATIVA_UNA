@@ -223,7 +223,8 @@ def generate_quiz(current_user, session_id):
     
     Body:
     {
-        "num_questions": int (1-10, default 5)
+        "num_questions": int (1-20, default 5),
+        "time_limit": int (seconds, default 60 per question)
     }
     """
     from app.services.ai_service import generate_quiz
@@ -240,7 +241,8 @@ def generate_quiz(current_user, session_id):
         return jsonify({'success': False, 'error': f'Transcrição muito curta para gerar quiz. Atual: {len(session.full_transcript.strip()) if session.full_transcript else 0} caracteres, mínimo: 5'}), 400
     
     data = request.get_json() or {}
-    num_questions = min(max(data.get('num_questions', 5), 1), 10)
+    num_questions = min(max(data.get('num_questions', 5), 1), 20)
+    time_limit = data.get('time_limit', num_questions * 60)  # Default: 1 minute per question
     
     # Criar checkpoint antes da atividade
     checkpoint = TranscriptionCheckpoint(
@@ -277,6 +279,7 @@ def generate_quiz(current_user, session_id):
             title=f'Quiz - {session.title}',
             content=quiz_content,
             ai_generated_content=quiz_text,
+            time_limit=time_limit,
             status='waiting'
         )
         db.session.add(activity)
@@ -522,6 +525,53 @@ def end_activity(current_user, activity_id):
         'success': True,
         'message': 'Atividade encerrada',
         'activity': activity.to_dict(include_responses=True)
+    })
+
+
+@transcription_bp.route('/activities/<int:activity_id>/update', methods=['PUT'])
+@token_required
+def update_activity(current_user, activity_id):
+    """
+    Atualiza o conteúdo da atividade (ex: remover questões do quiz)
+    
+    Body:
+    {
+        "content": {...},  // Novo conteúdo (ex: questions modificadas)
+        "time_limit": int  // Novo tempo limite em segundos
+    }
+    """
+    activity = LiveActivity.query.get(activity_id)
+    
+    if not activity:
+        return jsonify({'success': False, 'error': 'Atividade não encontrada'}), 404
+    
+    if activity.session.teacher_id != current_user.id:
+        return jsonify({'success': False, 'error': 'Não autorizado'}), 403
+    
+    # Só pode atualizar se ainda não foi enviada
+    if activity.status != 'waiting':
+        return jsonify({'success': False, 'error': 'Não é possível atualizar uma atividade já iniciada'}), 400
+    
+    data = request.get_json() or {}
+    
+    # Atualizar conteúdo
+    if 'content' in data:
+        activity.content = data['content']
+        # Atualizar também o ai_generated_content se for quiz
+        if activity.activity_type == 'quiz':
+            import json
+            activity.ai_generated_content = json.dumps(data['content'], ensure_ascii=False)
+    
+    # Atualizar time_limit
+    if 'time_limit' in data:
+        activity.time_limit = data['time_limit']
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Atividade atualizada',
+        'activity': activity.to_dict()
     })
 
 

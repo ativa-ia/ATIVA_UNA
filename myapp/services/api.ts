@@ -3,10 +3,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // URL da API (mude para seu IP local se testar em dispositivo físico)
 // Para desenvolvimento local, use localhost
-//export const API_URL = 'http://localhost:3000/api';
+export const API_URL = 'http://localhost:3000/api';
 
 // Para produção/Vercel, use:
-export const API_URL = 'https://ativa-ia-9rkb.vercel.app/api';
+//export const API_URL = 'https://ativa-ia-9rkb.vercel.app/api';
 
 export interface LoginData {
     email: string;
@@ -722,7 +722,7 @@ export const endTranscriptionSession = async (sessionId: number): Promise<{ succ
 };
 
 // Gerar Quiz via IA
-export const generateQuiz = async (sessionId: number, numQuestions: number = 5): Promise<{ success: boolean; activity?: LiveActivity; checkpoint?: TranscriptionCheckpoint; error?: string }> => {
+export const generateQuiz = async (sessionId: number, numQuestions: number = 5, timeLimit?: number): Promise<{ success: boolean; activity?: LiveActivity; checkpoint?: TranscriptionCheckpoint; error?: string }> => {
     const token = await AsyncStorage.getItem('authToken');
 
     const response = await fetch(`${API_URL}/transcription/sessions/${sessionId}/generate-quiz`, {
@@ -731,7 +731,10 @@ export const generateQuiz = async (sessionId: number, numQuestions: number = 5):
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ num_questions: numQuestions }),
+        body: JSON.stringify({
+            num_questions: numQuestions,
+            time_limit: timeLimit || numQuestions * 60  // Default: 1 minute per question
+        }),
     });
 
     return response.json();
@@ -798,6 +801,26 @@ export const shareSummary = async (activityId: number): Promise<{ success: boole
 
     return response.json();
 };
+
+// Atualizar atividade (ex: remover questões do quiz)
+export const updateActivity = async (activityId: number, content: any, timeLimit?: number): Promise<{ success: boolean; activity: LiveActivity; error?: string }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/activities/${activityId}/update`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+            content,
+            time_limit: timeLimit
+        }),
+    });
+
+    return response.json();
+};
+
 
 // Encerrar atividade
 export const endActivity = async (activityId: number): Promise<{ success: boolean; activity: LiveActivity }> => {

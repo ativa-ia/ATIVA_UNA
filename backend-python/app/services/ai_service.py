@@ -64,14 +64,14 @@ Resumo:"""
         return f"Erro ao gerar resumo: {str(e)}"
 
 
-def generate_quiz(text: str, subject_name: str = "Aula", num_questions: int = 10) -> str:
+def generate_quiz(text: str, subject_name: str = "Aula", num_questions: int = 20) -> str:
     """
     Gera um quiz baseado no texto transcrito
     
     Args:
         text: Texto transcrito para gerar quiz
         subject_name: Nome da disciplina/assunto (opcional)
-        num_questions: Número de questões (1-10)
+        num_questions: Número de questões (1-20)
     
     Returns:
         Quiz formatado gerado pela IA ou mensagem de erro
@@ -82,25 +82,36 @@ def generate_quiz(text: str, subject_name: str = "Aula", num_questions: int = 10
     try:
         model = genai.GenerativeModel(
             model_name='gemini-2.5-flash',
-            system_instruction=f"""Você é um assistente educacional especializado em criar quizzes.
-            
-Sua tarefa é criar questões de múltipla escolha EXCLUSIVAMENTE baseadas no conteúdo transcrito fornecido.
-IMPORTANTE: NÃO use conhecimento geral sobre o tema. Crie perguntas APENAS sobre o que foi mencionado no texto transcrito.
-Se o texto for muito curto, crie questões simples e diretas sobre o conteúdo disponível.
-- Ser baseada APENAS no conteúdo transcrito
+            system_instruction=f"""Você é um assistente educacional especializado em criar quizzes sobre conteúdo de aulas.
+
+REGRA CRÍTICA: O texto abaixo é uma TRANSCRIÇÃO de uma aula. Você deve criar perguntas sobre o CONTEÚDO EDUCACIONAL que está sendo ENSINADO na aula, NÃO sobre o processo de transcrição em si.
+
+EXEMPLOS DO QUE FAZER:
+✅ Se a transcrição diz "A fotossíntese é o processo...", pergunte: "O que é fotossíntese?"
+✅ Se a transcrição diz "Vamos falar sobre a Segunda Guerra Mundial...", pergunte sobre eventos da guerra
+✅ Se a transcrição diz "O teorema de Pitágoras afirma que...", pergunte sobre o teorema
+
+EXEMPLOS DO QUE NÃO FAZER:
+❌ NÃO pergunte "O que é transcrição?"
+❌ NÃO pergunte "Qual a função de uma transcrição?"
+❌ NÃO pergunte sobre o processo de gravar ou transcrever aulas
+❌ NÃO use conhecimento externo - use APENAS o que foi mencionado na transcrição
+
+Cada questão deve:
+- Ser baseada no CONTEÚDO EDUCACIONAL mencionado na transcrição
 - Ter 4 alternativas (A, B, C, D)
 - Ter apenas uma resposta correta
 - Ser clara e objetiva
-- Testar compreensão do que foi efetivamente falado/transcrito
+- Testar compreensão do ASSUNTO da aula, não do processo de transcrição
 
-Formate as questões estritamente como um JSON válido, sem markdown ou code blocks, seguindo este esquema:
+Formate as questões estritamente como um JSON válido, sem markdown ou code blocks:
 
 {{
     "questions": [
         {{
-            "question": "Pergunta...",
+            "question": "Pergunta sobre o conteúdo da aula...",
             "options": ["Opção A", "Opção B", "Opção C", "Opção D"],
-            "correct": 0  // índice da correta (0-3)
+            "correct": 0
         }}
     ]
 }}
@@ -108,11 +119,20 @@ Formate as questões estritamente como um JSON válido, sem markdown ou code blo
 Responda apenas com o JSON cru."""
         )
         
-        prompt = f"""Crie {num_questions} questões de múltipla escolha baseadas EXCLUSIVAMENTE no seguinte conteúdo transcrito.
-NÃO adicione conhecimento geral sobre {subject_name}. Use APENAS o que está escrito abaixo.
-Retorne apenas o JSON, sem formatação extra:
+        prompt = f"""Abaixo está a TRANSCRIÇÃO de uma aula de {subject_name}.
 
-{text}"""
+Crie {num_questions} questões de múltipla escolha sobre o CONTEÚDO EDUCACIONAL que está sendo ENSINADO nesta aula.
+
+IMPORTANTE:
+- Crie perguntas sobre o ASSUNTO da aula (ex: matemática, história, ciências)
+- NÃO crie perguntas sobre "transcrição", "gravação" ou o processo de capturar a aula
+- Use APENAS informações mencionadas no texto abaixo
+- Se o texto mencionar conceitos, crie perguntas sobre esses conceitos
+
+TRANSCRIÇÃO DA AULA:
+{text}
+
+Retorne apenas o JSON com as questões sobre o conteúdo educacional:"""
         
         response = model.generate_content(prompt)
         return response.text
