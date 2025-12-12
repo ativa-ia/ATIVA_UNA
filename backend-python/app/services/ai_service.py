@@ -42,10 +42,11 @@ Sua tarefa é criar um resumo claro, objetivo e bem estruturado do conteúdo for
 Se o texto for curto ou apenas um título, use seu conhecimento para explicar o TEMA principal.
 O resumo deve:
 - Destacar os pontos principais
-- Ser organizado em tópicos
+- Ser organizado em tópicos usando apenas texto simples
 - Usar linguagem clara e didática
 - Ter entre 200-400 palavras
-- Não usar markdown
+- NÃO usar markdown, asteriscos, hashtags ou qualquer formatação especial
+- Usar apenas texto puro com quebras de linha para separar parágrafos
 
 Responda sempre em português brasileiro."""
         )
@@ -83,32 +84,35 @@ def generate_quiz(text: str, subject_name: str = "Aula", num_questions: int = 10
             model_name='gemini-2.5-flash',
             system_instruction=f"""Você é um assistente educacional especializado em criar quizzes.
             
-Sua tarefa é criar questões de múltipla escolha sobre o tema abordado.
-Se o texto for curto ou apenas um título, use seu conhecimento para criar perguntas relevantes sobre o TEMA.
-Mescle seu conhecimento junto ao texto para criar perguntas relevantes.
-Cada questão deve:
+Sua tarefa é criar questões de múltipla escolha EXCLUSIVAMENTE baseadas no conteúdo transcrito fornecido.
+IMPORTANTE: NÃO use conhecimento geral sobre o tema. Crie perguntas APENAS sobre o que foi mencionado no texto transcrito.
+Se o texto for muito curto, crie questões simples e diretas sobre o conteúdo disponível.
+- Ser baseada APENAS no conteúdo transcrito
 - Ter 4 alternativas (A, B, C, D)
 - Ter apenas uma resposta correta
 - Ser clara e objetiva
-- Testar compreensão do assunto
+- Testar compreensão do que foi efetivamente falado/transcrito
 
-Formate as questões assim:
+Formate as questões estritamente como um JSON válido, sem markdown ou code blocks, seguindo este esquema:
 
-Questão 1: [pergunta]
-A) [alternativa]
-B) [alternativa]
-C) [alternativa]
-D) [alternativa]
-Resposta correta: [letra]
+{{
+    "questions": [
+        {{
+            "question": "Pergunta...",
+            "options": ["Opção A", "Opção B", "Opção C", "Opção D"],
+            "correct": 0  // índice da correta (0-3)
+        }}
+    ]
+}}
 
-Responda sempre em português brasileiro."""
+Responda apenas com o JSON cru."""
         )
         
-        prompt = f"""Crie {num_questions} questões de múltipla escolha baseadas no seguinte conteúdo de {subject_name}:
+        prompt = f"""Crie {num_questions} questões de múltipla escolha baseadas EXCLUSIVAMENTE no seguinte conteúdo transcrito.
+NÃO adicione conhecimento geral sobre {subject_name}. Use APENAS o que está escrito abaixo.
+Retorne apenas o JSON, sem formatação extra:
 
-{text}
-
-Quiz:"""
+{text}"""
         
         response = model.generate_content(prompt)
         return response.text

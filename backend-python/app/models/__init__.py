@@ -41,6 +41,6 @@ __all__ = [
     'TranscriptionSession',
     'TranscriptionCheckpoint',
     'LiveActivity',
-    'LiveActivityResponse'
+    'LiveActivityResponse',
 ]
 

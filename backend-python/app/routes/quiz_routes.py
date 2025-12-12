@@ -7,6 +7,9 @@ from app.models.quiz import Quiz, QuizQuestion, QuizResponse
 from app.models.enrollment import Enrollment
 from app import db
 from datetime import datetime
+import logging
+
+logger = logging.getLogger(__name__)
 
 quiz_bp = Blueprint('quiz', __name__)
 
@@ -168,7 +171,8 @@ def submit_response(current_user, quiz_id):
         "answers": {
             "question_id": answer_index,
             ...
-        }
+        },
+        "time_taken": int (seconds)
     }
     """
     quiz = Quiz.query.get(quiz_id)
@@ -191,18 +195,32 @@ def submit_response(current_user, quiz_id):
     
     data = request.get_json()
     answers = data.get('answers', {})
+    time_taken = data.get('time_taken', 0)  # Tempo em segundos
     
     # Criar resposta
     response = QuizResponse(
         quiz_id=quiz_id,
         student_id=current_user.id,
-        answers=answers
+        answers=answers,
+        time_taken=time_taken
     )
     db.session.add(response)
     db.session.commit()
     
     # Calcular pontuação
     response.calculate_score()
+    
+    # Emitir evento WebSocket para atualizar ranking em tempo real
+    try:
+        from app.services.websocket_service import emit_new_response
+        emit_new_response(quiz_id, {
+            'student_id': current_user.id,
+            'student_name': current_user.name,
+            'points': response.points,
+            'percentage': response.percentage
+        })
+    except Exception as e:
+        logger.error(f"Erro ao emitir evento WebSocket: {e}")
     
     return jsonify({
         'success': True,
@@ -293,6 +311,115 @@ def end_quiz_manually(current_user, quiz_id):
         'success': True,
         'message': 'Quiz encerrado'
     })
+
+
+@quiz_bp.route('/<int:quiz_id>/live-ranking', methods=['GET'])
+@token_required
+def get_live_ranking(current_user, quiz_id):
+    """
+    Retorna ranking em tempo real do quiz (para WebSocket/polling)
+    """
+    quiz = Quiz.query.get(quiz_id)
+    
+    if not quiz:
+        return jsonify({'success': False, 'error': 'Quiz não encontrado'}), 404
+    
+    if quiz.created_by != current_user.id:
+        return jsonify({'success': False, 'error': 'Não autorizado'}), 403
+    
+    # Buscar todas as respostas ordenadas por pontos
+    responses = QuizResponse.query.filter_by(quiz_id=quiz_id)\
+        .order_by(QuizResponse.points.desc(), QuizResponse.submitted_at.asc())\
+        .all()
+    
+    # Contar matriculados
+    enrolled_count = Enrollment.query.filter_by(subject_id=quiz.subject_id).count()
+    
+    # Preparar ranking
+    ranking = []
+    for i, response in enumerate(responses):
+        ranking.append({
+            'position': i + 1,
+            'student_id': response.student_id,
+            'student_name': response.student.name if response.student else 'Desconhecido',
+            'points': response.points,
+            'score': response.score,
+            'total': response.total,
+            'percentage': response.percentage,
+            'time_taken': response.time_taken,
+            'submitted_at': response.submitted_at.isoformat() if response.submitted_at else None
+        })
+    
+    return jsonify({
+        'success': True,
+        'quiz_id': quiz_id,
+        'quiz_status': quiz.status,
+        'enrolled_count': enrolled_count,
+        'response_count': len(responses),
+        'ranking': ranking
+    })
+
+
+@quiz_bp.route('/<int:quiz_id>/export-pdf', methods=['GET'])
+@token_required
+def export_quiz_pdf(current_user, quiz_id):
+    """
+    Gera e retorna PDF do relatório do quiz
+    """
+    from flask import send_file
+    from app.services.pdf_service import generate_quiz_report_pdf
+    import tempfile
+    
+    quiz = Quiz.query.get(quiz_id)
+    
+    if not quiz:
+        return jsonify({'success': False, 'error': 'Quiz não encontrado'}), 404
+    
+    if quiz.created_by != current_user.id:
+        return jsonify({'success': False, 'error': 'Não autorizado'}), 403
+    
+    # Buscar ranking
+    responses = QuizResponse.query.filter_by(quiz_id=quiz_id)\
+        .order_by(QuizResponse.points.desc(), QuizResponse.submitted_at.asc())\
+        .all()
+    
+    enrolled_count = Enrollment.query.filter_by(subject_id=quiz.subject_id).count()
+    
+    # Preparar dados do ranking
+    ranking = []
+    for i, response in enumerate(responses):
+        ranking.append({
+            'position': i + 1,
+            'student_id': response.student_id,
+            'student_name': response.student.name if response.student else 'Desconhecido',
+            'points': response.points,
+            'score': response.score,
+            'total': response.total,
+            'percentage': response.percentage,
+            'time_taken': response.time_taken,
+        })
+    
+    ranking_data = {
+        'enrolled_count': enrolled_count,
+        'response_count': len(responses),
+        'ranking': ranking
+    }
+    
+    # Gerar PDF em arquivo temporário
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+    pdf_path = generate_quiz_report_pdf(
+        quiz.to_dict(),
+        ranking_data,
+        temp_file.name
+    )
+    
+    # Enviar arquivo
+    return send_file(
+        pdf_path,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=f'relatorio_quiz_{quiz_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+    )
 
 
 @quiz_bp.route('/subject/<int:subject_id>', methods=['GET'])

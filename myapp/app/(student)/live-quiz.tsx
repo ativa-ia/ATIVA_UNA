@@ -14,7 +14,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
-import { Quiz, QuizQuestion, submitQuizResponse } from '@/services/quiz';
+import { Quiz, QuizQuestion } from '@/services/quiz';
+import { submitActivityResponse } from '@/services/api';
 
 /**
  * LiveQuizScreen - Tela para aluno responder quiz ao vivo
@@ -31,6 +32,7 @@ export default function LiveQuizScreen() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSubmitted, setIsSubmitted] = useState(false);
     const [result, setResult] = useState<any>(null);
+    const [startTime] = useState(Date.now()); // Track when quiz started
 
     const timerRef = useRef<any>(null);
 
@@ -105,11 +107,31 @@ export default function LiveQuizScreen() {
         setIsSubmitting(true);
         if (timerRef.current) clearInterval(timerRef.current);
 
-        try {
-            const response = await submitQuizResponse(quiz.id, answers);
+        // Calculate time taken in seconds
+        const timeTaken = Math.floor((Date.now() - startTime) / 1000);
 
-            if (response.success && response.result) {
-                setResult(response.result);
+        try {
+            const response = await submitActivityResponse(quiz.id, {
+                answers,
+                time_taken: timeTaken
+            });
+            console.log('Submit response:', response);
+
+            if (response.success) {
+                // Use result data from response
+                const resultData = response.result || {
+                    score: Object.keys(answers).length,
+                    total: quiz.questions?.length || 0,
+                    percentage: 0,
+                    points: 0
+                };
+
+                // Calculate percentage if not provided
+                if (!resultData.percentage && resultData.total > 0) {
+                    resultData.percentage = (resultData.score / resultData.total) * 100;
+                }
+
+                setResult(resultData);
                 setIsSubmitted(true);
             } else {
                 Alert.alert('Erro', response.error || 'Falha ao enviar respostas');
@@ -144,7 +166,17 @@ export default function LiveQuizScreen() {
                     <Text style={styles.resultIcon}>
                         {result.percentage >= 70 ? '🎉' : result.percentage >= 50 ? '👍' : '📚'}
                     </Text>
+
                     <Text style={styles.resultTitle}>Quiz Concluído!</Text>
+
+                    {/* Pontuação Gamificada */}
+                    {result.points > 0 && (
+                        <View style={styles.pointsContainer}>
+                            <Text style={styles.pointsLabel}>🏆 Pontuação</Text>
+                            <Text style={styles.pointsValue}>{result.points} pts</Text>
+                        </View>
+                    )}
+
                     <Text style={styles.resultScore}>
                         {result.score} / {result.total}
                     </Text>
@@ -609,6 +641,29 @@ const styles = StyleSheet.create({
         fontFamily: typography.fontFamily.display,
         color: colors.white,
         marginBottom: spacing.sm,
+    },
+    pointsContainer: {
+        backgroundColor: 'rgba(139, 92, 246, 0.2)',
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.md,
+        borderRadius: borderRadius.full,
+        marginBottom: spacing.md,
+        borderWidth: 2,
+        borderColor: '#8b5cf6',
+    },
+    pointsLabel: {
+        fontSize: typography.fontSize.sm,
+        fontFamily: typography.fontFamily.display,
+        color: '#a78bfa',
+        textAlign: 'center',
+        marginBottom: 4,
+    },
+    pointsValue: {
+        fontSize: typography.fontSize['3xl'],
+        fontWeight: typography.fontWeight.bold,
+        fontFamily: typography.fontFamily.display,
+        color: '#8b5cf6',
+        textAlign: 'center',
     },
     resultScore: {
         fontSize: typography.fontSize['4xl'],

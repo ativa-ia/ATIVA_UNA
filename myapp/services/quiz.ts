@@ -160,20 +160,61 @@ export const endQuiz = async (
     return response.json();
 };
 
-// Listar quizzes de uma disciplina
-export const listQuizzes = async (
-    subjectId: number
-): Promise<{ success: boolean; quizzes?: Quiz[]; error?: string }> => {
+/**
+ * Listar todos os quizzes de uma disciplina
+ */
+export const listQuizzes = async (subjectId: number): Promise<{ success: boolean; quizzes: Quiz[] }> => {
     const token = await AsyncStorage.getItem('authToken');
 
     const response = await fetch(`${API_URL}/quiz/subject/${subjectId}`, {
-        method: 'GET',
         headers: {
             'Authorization': `Bearer ${token}`,
         },
     });
 
     return response.json();
+};
+
+/**
+ * Buscar ranking em tempo real do quiz (para gamificação)
+ */
+export const getQuizLiveRanking = async (quizId: number): Promise<{
+    success: boolean;
+    quiz_id: number;
+    quiz_status: string;
+    enrolled_count: number;
+    response_count: number;
+    ranking: Array<{
+        position: number;
+        student_id: number;
+        student_name: string;
+        points: number;
+        score: number;
+        total: number;
+        percentage: number;
+        time_taken: number;
+        submitted_at: string;
+    }>;
+}> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/quiz/${quizId}/live-ranking`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    return response.json();
+};
+
+/**
+ * Exportar PDF do relatório do quiz
+ */
+export const exportQuizPDF = async (quizId: number): Promise<string> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const url = `${API_URL}/quiz/${quizId}/export-pdf`;
+    return url; // Retorna URL para download
 };
 
 // Processar conteúdo ditado para gerar quiz/resumo/discussão

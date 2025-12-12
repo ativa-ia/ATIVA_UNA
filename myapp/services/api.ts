@@ -390,9 +390,10 @@ export interface LiveActivity {
     activity_type: 'quiz' | 'summary' | 'open_question';
     title: string;
     content: any;
-    ai_generated_content: string | null;
+    ai_generated_content?: string;
     shared_with_students: boolean;
     status: 'waiting' | 'active' | 'ended';
+    subject_name?: string;
     time_limit: number;
     time_remaining: number | null;
     starts_at: string | null;
@@ -410,6 +411,7 @@ export interface LiveActivityResponse {
     score: number;
     total: number;
     percentage: number;
+    points?: number; // Pontos gamificados
     submitted_at: string;
 }
 
@@ -421,13 +423,14 @@ export interface RankingData {
     response_rate: number;
     ranking: Array<{
         position: number;
-        student_id: number;
+        student_id?: number;
         student_name: string;
         score: number;
-        total: number;
+        total?: number;
+        points: number; // Pontos gamificados
         percentage: number;
-        is_correct: boolean;
-        submitted_at: string;
+        is_correct?: boolean;
+        submitted_at?: string;
     }>;
 }
 
@@ -638,20 +641,44 @@ export const getActiveActivity = async (subjectId: number): Promise<{ success: b
     return response.json();
 };
 
-// Aluno: enviar resposta
-export const submitActivityResponse = async (activityId: number, data: { answers?: Record<string, number>; text?: string }): Promise<{ success: boolean; result: LiveActivityResponse }> => {
-    const token = await AsyncStorage.getItem('authToken');
+// Aluno:// Local cache for submitted activities to ensure instant UI updates
+export const submittedActivities = new Set<number>();
 
-    const response = await fetch(`${API_URL}/transcription/activities/${activityId}/respond`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(data),
-    });
+export const markActivityAsSubmitted = (activityId: number) => {
+    submittedActivities.add(activityId);
+};
 
-    return response.json();
+export const isActivitySubmitted = (activityId: number) => {
+    return submittedActivities.has(activityId);
+};
+
+/**
+ * Envia resposta para uma atividade
+ */
+export const submitActivityResponse = async (activityId: number, data: any): Promise<{ success: boolean; result?: any; error?: string }> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        // Correct URL with /transcription prefix
+        const response = await fetch(`${API_URL}/transcription/activities/${activityId}/respond`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            markActivityAsSubmitted(activityId);
+        }
+
+        return result;
+    } catch (error) {
+        console.error('Error submitting response:', error);
+        return { success: false, error: 'Erro de conexão' };
+    }
 };
 
 // Listar sessões de uma disciplina
@@ -667,4 +694,32 @@ export const getTranscriptionSessions = async (subjectId: number): Promise<{ suc
     return response.json();
 };
 
+// Obter relatório de atividade (paridade com Quiz)
+export const getLiveActivityReport = async (activityId: number): Promise<{ success: boolean; report?: any; error?: string }> => {
+    const token = await AsyncStorage.getItem('authToken');
 
+    const response = await fetch(`${API_URL}/transcription/activities/${activityId}/report`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    return response.json();
+};
+
+// Exportar relatório de atividade em PDF
+export const exportActivityPDF = async (activityId: number): Promise<Blob> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/activities/${activityId}/export-pdf`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to export PDF');
+    }
+
+    return response.blob();
+};

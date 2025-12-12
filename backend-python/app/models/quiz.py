@@ -114,13 +114,15 @@ class QuizResponse(db.Model):
     score = db.Column(db.Integer, default=0)  # Pontuação (número de acertos)
     total = db.Column(db.Integer, default=0)  # Total de perguntas
     percentage = db.Column(db.Float, default=0.0)  # Porcentagem de acerto
+    points = db.Column(db.Integer, default=0)  # Pontuação gamificada (com bônus)
+    time_taken = db.Column(db.Integer, default=0)  # Tempo gasto em segundos
     submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationships
     student = db.relationship('User', backref='quiz_responses', lazy=True)
     
     def calculate_score(self):
-        """Calcula a pontuação baseada nas respostas"""
+        """Calcula a pontuação baseada nas respostas + bônus de tempo"""
         quiz = Quiz.query.get(self.quiz_id)
         if not quiz:
             return
@@ -136,6 +138,25 @@ class QuizResponse(db.Model):
         self.score = correct_count
         self.total = total_questions
         self.percentage = (correct_count / total_questions * 100) if total_questions > 0 else 0
+        
+        # Gamification: 100 pontos por acerto + bônus de tempo
+        base_points = correct_count * 100
+        
+        # Bônus de tempo: quanto mais rápido, mais pontos
+        # Máximo de 50 pontos por questão se responder muito rápido
+        time_bonus = 0
+        if self.time_taken > 0 and quiz.time_limit > 0:
+            # Calcular tempo médio esperado por questão
+            avg_time_per_question = quiz.time_limit / total_questions
+            actual_time_per_question = self.time_taken / total_questions
+            
+            # Se respondeu mais rápido que a média, ganha bônus
+            if actual_time_per_question < avg_time_per_question:
+                # Bônus proporcional: quanto mais rápido, mais pontos
+                speed_ratio = 1 - (actual_time_per_question / avg_time_per_question)
+                time_bonus = int(speed_ratio * 50 * correct_count)  # Até 50 pontos por acerto
+        
+        self.points = base_points + time_bonus
         db.session.commit()
     
     def to_dict(self):
@@ -148,5 +169,7 @@ class QuizResponse(db.Model):
             'score': self.score,
             'total': self.total,
             'percentage': self.percentage,
+            'points': self.points,
+            'time_taken': self.time_taken,
             'submitted_at': self.submitted_at.isoformat() if self.submitted_at else None
         }
