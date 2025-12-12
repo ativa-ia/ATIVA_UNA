@@ -36,6 +36,7 @@ import {
     broadcastActivity,
     endActivity,
     exportActivityPDF,
+    updateActivity,
 } from '@/services/api';
 import RaceVisualization from '@/components/quiz/RaceVisualization';
 import PodiumDisplay from '@/components/quiz/PodiumDisplay';
@@ -318,6 +319,11 @@ export default function TranscriptionScreen() {
         console.log('[QUIZ] Session ID:', session.id);
         console.log('[QUIZ] Texto transcrito:', transcribedText.substring(0, 100), '...');
         console.log('[QUIZ] Comprimento do texto:', transcribedText.length, 'caracteres');
+        console.log('[QUIZ] Número de questões:', numQuestions);
+
+        // Calcular tempo: 1 minuto (60 segundos) por questão
+        const timeLimit = numQuestions * 60;
+        console.log('[QUIZ] Tempo limite:', timeLimit, 'segundos (', numQuestions, 'minutos)');
 
         setIsGenerating(true);
         setDisplayMode('quiz');
@@ -329,12 +335,13 @@ export default function TranscriptionScreen() {
             console.log('[QUIZ] Transcrição salva.');
 
             console.log('[QUIZ] Chamando API generateQuiz...');
-            const result = await generateQuiz(session.id, numQuestions);
+            const result = await generateQuiz(session.id, numQuestions, timeLimit);
             console.log('[QUIZ] Resposta da API:', JSON.stringify(result, null, 2));
 
             if (result.success && result.activity) {
                 console.log('[QUIZ] Quiz gerado com sucesso! ID:', result.activity.id);
                 console.log('[QUIZ] Perguntas:', result.activity.content?.questions?.length || 0);
+                console.log('[QUIZ] Tempo limite:', result.activity.time_limit, 'segundos');
                 setCurrentActivity(result.activity);
                 // Backend agora retorna o conteúdo estruturado em 'content'
                 const quizContent = result.activity.content || result.activity.ai_generated_content || '';
@@ -389,6 +396,81 @@ export default function TranscriptionScreen() {
         }
         setIsGenerating(false);
     };
+
+    // Excluir questão do quiz
+    const handleDeleteQuestion = async (questionIndex: number) => {
+        if (!currentActivity || !generatedQuiz) return;
+
+        try {
+            // Parsear conteúdo atual
+            const content = typeof generatedQuiz === 'string'
+                ? JSON.parse(generatedQuiz)
+                : generatedQuiz;
+
+            const questions = content.questions || [];
+
+            // Validar: não pode excluir se só tiver 1 questão
+            if (questions.length <= 1) {
+                if (Platform.OS === 'web') {
+                    window.alert('Não é possível excluir. Mantenha pelo menos 1 questão no quiz.');
+                } else {
+                    Alert.alert(
+                        'Não é possível excluir',
+                        'Mantenha pelo menos 1 questão no quiz.'
+                    );
+                }
+                return;
+            }
+
+            // Remover questão do array (sem confirmação)
+
+            const updatedQuestions = questions.filter((_: any, i: number) => i !== questionIndex);
+            const updatedContent = { ...content, questions: updatedQuestions };
+
+            // Recalcular tempo: 1 minuto por questão
+            const newTimeLimit = updatedQuestions.length * 60;
+
+            console.log('[DELETE QUESTION] Removendo questão', questionIndex);
+            console.log('[DELETE QUESTION] Questões restantes:', updatedQuestions.length);
+            console.log('[DELETE QUESTION] Novo tempo limite:', newTimeLimit, 'segundos');
+
+            // Atualizar no backend
+            const result = await updateActivity(currentActivity.id, updatedContent, newTimeLimit);
+
+            if (result.success && result.activity) {
+                // Atualizar estados locais
+                setGeneratedQuiz(updatedContent);
+                setCurrentActivity(result.activity);
+
+                // Limpar respostas visíveis que foram afetadas
+                const newVisibleAnswers = new Set<number>();
+                visibleAnswers.forEach(idx => {
+                    if (idx < questionIndex) {
+                        newVisibleAnswers.add(idx);
+                    } else if (idx > questionIndex) {
+                        newVisibleAnswers.add(idx - 1);
+                    }
+                });
+                setVisibleAnswers(newVisibleAnswers);
+
+                console.log('[DELETE QUESTION] Questão excluída com sucesso');
+            } else {
+                if (Platform.OS === 'web') {
+                    window.alert('Erro: ' + (result.error || 'Não foi possível excluir a questão.'));
+                } else {
+                    Alert.alert('Erro', result.error || 'Não foi possível excluir a questão.');
+                }
+            }
+        } catch (error) {
+            console.error('[DELETE QUESTION] Erro ao excluir questão:', error);
+            if (Platform.OS === 'web') {
+                window.alert('Erro ao excluir questão.');
+            } else {
+                Alert.alert('Erro', 'Erro ao excluir questão.');
+            }
+        }
+    };
+
 
     // Criar Pergunta Aberta
     const handleCreateOpenQuestion = async (type: 'doubts' | 'feedback') => {
@@ -656,12 +738,21 @@ export default function TranscriptionScreen() {
 
                                         return (
                                             <View>
+                                                {/* Contador de questões */}
+                                                <View style={styles.questionCountBadge}>
+                                                    <MaterialIcons name="quiz" size={16} color="#8b5cf6" />
+                                                    <Text style={styles.questionCountText}>
+                                                        {questions.length} {questions.length === 1 ? 'questão' : 'questões'}
+                                                    </Text>
+                                                </View>
+
                                                 {questions.map((q: any, i: number) => (
                                                     <View key={i} style={styles.previewQuestionCard}>
                                                         <View style={styles.questionHeader}>
                                                             <Text style={styles.previewQuestionTitle}>
                                                                 {i + 1}. {q.question}
                                                             </Text>
+                                                            {/* Botão de visibilidade no header */}
                                                             <TouchableOpacity
                                                                 style={styles.individualAnswerButton}
                                                                 onPress={() => {
@@ -689,6 +780,17 @@ export default function TranscriptionScreen() {
                                                                 {String.fromCharCode(65 + idx)}) {opt}
                                                             </Text>
                                                         ))}
+                                                        {/* Botão de exclusão no canto inferior direito */}
+                                                        <TouchableOpacity
+                                                            style={styles.deleteQuestionButtonBottomRight}
+                                                            onPress={() => handleDeleteQuestion(i)}
+                                                        >
+                                                            <MaterialIcons
+                                                                name="delete"
+                                                                size={20}
+                                                                color="#ef4444"
+                                                            />
+                                                        </TouchableOpacity>
                                                     </View>
                                                 ))}
 
@@ -782,7 +884,7 @@ Pressione o botão do microfone para começar a falar."
                 <View style={styles.questionCountSelector}>
                     <Text style={styles.questionCountLabel}>Questões:</Text>
                     <View style={styles.questionCountOptions}>
-                        {[3, 5, 10].map((count) => (
+                        {[3, 5, 10, 15, 20].map((count) => (
                             <TouchableOpacity
                                 key={count}
                                 style={[
@@ -1762,6 +1864,7 @@ const styles = StyleSheet.create({
         padding: spacing.lg,
         borderRadius: borderRadius.lg,
         marginBottom: spacing.md,
+        position: 'relative',  // Para posicionar o botão de exclusão
     },
     questionHeader: {
         flexDirection: 'row',
@@ -1769,11 +1872,6 @@ const styles = StyleSheet.create({
         alignItems: 'flex-start',
         marginBottom: spacing.md,
         gap: spacing.sm,
-    },
-    individualAnswerButton: {
-        padding: spacing.sm,
-        borderRadius: borderRadius.lg,
-        backgroundColor: colors.zinc700,
     },
     previewQuestionTitle: {
         fontSize: typography.fontSize.base,
@@ -1805,6 +1903,47 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
         color: colors.white,
+    },
+    // Question counter badge
+    questionCountBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+        paddingVertical: spacing.xs,
+        paddingHorizontal: spacing.sm,
+        borderRadius: borderRadius.default,
+        marginBottom: spacing.md,
+        alignSelf: 'flex-start',
+    },
+    questionCountText: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: typography.fontWeight.medium,
+        color: '#8b5cf6',
+    },
+    // Question actions row (delete + visibility buttons)
+    questionActionsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+    },
+    deleteQuestionButton: {
+        padding: spacing.xs,
+        borderRadius: borderRadius.default,
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    },
+    deleteQuestionButtonBottomRight: {
+        position: 'absolute',
+        bottom: spacing.sm,
+        right: spacing.sm,
+        padding: spacing.sm,
+        borderRadius: borderRadius.default,
+        backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    },
+    individualAnswerButton: {
+        padding: spacing.xs,
+        borderRadius: borderRadius.default,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
     },
 
     listContainer: {
