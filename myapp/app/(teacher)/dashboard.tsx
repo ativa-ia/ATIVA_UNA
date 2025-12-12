@@ -80,8 +80,6 @@ export default function TeacherDashboardScreen() {
 
     const navItems: NavItem[] = [
         { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
-        { id: 'materials', label: 'Materiais', iconName: 'folder' },
-        { id: 'reports', label: 'Relatórios', iconName: 'assessment' },
     ];
 
     const handleNavPress = (id: string) => {
@@ -90,12 +88,6 @@ export default function TeacherDashboardScreen() {
         switch (id) {
             case 'dashboard':
                 // Already on dashboard
-                break;
-            case 'materials':
-                router.push('/(teacher)/materials');
-                break;
-            case 'reports':
-                router.push('/(teacher)/reports');
                 break;
         }
     };

@@ -1,11 +1,12 @@
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // URL da API (mude para seu IP local se testar em dispositivo físico)
 // Para desenvolvimento local, use localhost
-//export const API_URL = 'http://localhost:3000/api';
+export const API_URL = 'http://localhost:3000/api';
 
 // Para produção/Vercel, use:
-export const API_URL = 'https://ativa-ia-9rkb.vercel.app/api';
+//export const API_URL = 'https://ativa-ia-9rkb.vercel.app/api';
 
 export interface LoginData {
     email: string;
@@ -273,6 +274,88 @@ export const changePassword = async (data: ChangePasswordData): Promise<AuthResp
     return response.json();
 };
 
+
+// ========== AI CONTEXT API ==========
+
+export const uploadContextFile = async (subjectId: number, file: any) => {
+    try {
+        const formData = new FormData();
+
+        if (Platform.OS === 'web' && file.file) {
+            formData.append('file', file.file);
+        } else {
+            formData.append('file', {
+                uri: file.uri,
+                name: file.name,
+                type: file.mimeType || 'application/pdf'
+            } as any);
+        }
+
+        formData.append('subject_id', subjectId.toString());
+
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/ai/upload-context`, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Upload error:', error);
+        return { success: false, error: 'Erro no upload' };
+    }
+};
+
+// Gerar sugestões de perguntas baseadas no contexto (novo arquivo)
+export const generateSuggestions = async (subjectId: number) => {
+    const token = await AsyncStorage.getItem('authToken');
+    try {
+        const response = await fetch(`${API_URL}/ai/generate-suggestions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ subject_id: subjectId }),
+        });
+        return response.json();
+    } catch (error) {
+        return { success: false, error: 'Erro ao gerar sugestões' };
+    }
+};
+
+export const getContextFiles = async (subjectId: number) => {
+    const token = await AsyncStorage.getItem('authToken');
+    try {
+        const response = await fetch(`${API_URL}/ai/context-files/${subjectId}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+        return response.json();
+    } catch (error) {
+        return { success: false, error: 'Erro ao listar arquivos' };
+    }
+};
+
+export const deleteContextFile = async (fileId: number) => {
+    const token = await AsyncStorage.getItem('authToken');
+    try {
+        const response = await fetch(`${API_URL}/ai/context-files/${fileId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Erro detalhado ao deletar:', error);
+        return { success: false, error: 'Erro ao deletar arquivo' };
+    }
+};
+
 // ========== ENROLLMENTS API ==========
 
 export interface AutoEnrollResponse {
@@ -505,9 +588,10 @@ export interface LiveActivity {
     activity_type: 'quiz' | 'summary' | 'open_question';
     title: string;
     content: any;
-    ai_generated_content: string | null;
+    ai_generated_content?: string;
     shared_with_students: boolean;
     status: 'waiting' | 'active' | 'ended';
+    subject_name?: string;
     time_limit: number;
     time_remaining: number | null;
     starts_at: string | null;
@@ -525,6 +609,7 @@ export interface LiveActivityResponse {
     score: number;
     total: number;
     percentage: number;
+    points?: number; // Pontos gamificados
     submitted_at: string;
 }
 
@@ -536,13 +621,14 @@ export interface RankingData {
     response_rate: number;
     ranking: Array<{
         position: number;
-        student_id: number;
+        student_id?: number;
         student_name: string;
         score: number;
-        total: number;
+        total?: number;
+        points: number; // Pontos gamificados
         percentage: number;
-        is_correct: boolean;
-        submitted_at: string;
+        is_correct?: boolean;
+        submitted_at?: string;
     }>;
 }
 
@@ -636,7 +722,7 @@ export const endTranscriptionSession = async (sessionId: number): Promise<{ succ
 };
 
 // Gerar Quiz via IA
-export const generateQuiz = async (sessionId: number, numQuestions: number = 5): Promise<{ success: boolean; activity?: LiveActivity; checkpoint?: TranscriptionCheckpoint; error?: string }> => {
+export const generateQuiz = async (sessionId: number, numQuestions: number = 5, timeLimit?: number): Promise<{ success: boolean; activity?: LiveActivity; checkpoint?: TranscriptionCheckpoint; error?: string }> => {
     const token = await AsyncStorage.getItem('authToken');
 
     const response = await fetch(`${API_URL}/transcription/sessions/${sessionId}/generate-quiz`, {
@@ -645,7 +731,10 @@ export const generateQuiz = async (sessionId: number, numQuestions: number = 5):
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ num_questions: numQuestions }),
+        body: JSON.stringify({
+            num_questions: numQuestions,
+            time_limit: timeLimit || numQuestions * 60  // Default: 1 minute per question
+        }),
     });
 
     return response.json();
@@ -713,6 +802,26 @@ export const shareSummary = async (activityId: number): Promise<{ success: boole
     return response.json();
 };
 
+// Atualizar atividade (ex: remover questões do quiz)
+export const updateActivity = async (activityId: number, content: any, timeLimit?: number): Promise<{ success: boolean; activity: LiveActivity; error?: string }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/activities/${activityId}/update`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+            content,
+            time_limit: timeLimit
+        }),
+    });
+
+    return response.json();
+};
+
+
 // Encerrar atividade
 export const endActivity = async (activityId: number): Promise<{ success: boolean; activity: LiveActivity }> => {
     const token = await AsyncStorage.getItem('authToken');
@@ -753,20 +862,44 @@ export const getActiveActivity = async (subjectId: number): Promise<{ success: b
     return response.json();
 };
 
-// Aluno: enviar resposta
-export const submitActivityResponse = async (activityId: number, data: { answers?: Record<string, number>; text?: string }): Promise<{ success: boolean; result: LiveActivityResponse }> => {
-    const token = await AsyncStorage.getItem('authToken');
+// Aluno:// Local cache for submitted activities to ensure instant UI updates
+export const submittedActivities = new Set<number>();
 
-    const response = await fetch(`${API_URL}/transcription/activities/${activityId}/respond`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(data),
-    });
+export const markActivityAsSubmitted = (activityId: number) => {
+    submittedActivities.add(activityId);
+};
 
-    return response.json();
+export const isActivitySubmitted = (activityId: number) => {
+    return submittedActivities.has(activityId);
+};
+
+/**
+ * Envia resposta para uma atividade
+ */
+export const submitActivityResponse = async (activityId: number, data: any): Promise<{ success: boolean; result?: any; error?: string }> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        // Correct URL with /transcription prefix
+        const response = await fetch(`${API_URL}/transcription/activities/${activityId}/respond`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            markActivityAsSubmitted(activityId);
+        }
+
+        return result;
+    } catch (error) {
+        console.error('Error submitting response:', error);
+        return { success: false, error: 'Erro de conexão' };
+    }
 };
 
 // Listar sessões de uma disciplina
@@ -782,5 +915,32 @@ export const getTranscriptionSessions = async (subjectId: number): Promise<{ suc
     return response.json();
 };
 
+// Obter relatório de atividade (paridade com Quiz)
+export const getLiveActivityReport = async (activityId: number): Promise<{ success: boolean; report?: any; error?: string }> => {
+    const token = await AsyncStorage.getItem('authToken');
 
+    const response = await fetch(`${API_URL}/transcription/activities/${activityId}/report`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
 
+    return response.json();
+};
+
+// Exportar relatório de atividade em PDF
+export const exportActivityPDF = async (activityId: number): Promise<Blob> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/activities/${activityId}/export-pdf`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to export PDF');
+    }
+
+    return response.blob();
+};

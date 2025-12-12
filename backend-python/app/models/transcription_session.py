@@ -213,7 +213,7 @@ class LiveActivityResponse(db.Model):
     student = db.relationship('User', backref='live_activity_responses', lazy=True)
     
     def calculate_quiz_score(self):
-        """Calcula pontuação para quiz"""
+        """Calcula pontuação básica para quiz"""
         activity = LiveActivity.query.get(self.activity_id)
         if not activity or activity.activity_type != 'quiz':
             return
@@ -233,6 +233,7 @@ class LiveActivityResponse(db.Model):
         self.total = total_questions
         self.percentage = (correct_count / total_questions * 100) if total_questions > 0 else 0
         self.is_correct = correct_count == total_questions
+        
         db.session.commit()
     
     def to_dict(self):

@@ -23,22 +23,32 @@ import { spacing, borderRadius } from '@/constants/spacing';
 import {
     createTranscriptionSession,
     updateTranscription,
+    shareSummary,
+    getTranscriptionSession,
+    getActivityRanking,
+    TranscriptionSession,
+    LiveActivity,
+    resumeSession,
+    endTranscriptionSession,
     generateQuiz,
     generateSummary,
     createOpenQuestion,
     broadcastActivity,
-    shareSummary,
     endActivity,
-    resumeSession,
-    getActivityRanking,
-    TranscriptionSession,
-    LiveActivity,
+    exportActivityPDF,
+    updateActivity,
 } from '@/services/api';
+import RaceVisualization from '@/components/quiz/RaceVisualization';
+import PodiumDisplay from '@/components/quiz/PodiumDisplay';
+// import { useAuth } from '@/context/AuthContext'; // Ajuste o caminho se necessário
+import { useRouter } from 'expo-router';
 
 /**
  * TranscriptionScreen - Tela de transcrição com sessões persistentes e atividades
  */
 export default function TranscriptionScreen() {
+    const router = useRouter();
+    // const { user } = useAuth(); // Se precisar do user
     const insets = useSafeAreaInsets();
     const params = useLocalSearchParams();
     const subjectId = parseInt(params.subjectId as string) || 1;
@@ -61,7 +71,10 @@ export default function TranscriptionScreen() {
     const [currentActivity, setCurrentActivity] = useState<LiveActivity | null>(null);
     const [showRankingModal, setShowRankingModal] = useState(false);
     const [ranking, setRanking] = useState<any[]>([]);
-    const [showQuizOptions, setShowQuizOptions] = useState(false); // Submenu de quiz
+    const [showPodium, setShowPodium] = useState(false); // Controla exibição do pódio
+    const [showAnswerKey, setShowAnswerKey] = useState(false); // Controla exibição do gabarito
+    const [visibleAnswers, setVisibleAnswers] = useState<Set<number>>(new Set()); // Controla quais questões mostram resposta
+    const [numQuestions, setNumQuestions] = useState(5); // Quantidade de questões do quiz
 
     // Estado do conteúdo gerado (exibido no painel esquerdo)
     const [generatedSummary, setGeneratedSummary] = useState<string | null>(null);
@@ -306,6 +319,11 @@ export default function TranscriptionScreen() {
         console.log('[QUIZ] Session ID:', session.id);
         console.log('[QUIZ] Texto transcrito:', transcribedText.substring(0, 100), '...');
         console.log('[QUIZ] Comprimento do texto:', transcribedText.length, 'caracteres');
+        console.log('[QUIZ] Número de questões:', numQuestions);
+
+        // Calcular tempo: 1 minuto (60 segundos) por questão
+        const timeLimit = numQuestions * 60;
+        console.log('[QUIZ] Tempo limite:', timeLimit, 'segundos (', numQuestions, 'minutos)');
 
         setIsGenerating(true);
         setDisplayMode('quiz');
@@ -317,15 +335,16 @@ export default function TranscriptionScreen() {
             console.log('[QUIZ] Transcrição salva.');
 
             console.log('[QUIZ] Chamando API generateQuiz...');
-            const result = await generateQuiz(session.id, numQuestions);
+            const result = await generateQuiz(session.id, numQuestions, timeLimit);
             console.log('[QUIZ] Resposta da API:', JSON.stringify(result, null, 2));
 
             if (result.success && result.activity) {
                 console.log('[QUIZ] Quiz gerado com sucesso! ID:', result.activity.id);
                 console.log('[QUIZ] Perguntas:', result.activity.content?.questions?.length || 0);
+                console.log('[QUIZ] Tempo limite:', result.activity.time_limit, 'segundos');
                 setCurrentActivity(result.activity);
-                // Backend agora retorna { text: "..." } ou o conteúdo direto em ai_generated_content
-                const quizContent = result.activity.content?.text || result.activity.ai_generated_content || '';
+                // Backend agora retorna o conteúdo estruturado em 'content'
+                const quizContent = result.activity.content || result.activity.ai_generated_content || '';
                 setGeneratedQuiz(quizContent);
                 console.log('Quiz gerado:', quizContent);
             } else {
@@ -377,6 +396,81 @@ export default function TranscriptionScreen() {
         }
         setIsGenerating(false);
     };
+
+    // Excluir questão do quiz
+    const handleDeleteQuestion = async (questionIndex: number) => {
+        if (!currentActivity || !generatedQuiz) return;
+
+        try {
+            // Parsear conteúdo atual
+            const content = typeof generatedQuiz === 'string'
+                ? JSON.parse(generatedQuiz)
+                : generatedQuiz;
+
+            const questions = content.questions || [];
+
+            // Validar: não pode excluir se só tiver 1 questão
+            if (questions.length <= 1) {
+                if (Platform.OS === 'web') {
+                    window.alert('Não é possível excluir. Mantenha pelo menos 1 questão no quiz.');
+                } else {
+                    Alert.alert(
+                        'Não é possível excluir',
+                        'Mantenha pelo menos 1 questão no quiz.'
+                    );
+                }
+                return;
+            }
+
+            // Remover questão do array (sem confirmação)
+
+            const updatedQuestions = questions.filter((_: any, i: number) => i !== questionIndex);
+            const updatedContent = { ...content, questions: updatedQuestions };
+
+            // Recalcular tempo: 1 minuto por questão
+            const newTimeLimit = updatedQuestions.length * 60;
+
+            console.log('[DELETE QUESTION] Removendo questão', questionIndex);
+            console.log('[DELETE QUESTION] Questões restantes:', updatedQuestions.length);
+            console.log('[DELETE QUESTION] Novo tempo limite:', newTimeLimit, 'segundos');
+
+            // Atualizar no backend
+            const result = await updateActivity(currentActivity.id, updatedContent, newTimeLimit);
+
+            if (result.success && result.activity) {
+                // Atualizar estados locais
+                setGeneratedQuiz(updatedContent);
+                setCurrentActivity(result.activity);
+
+                // Limpar respostas visíveis que foram afetadas
+                const newVisibleAnswers = new Set<number>();
+                visibleAnswers.forEach(idx => {
+                    if (idx < questionIndex) {
+                        newVisibleAnswers.add(idx);
+                    } else if (idx > questionIndex) {
+                        newVisibleAnswers.add(idx - 1);
+                    }
+                });
+                setVisibleAnswers(newVisibleAnswers);
+
+                console.log('[DELETE QUESTION] Questão excluída com sucesso');
+            } else {
+                if (Platform.OS === 'web') {
+                    window.alert('Erro: ' + (result.error || 'Não foi possível excluir a questão.'));
+                } else {
+                    Alert.alert('Erro', result.error || 'Não foi possível excluir a questão.');
+                }
+            }
+        } catch (error) {
+            console.error('[DELETE QUESTION] Erro ao excluir questão:', error);
+            if (Platform.OS === 'web') {
+                window.alert('Erro ao excluir questão.');
+            } else {
+                Alert.alert('Erro', 'Erro ao excluir questão.');
+            }
+        }
+    };
+
 
     // Criar Pergunta Aberta
     const handleCreateOpenQuestion = async (type: 'doubts' | 'feedback') => {
@@ -456,18 +550,46 @@ export default function TranscriptionScreen() {
     // Encerrar atividade
     const handleEndActivity = async () => {
         if (!currentActivity) return;
-        try {
-            if (rankingIntervalRef.current) clearInterval(rankingIntervalRef.current);
-            await endActivity(currentActivity.id);
-            setShowRankingModal(false);
-            setCurrentActivity(null);
-            // Retomar sessão
-            if (session) {
-                await resumeSession(session.id);
+
+        // Se já está mostrando o pódio, fechar tudo
+        if (showPodium) {
+            try {
+                const activityId = currentActivity.id;
+                if (rankingIntervalRef.current) clearInterval(rankingIntervalRef.current);
+                await endActivity(activityId);
+                setShowRankingModal(false);
+                setCurrentActivity(null);
+                setShowPodium(false);
+
+                // Retomar sessão
+                if (session) {
+                    await resumeSession(session.id);
+                }
+            } catch (error) {
+                console.error('Erro ao encerrar:', error);
             }
-            Alert.alert('Atividade Encerrada', 'Você pode continuar a transcrição.');
-        } catch (error) {
-            Alert.alert('Erro', 'Erro ao encerrar atividade.');
+            return;
+        }
+
+        // Primeira vez: mostrar pódio se houver pelo menos 1 resposta
+        const submittedCount = ranking.filter((r: any) => r.status === 'submitted').length;
+        if (submittedCount >= 1) {
+            setShowPodium(true);
+        } else {
+            // Se não houver respostas, encerrar direto
+            try {
+                const activityId = currentActivity.id;
+                if (rankingIntervalRef.current) clearInterval(rankingIntervalRef.current);
+                await endActivity(activityId);
+                setShowRankingModal(false);
+                setCurrentActivity(null);
+
+                if (session) {
+                    await resumeSession(session.id);
+                }
+            } catch (error) {
+                console.error('Erro ao encerrar:', error);
+            }
         }
     };
 
@@ -493,6 +615,34 @@ export default function TranscriptionScreen() {
         if (session) {
             await resumeSession(session.id);
         }
+    };
+
+    // Exportar PDF do ranking
+    const [isExportingPDF, setIsExportingPDF] = useState(false);
+
+    const handleExportPDF = async () => {
+        if (!currentActivity) return;
+
+        setIsExportingPDF(true);
+        try {
+            const blob = await exportActivityPDF(currentActivity.id);
+
+            // Criar URL do blob e fazer download
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `relatorio_atividade_${currentActivity.id}_${new Date().toISOString().slice(0, 10)}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+
+            Alert.alert('Sucesso', 'Relatório PDF exportado com sucesso!');
+        } catch (error) {
+            console.error('Erro ao exportar PDF:', error);
+            Alert.alert('Erro', 'Não foi possível exportar o relatório em PDF.');
+        }
+        setIsExportingPDF(false);
     };
 
     const wordCount = transcribedText.split(/\s+/).filter(w => w).length;
@@ -570,19 +720,109 @@ export default function TranscriptionScreen() {
                         ) : displayMode === 'summary' && generatedSummary ? (
                             <View style={styles.summaryContent}>
                                 <Text style={styles.generatedText}>{generatedSummary}</Text>
-                                {currentActivity && (
-                                    <TouchableOpacity
-                                        style={styles.sendButton}
-                                        onPress={() => shareSummary(currentActivity.id)}
-                                    >
-                                        <MaterialIcons name="send" size={18} color={colors.white} />
-                                        <Text style={styles.sendButtonText}>Enviar para Alunos</Text>
-                                    </TouchableOpacity>
-                                )}
                             </View>
                         ) : displayMode === 'quiz' && generatedQuiz ? (
                             <View style={styles.quizContent}>
-                                <Text style={styles.generatedText}>{generatedQuiz}</Text>
+                                {(() => {
+                                    try {
+                                        // Tentar parsear se for string, ou usar direto se já for objeto
+                                        const content = typeof generatedQuiz === 'string'
+                                            ? JSON.parse(generatedQuiz)
+                                            : generatedQuiz;
+
+                                        const questions = content.questions || [];
+
+                                        if (!questions.length) {
+                                            return <Text style={styles.generatedText}>{typeof generatedQuiz === 'string' ? generatedQuiz : JSON.stringify(generatedQuiz)}</Text>;
+                                        }
+
+                                        return (
+                                            <View>
+                                                {/* Contador de questões */}
+                                                <View style={styles.questionCountBadge}>
+                                                    <MaterialIcons name="quiz" size={16} color="#8b5cf6" />
+                                                    <Text style={styles.questionCountText}>
+                                                        {questions.length} {questions.length === 1 ? 'questão' : 'questões'}
+                                                    </Text>
+                                                </View>
+
+                                                {questions.map((q: any, i: number) => (
+                                                    <View key={i} style={styles.previewQuestionCard}>
+                                                        <View style={styles.questionHeader}>
+                                                            <Text style={styles.previewQuestionTitle}>
+                                                                {i + 1}. {q.question}
+                                                            </Text>
+                                                            {/* Botão de visibilidade no header */}
+                                                            <TouchableOpacity
+                                                                style={styles.individualAnswerButton}
+                                                                onPress={() => {
+                                                                    const newVisible = new Set(visibleAnswers);
+                                                                    if (newVisible.has(i)) {
+                                                                        newVisible.delete(i);
+                                                                    } else {
+                                                                        newVisible.add(i);
+                                                                    }
+                                                                    setVisibleAnswers(newVisible);
+                                                                }}
+                                                            >
+                                                                <MaterialIcons
+                                                                    name={visibleAnswers.has(i) ? 'visibility-off' : 'visibility'}
+                                                                    size={18}
+                                                                    color={visibleAnswers.has(i) ? '#22c55e' : colors.zinc400}
+                                                                />
+                                                            </TouchableOpacity>
+                                                        </View>
+                                                        {q.options?.map((opt: string, idx: number) => (
+                                                            <Text key={idx} style={[
+                                                                styles.previewOption,
+                                                                (showAnswerKey || visibleAnswers.has(i)) && idx === q.correct && styles.previewCorrectOption
+                                                            ]}>
+                                                                {String.fromCharCode(65 + idx)}) {opt}
+                                                            </Text>
+                                                        ))}
+                                                        {/* Botão de exclusão no canto inferior direito */}
+                                                        <TouchableOpacity
+                                                            style={styles.deleteQuestionButtonBottomRight}
+                                                            onPress={() => handleDeleteQuestion(i)}
+                                                        >
+                                                            <MaterialIcons
+                                                                name="delete"
+                                                                size={20}
+                                                                color="#ef4444"
+                                                            />
+                                                        </TouchableOpacity>
+                                                    </View>
+                                                ))}
+
+                                                {/* Botão para mostrar/ocultar TODAS as respostas */}
+                                                <TouchableOpacity
+                                                    style={styles.toggleAnswerKeyButton}
+                                                    onPress={() => {
+                                                        const newState = !showAnswerKey;
+                                                        setShowAnswerKey(newState);
+                                                        // Se estiver mostrando todas, limpar individuais
+                                                        if (newState) {
+                                                            setVisibleAnswers(new Set());
+                                                        }
+                                                    }}
+                                                >
+                                                    <MaterialIcons
+                                                        name={showAnswerKey ? 'visibility-off' : 'visibility'}
+                                                        size={20}
+                                                        color={colors.white}
+                                                    />
+                                                    <Text style={styles.toggleAnswerKeyText}>
+                                                        {showAnswerKey ? 'Ocultar Todas' : 'Mostrar Todas'}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            </View>
+                                        );
+                                    } catch (e) {
+                                        // Fallback para texto simples se não for JSON válido
+                                        return <Text style={styles.generatedText}>{String(generatedQuiz)}</Text>;
+                                    }
+                                })()}
+
                                 {currentActivity && (
                                     <TouchableOpacity
                                         style={styles.sendButton}
@@ -640,6 +880,30 @@ Pressione o botão do microfone para começar a falar."
 
             {/* Footer */}
             <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
+                {/* Seletor de Quantidade de Questões */}
+                <View style={styles.questionCountSelector}>
+                    <Text style={styles.questionCountLabel}>Questões:</Text>
+                    <View style={styles.questionCountOptions}>
+                        {[3, 5, 10, 15, 20].map((count) => (
+                            <TouchableOpacity
+                                key={count}
+                                style={[
+                                    styles.questionCountOption,
+                                    numQuestions === count && styles.questionCountOptionActive
+                                ]}
+                                onPress={() => setNumQuestions(count)}
+                            >
+                                <Text style={[
+                                    styles.questionCountOptionText,
+                                    numQuestions === count && styles.questionCountOptionTextActive
+                                ]}>
+                                    {count}
+                                </Text>
+                            </TouchableOpacity>
+                        ))}
+                    </View>
+                </View>
+
                 <View style={styles.footerButtons}>
                     {/* Botão de Resumo */}
                     <TouchableOpacity
@@ -677,15 +941,14 @@ Pressione o botão do microfone para começar a falar."
                         </TouchableOpacity>
                     </Animated.View>
 
-                    {/* Botão de Quiz */}
                     <TouchableOpacity
                         style={styles.quizButton}
-                        onPress={() => handleGenerateQuiz(5)}
+                        onPress={() => handleGenerateQuiz(numQuestions)}
                         activeOpacity={0.8}
                         disabled={isGenerating}
                     >
                         <LinearGradient
-                            colors={['#8b5cf6', '#a855f7']}
+                            colors={['#f59e0b', '#d97706']}
                             style={styles.quizButtonGradient}
                         >
                             <MaterialIcons name="quiz" size={24} color={colors.white} />
@@ -699,211 +962,100 @@ Pressione o botão do microfone para começar a falar."
                 </Text>
             </View>
 
-            {/* Modal de Atividades */}
-            <Modal
-                visible={showActivityModal}
-                transparent
-                animationType="slide"
-                onRequestClose={() => setShowActivityModal(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Criar Atividade</Text>
-                        <Text style={styles.modalSubtitle}>Escolha o tipo de atividade para os alunos</Text>
 
-                        {isGenerating ? (
-                            <View style={styles.generatingContainer}>
-                                <ActivityIndicator size="large" color={colors.primary} />
-                                <Text style={styles.generatingText}>Gerando com IA...</Text>
-                            </View>
-                        ) : showQuizOptions ? (
-                            /* Submenu de opções do Quiz */
-                            <>
-                                <Text style={styles.quizOptionsTitle}>Quantas perguntas?</Text>
-
-                                <TouchableOpacity
-                                    style={styles.quizOptionButton}
-                                    onPress={() => { setShowQuizOptions(false); handleGenerateQuiz(3); }}
-                                >
-                                    <Text style={styles.quizOptionText}>3 Perguntas</Text>
-                                    <Text style={styles.quizOptionDesc}>Quiz rápido</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={styles.quizOptionButton}
-                                    onPress={() => { setShowQuizOptions(false); handleGenerateQuiz(5); }}
-                                >
-                                    <Text style={styles.quizOptionText}>5 Perguntas</Text>
-                                    <Text style={styles.quizOptionDesc}>Padrão</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={styles.quizOptionButton}
-                                    onPress={() => { setShowQuizOptions(false); handleGenerateQuiz(10); }}
-                                >
-                                    <Text style={styles.quizOptionText}>10 Perguntas</Text>
-                                    <Text style={styles.quizOptionDesc}>Quiz completo</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={styles.backButton}
-                                    onPress={() => setShowQuizOptions(false)}
-                                >
-                                    <Text style={styles.backButtonText}>← Voltar</Text>
-                                </TouchableOpacity>
-                            </>
-                        ) : (
-                            <>
-                                {/* Quiz */}
-                                <TouchableOpacity
-                                    style={styles.activityOption}
-                                    onPress={() => setShowQuizOptions(true)}
-                                >
-                                    <View style={[styles.activityIcon, { backgroundColor: '#8b5cf6' }]}>
-                                        <MaterialIcons name="quiz" size={24} color={colors.white} />
-                                    </View>
-                                    <View style={styles.activityInfo}>
-                                        <Text style={styles.activityName}>Quiz Rápido</Text>
-                                        <Text style={styles.activityDesc}>IA gera perguntas da aula</Text>
-                                    </View>
-                                    <MaterialIcons name="chevron-right" size={24} color={colors.zinc500} />
-                                </TouchableOpacity>
-
-                                {/* Resumo */}
-                                <TouchableOpacity
-                                    style={styles.activityOption}
-                                    onPress={handleGenerateSummary}
-                                >
-                                    <View style={[styles.activityIcon, { backgroundColor: '#22c55e' }]}>
-                                        <MaterialIcons name="summarize" size={24} color={colors.white} />
-                                    </View>
-                                    <View style={styles.activityInfo}>
-                                        <Text style={styles.activityName}>Resumo da Aula</Text>
-                                        <Text style={styles.activityDesc}>IA resume o conteúdo</Text>
-                                    </View>
-                                    <MaterialIcons name="chevron-right" size={24} color={colors.zinc500} />
-                                </TouchableOpacity>
-
-                                {/* Pergunta - Dúvidas */}
-                                <TouchableOpacity
-                                    style={styles.activityOption}
-                                    onPress={() => handleCreateOpenQuestion('doubts')}
-                                >
-                                    <View style={[styles.activityIcon, { backgroundColor: '#3b82f6' }]}>
-                                        <MaterialIcons name="help-outline" size={24} color={colors.white} />
-                                    </View>
-                                    <View style={styles.activityInfo}>
-                                        <Text style={styles.activityName}>Coletar Dúvidas</Text>
-                                        <Text style={styles.activityDesc}>"Qual sua maior dúvida?"</Text>
-                                    </View>
-                                    <MaterialIcons name="chevron-right" size={24} color={colors.zinc500} />
-                                </TouchableOpacity>
-
-                                {/* Pergunta - Feedback */}
-                                <TouchableOpacity
-                                    style={styles.activityOption}
-                                    onPress={() => handleCreateOpenQuestion('feedback')}
-                                >
-                                    <View style={[styles.activityIcon, { backgroundColor: '#ec4899' }]}>
-                                        <MaterialIcons name="rate-review" size={24} color={colors.white} />
-                                    </View>
-                                    <View style={styles.activityInfo}>
-                                        <Text style={styles.activityName}>Feedback da Aula</Text>
-                                        <Text style={styles.activityDesc}>"O que poderia melhorar?"</Text>
-                                    </View>
-                                    <MaterialIcons name="chevron-right" size={24} color={colors.zinc500} />
-                                </TouchableOpacity>
-                            </>
-                        )}
-
-                        <TouchableOpacity
-                            style={styles.cancelButton}
-                            onPress={() => setShowActivityModal(false)}
-                        >
-                            <Text style={styles.cancelButtonText}>Cancelar</Text>
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
-
-            {/* Modal de Resumo */}
-            <Modal
-                visible={showSummaryModal}
-                transparent
-                animationType="slide"
-                onRequestClose={handleCloseSummary}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.summaryModalContent}>
-                        <Text style={styles.modalTitle}>Resumo Gerado</Text>
-
-                        <ScrollView style={styles.summaryScroll}>
-                            <Text style={styles.summaryText}>{generatedSummary}</Text>
-                        </ScrollView>
-
-                        <View style={styles.summaryButtons}>
-                            <TouchableOpacity
-                                style={styles.secondaryButton}
-                                onPress={handleCloseSummary}
-                            >
-                                <Text style={styles.secondaryButtonText}>Apenas Visualizar</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={styles.primaryButton}
-                                onPress={handleShareSummary}
-                            >
-                                <MaterialIcons name="send" size={18} color={colors.white} />
-                                <Text style={styles.primaryButtonText}>Enviar para Alunos</Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
-
-            {/* Modal de Ranking */}
+            {/* Modal de Ranking - COM GAMIFICAÇÃO */}
             <Modal
                 visible={showRankingModal}
                 transparent
                 animationType="slide"
                 onRequestClose={handleEndActivity}
             >
-                <View style={styles.modalOverlay}>
+                <View style={styles.modalOverlayFullScreen}>
                     <View style={styles.rankingModalContent}>
-                        <Text style={styles.modalTitle}>📊 Ranking em Tempo Real</Text>
+                        {/* Header */}
+                        <View style={styles.rankingHeader}>
+                            <Text style={styles.modalTitle}>
+                                {currentActivity?.status === 'ended' ? '🏆 Pódio Final' : '🏁 Ranking ao Vivo'}
+                            </Text>
+                            <TouchableOpacity onPress={handleEndActivity} style={styles.closeIconButton}>
+                                <MaterialIcons name="close" size={24} color={colors.white} />
+                            </TouchableOpacity>
+                        </View>
 
-                        <ScrollView style={styles.rankingScroll}>
-                            {ranking.length === 0 ? (
-                                <View style={styles.waitingContainer}>
-                                    <ActivityIndicator size="large" color={colors.primary} />
-                                    <Text style={styles.waitingText}>Aguardando respostas...</Text>
-                                </View>
+                        {/* Conteúdo com Gamificação */}
+                        <View style={styles.gamificationContent}>
+                            {showPodium && ranking.filter((r: any) => r.status === 'submitted').length >= 1 ? (
+                                // Pódio quando encerrado (funciona com 1, 2 ou 3+ alunos)
+                                <PodiumDisplay
+                                    topStudents={ranking
+                                        .filter((r: any) => r.status === 'submitted')
+                                        .slice(0, 3)
+                                        .map((student: any, index: number) => ({
+                                            position: index + 1,
+                                            student_name: student.student_name,
+                                            points: student.points || (student.score * 100),
+                                            percentage: student.percentage || 0,
+                                            score: student.score || 0,
+                                            total: student.total || 0,
+                                        }))
+                                    }
+                                />
+                            ) : ranking.length > 0 ? (
+                                // Visualização de corrida em tempo real
+                                <RaceVisualization
+                                    ranking={ranking
+                                        .filter((r: any) => r.status === 'submitted')
+                                        .map((student: any, index: number) => ({
+                                            position: index + 1,
+                                            student_id: student.student_id,
+                                            student_name: student.student_name,
+                                            points: student.points || (student.score * 100),
+                                            score: student.score || 0,
+                                            total: student.total || 0,
+                                            percentage: student.percentage || 0,
+                                            time_taken: student.time_taken || 0,
+                                        }))
+                                    }
+                                    enrolledCount={ranking.length}
+                                />
                             ) : (
-                                ranking.map((item, index) => (
-                                    <View key={item.student_id} style={styles.rankingItem}>
-                                        <Text style={styles.rankingPosition}>#{item.position}</Text>
-                                        <View style={styles.rankingInfo}>
-                                            <Text style={styles.rankingName}>{item.student_name}</Text>
-                                            <Text style={styles.rankingScore}>
-                                                {item.score}/{item.total} ({item.percentage.toFixed(0)}%)
-                                            </Text>
-                                        </View>
-                                        <MaterialIcons
-                                            name={item.is_correct ? "check-circle" : "cancel"}
-                                            size={24}
-                                            color={item.is_correct ? "#22c55e" : "#ef4444"}
-                                        />
-                                    </View>
-                                ))
+                                <View style={styles.emptyStateRanking}>
+                                    <ActivityIndicator size="large" color="#8b5cf6" />
+                                    <Text style={styles.emptyText}>Aguardando respostas...</Text>
+                                </View>
                             )}
-                        </ScrollView>
+                        </View>
 
-                        <TouchableOpacity
-                            style={styles.endActivityButton}
-                            onPress={handleEndActivity}
-                        >
-                            <Text style={styles.endActivityButtonText}>Encerrar e Voltar à Transcrição</Text>
-                        </TouchableOpacity>
+                        {/* Botões - lado a lado */}
+                        <View style={styles.modalButtonsRow}>
+                            {/* Botão Exportar PDF - apenas quando pódio estiver visível */}
+                            {showPodium && (
+                                <TouchableOpacity
+                                    style={[styles.exportPdfButton, styles.buttonHalf]}
+                                    onPress={handleExportPDF}
+                                    disabled={isExportingPDF}
+                                >
+                                    {isExportingPDF ? (
+                                        <ActivityIndicator size="small" color={colors.white} />
+                                    ) : (
+                                        <MaterialIcons name="picture-as-pdf" size={20} color={colors.white} />
+                                    )}
+                                    <Text style={styles.exportPdfButtonText}>
+                                        {isExportingPDF ? 'Gerando...' : 'Exportar PDF'}
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
+
+                            {/* Botão Encerrar/Fechar */}
+                            <TouchableOpacity
+                                style={[styles.closeButton, showPodium && styles.buttonHalf]}
+                                onPress={handleEndActivity}
+                            >
+                                <Text style={styles.closeButtonText}>
+                                    {showPodium ? 'Fechar' : 'Encerrar e Ver Pódio'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
             </Modal>
@@ -1170,11 +1322,6 @@ const styles = StyleSheet.create({
         gap: spacing.lg,
     },
     recordButton: {
-        shadowColor: '#8b5cf6',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.4,
-        shadowRadius: 12,
-        elevation: 8,
     },
     recordButtonActive: {
         shadowColor: '#ef4444',
@@ -1187,11 +1334,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     summaryButton: {
-        shadowColor: '#22c55e',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 6,
     },
     summaryButtonGradient: {
         width: 60,
@@ -1202,11 +1344,6 @@ const styles = StyleSheet.create({
         gap: 2,
     },
     quizButton: {
-        shadowColor: '#8b5cf6',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 6,
     },
     quizButtonGradient: {
         width: 60,
@@ -1221,6 +1358,45 @@ const styles = StyleSheet.create({
         fontWeight: typography.fontWeight.semibold,
         color: colors.white,
         marginTop: -2,
+    },
+    questionCountSelector: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: spacing.lg,
+        paddingBottom: spacing.md,
+        gap: spacing.md,
+    },
+    questionCountLabel: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: typography.fontWeight.semibold,
+        color: colors.white,
+    },
+    questionCountOptions: {
+        flexDirection: 'row',
+        gap: spacing.sm,
+    },
+    questionCountOption: {
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+        borderRadius: borderRadius.lg,
+        backgroundColor: colors.zinc800,
+        borderWidth: 2,
+        borderColor: colors.zinc700,
+        minWidth: 40,
+        alignItems: 'center',
+    },
+    questionCountOptionActive: {
+        backgroundColor: '#8b5cf6',
+        borderColor: '#a855f7',
+    },
+    questionCountOptionText: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: typography.fontWeight.semibold,
+        color: colors.zinc400,
+    },
+    questionCountOptionTextActive: {
+        color: colors.white,
     },
     activityButton: {
         shadowColor: '#f59e0b',
@@ -1244,8 +1420,21 @@ const styles = StyleSheet.create({
     // Modal styles
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
         justifyContent: 'flex-end',
+    },
+    modalOverlayFullScreen: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.95)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    closeIconButton: {
+        padding: spacing.sm,
+    },
+    gamificationContent: {
+        padding: spacing.lg,
+        maxHeight: '75%',
     },
     modalContent: {
         backgroundColor: colors.zinc900,
@@ -1361,26 +1550,32 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.semibold,
     },
-    // Ranking Modal
+    // Ranking Modal - Premium Dark Theme with Primary Accents
     rankingModalContent: {
-        backgroundColor: colors.zinc900,
-        borderTopLeftRadius: borderRadius.xl,
-        borderTopRightRadius: borderRadius.xl,
+        backgroundColor: colors.backgroundDark,
+        borderRadius: borderRadius.xl,
         padding: spacing.lg,
-        maxHeight: '70%',
+        width: '95%',
+        height: '90%',
+        borderWidth: 3,
+        borderColor: colors.primary,
     },
     rankingScroll: {
-        maxHeight: 350,
+        maxHeight: 400,
         marginVertical: spacing.md,
     },
     waitingContainer: {
         alignItems: 'center',
         paddingVertical: spacing.xl,
+        backgroundColor: 'rgba(19, 91, 236, 0.05)',
+        borderRadius: borderRadius.lg,
+        marginTop: spacing.md,
     },
     waitingText: {
         marginTop: spacing.md,
-        color: colors.zinc400,
-        fontSize: typography.fontSize.base,
+        color: colors.white,
+        fontSize: typography.fontSize.lg,
+        fontWeight: 'bold',
     },
     rankingItem: {
         flexDirection: 'row',
@@ -1390,21 +1585,21 @@ const styles = StyleSheet.create({
         padding: spacing.md,
         marginBottom: spacing.sm,
     },
-    rankingPosition: {
+    rankingPositionOld: {
         fontSize: typography.fontSize.lg,
         fontWeight: typography.fontWeight.bold,
         color: '#f59e0b',
         width: 40,
     },
-    rankingInfo: {
+    rankingInfoOld: {
         flex: 1,
     },
-    rankingName: {
+    rankingNameOld: {
         fontSize: typography.fontSize.base,
         color: colors.white,
         fontWeight: typography.fontWeight.medium,
     },
-    rankingScore: {
+    rankingScoreOld: {
         fontSize: typography.fontSize.sm,
         color: colors.zinc400,
     },
@@ -1419,34 +1614,355 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
     },
-    // Estilos para submenu de quiz
-    quizOptionsTitle: {
-        fontSize: typography.fontSize.lg,
-        fontWeight: typography.fontWeight.bold,
-        color: colors.white,
-        textAlign: 'center',
+    // Leaderboard Styles - Premium Design
+    leaderboardContainer: {
+        backgroundColor: 'rgba(19, 91, 236, 0.03)',
+        borderRadius: borderRadius.xl,
+        padding: spacing.lg,
         marginBottom: spacing.md,
+        borderWidth: 1,
+        borderColor: 'rgba(19, 91, 236, 0.15)',
+        height: 450,
     },
-    quizOptionButton: {
+    leaderboardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: spacing.lg,
+        paddingBottom: spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(255,255,255,0.1)',
+    },
+    leaderboardStats: {
+        flexDirection: 'row',
+        gap: spacing.sm,
+    },
+    // Novo Modal de Ranking - Estilos Simples
+    rankingHeader: {
+        padding: spacing.lg,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.zinc700,
+    },
+    statsRow: {
+        flexDirection: 'row',
+        gap: spacing.md,
+        marginTop: spacing.md,
+    },
+    statCard: {
+        flex: 1,
+        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+        padding: spacing.md,
+        borderRadius: borderRadius.lg,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(139, 92, 246, 0.3)',
+    },
+    statNumber: {
+        fontSize: typography.fontSize['2xl'],
+        fontWeight: typography.fontWeight.bold,
+        color: '#a78bfa',
+    },
+    statLabel: {
+        fontSize: typography.fontSize.xs,
+        color: colors.zinc400,
+        marginTop: 4,
+    },
+    studentList: {
+        flex: 1,
+        padding: spacing.base,
+    },
+    studentRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: spacing.md,
         backgroundColor: colors.zinc800,
         borderRadius: borderRadius.lg,
-        padding: spacing.md,
         marginBottom: spacing.sm,
-        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: colors.zinc700,
     },
-    quizOptionText: {
+    studentRowWaiting: {
+        opacity: 0.6,
+        borderStyle: 'dashed',
+    },
+    positionBadge: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: colors.zinc700,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: spacing.md,
+    },
+    positionText: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: typography.fontWeight.bold,
+        color: colors.white,
+    },
+    studentInfo: {
+        flex: 1,
+    },
+    studentName: {
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
         color: colors.white,
     },
-    quizOptionDesc: {
+    studentNameWaiting: {
+        color: colors.zinc500,
+    },
+    studentScore: {
+        fontSize: typography.fontSize.xs,
+        color: colors.zinc400,
+        marginTop: 2,
+    },
+    resultBadge: {
+        backgroundColor: '#10b981',
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.xs,
+        borderRadius: borderRadius.full,
+    },
+    percentageText: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: typography.fontWeight.bold,
+        color: colors.white,
+    },
+    waitingTextSmall: {
+        fontSize: typography.fontSize.xs,
+        color: colors.zinc500,
+        fontStyle: 'italic',
+    },
+    emptyStateRanking: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: spacing.xl * 2,
+    },
+    emptyText: {
+        fontSize: typography.fontSize.base,
+        color: colors.zinc400,
+        marginTop: spacing.md,
+    },
+    closeButton: {
+        backgroundColor: '#ef4444',
+        padding: spacing.md,
+        borderRadius: borderRadius.lg,
+        margin: spacing.base,
+        alignItems: 'center',
+    },
+    closeButtonText: {
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.bold,
+        color: colors.white,
+    },
+    exportPdfButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: spacing.sm,
+        backgroundColor: '#8b5cf6',
+        padding: spacing.md,
+        borderRadius: borderRadius.lg,
+        margin: spacing.base,
+        marginBottom: spacing.sm,
+    },
+    exportPdfButtonText: {
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.semibold,
+        color: colors.white,
+    },
+    modalButtonsRow: {
+        flexDirection: 'row',
+        gap: spacing.md,
+        padding: spacing.base,
+        paddingTop: 0,
+    },
+    buttonHalf: {
+        flex: 1,
+        margin: 0,
+    },
+    leaderboardTitle: {
+        fontSize: typography.fontSize.xl,
+        fontWeight: typography.fontWeight.bold,
+        color: colors.white,
+    },
+    leaderboardScroll: {
+        flex: 1,
+    },
+    leaderboardRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.md,
+        backgroundColor: 'rgba(255,255,255,0.03)',
+        borderRadius: borderRadius.lg,
+        marginBottom: spacing.xs,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.05)',
+    },
+    rank1: { backgroundColor: 'rgba(255, 215, 0, 0.1)', borderColor: 'rgba(255, 215, 0, 0.3)' },
+    rank2: { backgroundColor: 'rgba(192, 192, 192, 0.1)', borderColor: 'rgba(192, 192, 192, 0.3)' },
+    rank3: { backgroundColor: 'rgba(205, 127, 50, 0.1)', borderColor: 'rgba(205, 127, 50, 0.3)' },
+    rankWaiting: { opacity: 0.5, borderStyle: 'dashed' },
+
+    // rankText definitions
+    rankText: {
+        fontSize: typography.fontSize.base,
+        fontWeight: 'bold',
+        color: colors.zinc400,
+    },
+    rankTextTop: {
+        fontSize: typography.fontSize.lg,
+        color: colors.white,
+    },
+
+    rankingPosition: {
+        width: 44,
+        height: 44,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(19, 91, 236, 0.15)',
+        borderRadius: 22,
+    },
+    rankingInfo: {
+        flex: 1,
+        marginLeft: spacing.md,
+    },
+    rankingName: {
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.semibold,
+        color: colors.white,
+    },
+    rankingNameWaiting: {
+        color: colors.zinc500,
+        fontStyle: 'italic',
+    },
+    statusWaiting: {
+        fontSize: 11,
+        color: colors.zinc500,
+    },
+    rankingScore: {
+        alignItems: 'flex-end',
+    },
+    pointsBadge: {
+        backgroundColor: colors.primary,
+        paddingHorizontal: 12,
+        paddingVertical: 4,
+        borderRadius: borderRadius.full,
+        marginBottom: 2,
+    },
+    rankPoints: {
+        fontSize: typography.fontSize.xs,
+        fontWeight: 'bold',
+        color: '#D97706', // Amber 600
+    },
+    rankPercentage: {
+        fontSize: 10,
+        color: colors.zinc500,
+    },
+    previewQuestionCard: {
+        backgroundColor: colors.zinc800,
+        padding: spacing.lg,
+        borderRadius: borderRadius.lg,
+        marginBottom: spacing.md,
+        position: 'relative',  // Para posicionar o botão de exclusão
+    },
+    questionHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: spacing.md,
+        gap: spacing.sm,
+    },
+    previewQuestionTitle: {
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.bold,
+        color: colors.white,
+        marginBottom: spacing.sm,
+    },
+    previewOption: {
+        fontSize: typography.fontSize.sm,
+        color: colors.zinc400,
+        marginLeft: spacing.sm,
+        marginBottom: 2,
+    },
+    previewCorrectOption: {
+        color: '#22c55e',
+        fontWeight: typography.fontWeight.bold,
+    },
+    toggleAnswerKeyButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: spacing.sm,
+        backgroundColor: '#f59e0b',
+        padding: spacing.md,
+        borderRadius: borderRadius.lg,
+        marginTop: spacing.lg,
+    },
+    toggleAnswerKeyText: {
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.semibold,
+        color: colors.white,
+    },
+    // Question counter badge
+    questionCountBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+        paddingVertical: spacing.xs,
+        paddingHorizontal: spacing.sm,
+        borderRadius: borderRadius.default,
+        marginBottom: spacing.md,
+        alignSelf: 'flex-start',
+    },
+    questionCountText: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: typography.fontWeight.medium,
+        color: '#8b5cf6',
+    },
+    // Question actions row (delete + visibility buttons)
+    questionActionsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+    },
+    deleteQuestionButton: {
+        padding: spacing.xs,
+        borderRadius: borderRadius.default,
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    },
+    deleteQuestionButtonBottomRight: {
+        position: 'absolute',
+        bottom: spacing.sm,
+        right: spacing.sm,
+        padding: spacing.sm,
+        borderRadius: borderRadius.default,
+        backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    },
+    individualAnswerButton: {
+        padding: spacing.xs,
+        borderRadius: borderRadius.default,
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    },
+
+    listContainer: {
+        backgroundColor: colors.zinc50,
+        borderRadius: borderRadius.lg,
+        padding: spacing.sm,
+    },
+    waitingSubtext: {
         fontSize: typography.fontSize.sm,
         color: colors.zinc400,
         marginTop: 4,
     },
-    backButtonText: {
-        color: colors.zinc400,
-        fontSize: typography.fontSize.base,
-        textAlign: 'center',
+    leaderboardRowWaiting: {
+        opacity: 0.5,
+    },
+    rankPointsList: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: 'bold',
+        color: '#d97706',
+        marginRight: 8,
     },
 });

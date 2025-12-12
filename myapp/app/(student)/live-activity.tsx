@@ -9,13 +9,13 @@ import {
     ActivityIndicator,
     Alert,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
-import { LiveActivity, submitActivityResponse } from '@/services/api';
+import { LiveActivity, submitActivityResponse, isActivitySubmitted } from '@/services/api';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /**
  * LiveActivityScreen - Tela para aluno responder atividades ao vivo
@@ -24,16 +24,27 @@ import { LiveActivity, submitActivityResponse } from '@/services/api';
 export default function LiveActivityScreen() {
     const insets = useSafeAreaInsets();
     const params = useLocalSearchParams();
-    const activityData = params.activity ? JSON.parse(params.activity as string) : null;
 
-    const [activity, setActivity] = useState<LiveActivity | null>(activityData);
+    // Parse activity data safely
+    const activity = params.activity ? JSON.parse(params.activity as string) : null;
+
     const [currentQuestion, setCurrentQuestion] = useState(0);
     const [answers, setAnswers] = useState<Record<string, number>>({});
     const [textAnswer, setTextAnswer] = useState('');
-    const [timeRemaining, setTimeRemaining] = useState(activityData?.time_remaining || 300);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSubmitted, setIsSubmitted] = useState(false);
     const [result, setResult] = useState<any>(null);
+    const [timeRemaining, setTimeRemaining] = useState<number>(activity?.time_remaining || 300);
+
+    // Verificação inicial de segurança
+    useEffect(() => {
+        if (activity && isActivitySubmitted(activity.id)) {
+            // Se já foi enviado localmente, forçar estado de enviado
+            setIsSubmitted(true);
+            // Poderíamos buscar o resultado aqui se necessário, 
+            // mas por enquanto apenas bloqueia o reenvio e mostra concluído
+        }
+    }, [activity]);
 
     const timerRef = useRef<any>(null);
 
@@ -167,6 +178,15 @@ export default function LiveActivityScreen() {
                             <Text style={styles.resultScore}>
                                 {result.score} / {result.total}
                             </Text>
+
+                            {/* Points Display */}
+                            {result.points !== undefined && (
+                                <View style={styles.pointsContainer}>
+                                    <MaterialIcons name="stars" size={24} color="#F59E0B" />
+                                    <Text style={styles.pointsText}>+{result.points} pts</Text>
+                                </View>
+                            )}
+
                             <Text style={styles.resultPercentage}>
                                 {result.percentage.toFixed(0)}% de acertos
                             </Text>
@@ -607,6 +627,23 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.bold,
         color: colors.white,
+    },
+    pointsContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(245, 158, 11, 0.2)',
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.xs,
+        borderRadius: borderRadius.full,
+        marginTop: spacing.xs,
+        marginBottom: spacing.xs,
+        gap: spacing.xs,
+    },
+    pointsText: {
+        fontSize: typography.fontSize.lg,
+        fontWeight: typography.fontWeight.bold,
+        color: '#F59E0B',
     },
     errorText: {
         fontSize: typography.fontSize.lg,

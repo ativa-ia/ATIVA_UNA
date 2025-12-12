@@ -14,6 +14,7 @@ import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { getQuizReport, endQuiz, QuizReport } from '@/services/quiz';
+import { getLiveActivityReport } from '@/services/api';
 
 /**
  * QuizResultsScreen - Resultados do Quiz em Tempo Real (Professor)
@@ -23,6 +24,7 @@ export default function QuizResultsScreen() {
     const insets = useSafeAreaInsets();
     const params = useLocalSearchParams();
     const quizId = parseInt(params.quizId as string) || 0;
+    const activityId = parseInt(params.activityId as string) || 0;
     const subjectName = params.subject as string || 'Disciplina';
 
     const [report, setReport] = useState<QuizReport | null>(null);
@@ -34,7 +36,13 @@ export default function QuizResultsScreen() {
     useEffect(() => {
         const fetchReport = async () => {
             try {
-                const result = await getQuizReport(quizId);
+                let result;
+                if (activityId > 0) {
+                    result = await getLiveActivityReport(activityId);
+                } else {
+                    result = await getQuizReport(quizId);
+                }
+
                 if (result.success && result.report) {
                     setReport(result.report);
                 }
@@ -51,7 +59,7 @@ export default function QuizResultsScreen() {
         return () => {
             if (pollingRef.current) clearInterval(pollingRef.current);
         };
-    }, [quizId]);
+    }, [quizId, activityId]);
 
     const handleEndQuiz = async () => {
         setEnding(true);
