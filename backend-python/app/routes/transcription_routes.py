@@ -629,13 +629,13 @@ def get_active_activity(current_user, subject_id):
     if not enrollment and current_user.role != 'teacher':
         return jsonify({'success': False, 'error': 'Não matriculado'}), 403
     
-    # Buscar atividade ativa que foi compartilhada
+    # Buscar atividade ativa que foi compartilhada (pegar a mais recente)
     activity = LiveActivity.query.join(TranscriptionSession)\
         .filter(
             TranscriptionSession.subject_id == subject_id,
             LiveActivity.status == 'active',
             LiveActivity.shared_with_students == True
-        ).first()
+        ).order_by(LiveActivity.created_at.desc()).first()
     
     if activity:
         # Verificar se já respondeu

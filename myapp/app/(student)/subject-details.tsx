@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     View,
     Text,
@@ -16,6 +16,7 @@ import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { checkActiveQuiz, Quiz } from '@/services/quiz';
+import { getActiveActivity, LiveActivity } from '@/services/api';
 
 import { getActiveActivity, LiveActivity, isActivitySubmitted } from '@/services/api';
 import { useCallback } from 'react';
@@ -30,41 +31,72 @@ export default function SubjectDetailsScreen() {
     const subjectName = params.subject as string || 'Disciplina';
     const subjectId = parseInt(params.subjectId as string) || 1;
 
-    // Quiz ao vivo state (Standalone)
+    // Quiz ao vivo state (sistema de Quiz)
     const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
     const [showQuizPopup, setShowQuizPopup] = useState(false);
     const [alreadyAnswered, setAlreadyAnswered] = useState(false);
     const [quizStarted, setQuizStarted] = useState(false);
 
-    // Live Activity state (Transcription)
+    // LiveActivity state (sistema de Transcrição)
     const [liveActivity, setLiveActivity] = useState<LiveActivity | null>(null);
+    const [showActivityPopup, setShowActivityPopup] = useState(false);
+    const [activityStarted, setActivityStarted] = useState(false);
 
     const pollingRef = useRef<any>(null);
     const liveActivityPollingRef = useRef<any>(null);
 
-    // Polling para verificar quiz ativo (Standalone)
-    useEffect(() => {
-        const checkForQuiz = async () => {
-            if (quizStarted) return;
-            try {
-                const result = await checkActiveQuiz(subjectId);
-                if (result.success && result.active && result.quiz) {
-                    setActiveQuiz(result.quiz);
-                    setAlreadyAnswered(result.already_answered || false);
-                    if (!result.already_answered && !quizStarted) {
-                        setShowQuizPopup(true);
-                    }
-                } else {
-                    setActiveQuiz(null);
-                    setShowQuizPopup(false);
-                }
-            } catch (error) {
-                console.log('[Quiz Poll] Erro ao verificar quiz:', error);
-            }
-        };
+    // Polling para verificar quiz E liveActivity ativos
+    // Função de verificação (agora acessível para botão de refresh)
+    const checkForActivities = useCallback(async () => {
+        // Se já começou alguma atividade, não precisa verificar automaticamente
+        // (Mas se for chamado pelo botão manual, pode ser útil verificar mesmo assim?
+        //  Melhor manter a proteção para não sobrescrever estado de quiz ativo)
+        if (quizStarted || activityStarted) return;
 
-        checkForQuiz();
-        pollingRef.current = setInterval(checkForQuiz, 5000);
+        // 1. Verificar Quiz (sistema de Quiz)
+        try {
+            console.log(`[Activity Poll] Checking for quiz in subject ${subjectId}...`);
+            const quizResult = await checkActiveQuiz(subjectId);
+
+            if (quizResult.success && quizResult.active && quizResult.quiz) {
+                console.log('[Activity Poll] Quiz ATIVO encontrado:', quizResult.quiz.title);
+                setActiveQuiz(quizResult.quiz);
+                setAlreadyAnswered(quizResult.already_answered || false);
+                if (!quizResult.already_answered) {
+                    setShowQuizPopup(true);
+                }
+                return; // Quiz tem prioridade
+            } else {
+                setActiveQuiz(null);
+                setShowQuizPopup(false);
+            }
+        } catch (error) {
+            console.log('[Activity Poll] Erro ao verificar quiz:', error);
+        }
+
+        // 2. Verificar LiveActivity (sistema de Transcrição)
+        try {
+            const activityResult = await getActiveActivity(subjectId);
+            console.log('[Activity Poll] LiveActivity result:', JSON.stringify(activityResult, null, 2));
+
+            if (activityResult.success && activityResult.active && activityResult.activity) {
+                console.log('[Activity Poll] LiveActivity ATIVA encontrada:', activityResult.activity.title);
+                setLiveActivity(activityResult.activity);
+                setShowActivityPopup(true);
+            } else {
+                console.log('[Activity Poll] Nenhuma atividade ativa');
+                setLiveActivity(null);
+                setShowActivityPopup(false);
+            }
+        } catch (error) {
+            console.log('[Activity Poll] Erro ao verificar live activity:', error);
+        }
+    }, [subjectId, quizStarted, activityStarted]);
+
+    // Polling effect
+    useEffect(() => {
+        checkForActivities();
+        pollingRef.current = setInterval(checkForActivities, 5000);
 
         return () => {
             if (pollingRef.current) clearInterval(pollingRef.current);
@@ -150,6 +182,17 @@ export default function SubjectDetailsScreen() {
                     <View style={styles.placeholder} />
                 </View>
 
+                {/* Debug Info - Remover depois */}
+                {/* Debug Info */}
+                <View style={{ padding: 5, backgroundColor: '#333', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10 }}>
+                    <Text style={{ color: '#fff', fontSize: 10, flex: 1 }}>
+                        P:{quizStarted ? 'Strt' : 'Chk'} | Q:{activeQuiz ? 'Y' : 'N'} | L:{liveActivity?.status || 'N'} | ID:{subjectId}
+                    </Text>
+                    <TouchableOpacity onPress={() => checkForActivities()} style={{ padding: 4, backgroundColor: '#555', borderRadius: 4 }}>
+                        <Text style={{ color: 'white', fontSize: 10 }}>REFRESH</Text>
+                    </TouchableOpacity>
+                </View>
+
                 <ScrollView
                     style={styles.scrollView}
                     contentContainerStyle={styles.scrollContent}
@@ -213,17 +256,7 @@ export default function SubjectDetailsScreen() {
                             )}
                         </TouchableOpacity>
 
-                        <TouchableOpacity
-                            style={styles.secondaryButton}
-                            activeOpacity={0.8}
-                            onPress={() => router.push({
-                                pathname: './materials',
-                                params: { subject: subjectName }
-                            })}
-                        >
-                            <MaterialIcons name="folder" size={24} color={colors.white} />
-                            <Text style={styles.secondaryButtonText}>Ver Materiais de Aula</Text>
-                        </TouchableOpacity>
+
                     </View>
                 </ScrollView>
             </View>
@@ -266,6 +299,58 @@ export default function SubjectDetailsScreen() {
                             onPress={handleStartQuiz}
                         >
                             <Text style={styles.startQuizButtonText}>Começar Quiz</Text>
+                            <MaterialIcons name="arrow-forward" size={24} color={colors.white} />
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* LiveActivity Popup (sistema de Transcrição) */}
+            <Modal
+                visible={showActivityPopup}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowActivityPopup(false)}
+            >
+                <View style={styles.quizModalOverlay}>
+                    <View style={styles.quizPopup}>
+                        <View style={styles.quizPopupIcon}>
+                            <Text style={styles.quizPopupEmoji}>
+                                {liveActivity?.activity_type === 'quiz' ? '🎯' :
+                                    liveActivity?.activity_type === 'summary' ? '📝' : '💬'}
+                            </Text>
+                        </View>
+
+                        <Text style={styles.quizPopupTitle}>
+                            {liveActivity?.activity_type === 'quiz' ? 'Quiz ao Vivo!' :
+                                liveActivity?.activity_type === 'summary' ? 'Resumo Disponível!' : 'Atividade ao Vivo!'}
+                        </Text>
+                        <Text style={styles.quizPopupSubtitle}>
+                            {liveActivity?.title}
+                        </Text>
+
+                        <View style={styles.quizInfo}>
+                            <View style={styles.quizInfoItem}>
+                                <MaterialIcons
+                                    name={liveActivity?.activity_type === 'quiz' ? 'quiz' : 'assignment'}
+                                    size={20}
+                                    color="#10b981"
+                                />
+                                <Text style={styles.quizInfoText}>
+                                    {liveActivity?.activity_type === 'quiz'
+                                        ? `${liveActivity?.content?.questions?.length || 0} perguntas`
+                                        : 'Clique para ver'}
+                                </Text>
+                            </View>
+                        </View>
+
+                        <TouchableOpacity
+                            style={styles.startQuizButton}
+                            onPress={handleStartActivity}
+                        >
+                            <Text style={styles.startQuizButtonText}>
+                                {liveActivity?.activity_type === 'quiz' ? 'Começar Quiz' : 'Ver Atividade'}
+                            </Text>
                             <MaterialIcons name="arrow-forward" size={24} color={colors.white} />
                         </TouchableOpacity>
                     </View>

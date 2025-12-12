@@ -40,8 +40,10 @@ def chat(current_user):
     if stream:
         # Resposta em streaming
         def generate():
+            import json
             for chunk in chat_stream(current_user.id, subject_id, message):
-                yield f"data: {chunk}\n\n"
+                if chunk:
+                    yield f"data: {json.dumps({'text': chunk})}\n\n"
             yield "data: [DONE]\n\n"
         
         return Response(
@@ -262,3 +264,161 @@ Responda em formato JSON:
             'success': False,
             'error': f'Erro ao processar: {str(e)}'
         }), 500
+
+@ai_bp.route('/upload-context', methods=['POST'])
+@token_required
+def upload_context(current_user):
+    """
+    Endpoint para upload de arquivos de contexto (NotebookLM style)
+    Suporta PDF e TXT
+    """
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'error': 'Arquivo não enviado'}), 400
+    
+    file = request.files['file']
+    subject_id = request.form.get('subject_id')
+    
+    if not file or file.filename == '':
+        return jsonify({'success': False, 'error': 'Arquivo inválido'}), 400
+    
+    if not subject_id:
+        return jsonify({'success': False, 'error': 'ID da disciplina não fornecido'}), 400
+        
+    try:
+        from app import db
+        from app.models.ai_session import AIContextFile
+        import io
+        from pypdf import PdfReader
+        
+        filename = file.filename
+        content = ""
+        file_type = "text"
+        
+        # Extração de texto
+        # Extração de texto
+        if filename.lower().endswith('.pdf'):
+            file_type = "pdf"
+            pdf_reader = PdfReader(file)
+            for page in pdf_reader.pages:
+                content += page.extract_text() + "\n"
+        elif filename.lower().endswith('.docx'):
+            file_type = "docx"
+            from docx import Document as DocxDocument
+            doc = DocxDocument(file)
+            for para in doc.paragraphs:
+                content += para.text + "\n"
+        else:
+            # Assume text/plain
+            content = file.read().decode('utf-8', errors='ignore')
+            
+        if not content.strip():
+            return jsonify({'success': False, 'error': 'Não foi possível extrair texto do arquivo'}), 400
+            
+        # Salvar no banco
+        context_file = AIContextFile(
+            subject_id=subject_id,
+            filename=filename,
+            content=content,
+            file_type=file_type
+        )
+        db.session.add(context_file)
+        db.session.commit()
+        
+        # Gerar sugestões de perguntas
+        from app.services.ai_service import generate_study_questions
+        suggestions = generate_study_questions(content)
+        
+        return jsonify({
+            'success': True,
+            'file': context_file.to_dict()
+        })
+        
+    except Exception as e:
+        print(f"Erro no upload: {e}")
+        return jsonify({'success': False, 'error': f'Erro ao processar arquivo: {str(e)}'}), 500
+
+
+@ai_bp.route('/context-files/<int:subject_id>', methods=['GET'])
+@token_required
+def get_context_files(current_user, subject_id):
+    """Lista arquivos de contexto da disciplina"""
+    from app.models.ai_session import AIContextFile
+    
+    files = AIContextFile.query.filter_by(subject_id=subject_id).order_by(AIContextFile.created_at.desc()).all()
+    
+    return jsonify({
+        'success': True,
+        'files': [f.to_dict() for f in files]
+    })
+
+
+@ai_bp.route('/context-files/<int:file_id>', methods=['DELETE'])
+@token_required
+def delete_context_file(current_user, file_id):
+    """Remove um arquivo de contexto"""
+    from app import db
+    from app.models.ai_session import AIContextFile
+    
+    file = AIContextFile.query.get(file_id)
+    if not file:
+        return jsonify({'success': False, 'error': 'Arquivo não encontrado'}), 404
+        
+    subject_id = file.subject_id
+    db.session.delete(file)
+    db.session.commit()
+    
+    # Verificar se ainda existem arquivos para esta disciplina
+    remaining = AIContextFile.query.filter_by(subject_id=subject_id).count()
+    
+    if remaining == 0:
+        # Se não há mais arquivos, fazer RESET TOTAL (Limpar histórico)
+        try:
+            from app.models.chat import ChatMessage
+            from app.models.ai_session import AISession, AIMessage
+            
+            # 1. Limpar Chat UI
+            ChatMessage.clear_history(current_user.id, subject_id)
+            
+            # 2. Limpar Memória IA
+            ai_session = AISession.query.filter_by(
+                teacher_id=current_user.id, 
+                subject_id=subject_id
+            ).first()
+            
+            if ai_session:
+                AIMessage.query.filter_by(session_id=ai_session.id).delete()
+                db.session.commit()
+        except Exception as e:
+            print(f"Erro ao limpar histórico automático: {e}")
+    
+    return jsonify({'success': True})
+
+
+@ai_bp.route('/generate-suggestions', methods=['POST'])
+@token_required
+def generate_suggestions_route(current_user):
+    """Gera sugestões baseadas no último arquivo enviado"""
+    try:
+        data = request.get_json()
+        subject_id = data.get('subject_id')
+        
+        if not subject_id:
+            return jsonify({'success': False, 'error': 'Subject ID required'}), 400
+            
+        from app.models.ai_session import AIContextFile
+        # Pega o último arquivo adicionado
+        latest_file = AIContextFile.query.filter_by(subject_id=subject_id).order_by(AIContextFile.created_at.desc()).first()
+        
+        if not latest_file:
+            return jsonify({'success': True, 'suggestions': []})
+            
+        from app.services.ai_service import generate_study_questions
+        suggestions = generate_study_questions(latest_file.content)
+        
+        return jsonify({
+            'success': True,
+            'suggestions': suggestions
+        })
+    except Exception as e:
+        print(f"Erro ao gerar sugestões: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500

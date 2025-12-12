@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // URL da API (mude para seu IP local se testar em dispositivo físico)
@@ -182,7 +183,201 @@ export const getSubjectDetails = async (subjectId: number): Promise<SubjectDetai
     };
 };
 
+// Buscar materiais de uma disciplina
+export const getSubjectMaterials = async (subjectId: number): Promise<Material[]> => {
+    const token = await AsyncStorage.getItem('authToken');
 
+    const response = await fetch(`${API_URL}/subjects/${subjectId}/materials`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    return response.json();
+};
+
+// ========== TEACHER API ==========
+
+export interface TeacherClass {
+    id: number;
+    name: string;
+    code: string;
+    schedule?: string;
+    location?: string;
+    student_count?: number;
+}
+
+// Buscar turmas/disciplinas do professor
+export const getTeacherClasses = async (): Promise<TeacherClass[]> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/subjects`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    const subjects = await response.json();
+
+    // Mapear para o formato esperado pelo dashboard
+    return subjects.map((subject: any) => ({
+        id: subject.id,
+        name: subject.name,
+        code: subject.code,
+        schedule: subject.schedule || 'Seg/Qua 14h-16h',
+        location: subject.location,
+        student_count: subject.student_count || 0,
+    }));
+};
+
+// ========== ACCOUNT MANAGEMENT ==========
+
+export interface UpdateProfileData {
+    name?: string;
+    email?: string;
+}
+
+export interface ChangePasswordData {
+    current_password: string;
+    new_password: string;
+}
+
+// Atualizar perfil do usuário
+export const updateProfile = async (data: UpdateProfileData): Promise<AuthResponse> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/auth/update-profile`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+    });
+
+    return response.json();
+};
+
+// Alterar senha do usuário
+export const changePassword = async (data: ChangePasswordData): Promise<AuthResponse> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/auth/change-password`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+    });
+
+    return response.json();
+};
+
+
+// ========== AI CONTEXT API ==========
+
+export const uploadContextFile = async (subjectId: number, file: any) => {
+    try {
+        const formData = new FormData();
+
+        if (Platform.OS === 'web' && file.file) {
+            formData.append('file', file.file);
+        } else {
+            formData.append('file', {
+                uri: file.uri,
+                name: file.name,
+                type: file.mimeType || 'application/pdf'
+            } as any);
+        }
+
+        formData.append('subject_id', subjectId.toString());
+
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/ai/upload-context`, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Upload error:', error);
+        return { success: false, error: 'Erro no upload' };
+    }
+};
+
+// Gerar sugestões de perguntas baseadas no contexto (novo arquivo)
+export const generateSuggestions = async (subjectId: number) => {
+    const token = await AsyncStorage.getItem('authToken');
+    try {
+        const response = await fetch(`${API_URL}/ai/generate-suggestions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ subject_id: subjectId }),
+        });
+        return response.json();
+    } catch (error) {
+        return { success: false, error: 'Erro ao gerar sugestões' };
+    }
+};
+
+export const getContextFiles = async (subjectId: number) => {
+    const token = await AsyncStorage.getItem('authToken');
+    try {
+        const response = await fetch(`${API_URL}/ai/context-files/${subjectId}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+        return response.json();
+    } catch (error) {
+        return { success: false, error: 'Erro ao listar arquivos' };
+    }
+};
+
+export const deleteContextFile = async (fileId: number) => {
+    const token = await AsyncStorage.getItem('authToken');
+    try {
+        const response = await fetch(`${API_URL}/ai/context-files/${fileId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Erro detalhado ao deletar:', error);
+        return { success: false, error: 'Erro ao deletar arquivo' };
+    }
+};
+
+// ========== ENROLLMENTS API ==========
+
+export interface AutoEnrollResponse {
+    success: boolean;
+    message: string;
+    enrollments_created?: number;
+    total_enrollments?: number;
+}
+
+// Auto-matrícula de estudante em todas as disciplinas
+export const autoEnrollStudent = async (): Promise<AutoEnrollResponse> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/enrollments/auto-enroll`, {
+        method: 'POST',  // IMPORTANTE: Deve ser POST, não GET
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    return response.json();
+};
 
 
 // ========== PERFORMANCE API ==========
@@ -262,6 +457,7 @@ export const registerGrades = async (data: RegisterGradesData): Promise<{ messag
 };
 
 // Professor - Desempenho da turma
+// Professor - Desempenho da turma
 export const getClassPerformance = async (subjectId: number): Promise<ClassPerformanceData> => {
     const token = await AsyncStorage.getItem('authToken');
 
@@ -277,6 +473,8 @@ export const getClassPerformance = async (subjectId: number): Promise<ClassPerfo
 
     return response.json();
 };
+
+
 
 // Aluno - Todas as notas
 export const getMyGrades = async (): Promise<StudentGradesData> => {

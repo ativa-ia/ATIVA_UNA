@@ -16,7 +16,7 @@ import { Subject } from '@/types';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing } from '@/constants/spacing';
-import { getSubjects, Subject as APISubject, getMe } from '@/services/api';
+import { getSubjects, Subject as APISubject, getTeacherClasses, TeacherClass, getMe } from '@/services/api';
 
 /**
  * TeacherDashboardScreen - Dashboard do Professor
@@ -80,7 +80,7 @@ export default function TeacherDashboardScreen() {
 
     const navItems: NavItem[] = [
         { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
-
+        { id: 'materials', label: 'Materiais', iconName: 'folder' },
     ];
 
     const handleNavPress = (id: string) => {
@@ -90,7 +90,12 @@ export default function TeacherDashboardScreen() {
             case 'dashboard':
                 // Already on dashboard
                 break;
-
+            case 'materials':
+                router.push('/(teacher)/materials');
+                break;
+            case 'reports':
+                router.push('/(teacher)/reports');
+                break;
         }
     };
 
