@@ -4,6 +4,7 @@ import { supabase } from './supabase';
 
 // URL da API (mude para seu IP local se testar em dispositivo físico)
 // Para desenvolvimento local, use localhost
+//export const API_URL = 'http://localhost:3000/api';
 export const API_URL = 'http://localhost:3000/api';
 
 // Para produção/Vercel, use:
