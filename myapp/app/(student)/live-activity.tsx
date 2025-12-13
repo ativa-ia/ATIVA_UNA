@@ -9,6 +9,7 @@ import {
     ActivityIndicator,
     Alert,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '@/constants/colors';
@@ -151,6 +152,7 @@ export default function LiveActivityScreen() {
     if (!activity) {
         return (
             <View style={[styles.container, { paddingTop: insets.top }]}>
+                <StatusBar style="dark" />
                 <Text style={styles.errorText}>Atividade não encontrada</Text>
                 <TouchableOpacity onPress={() => router.back()}>
                     <Text style={styles.backLink}>Voltar</Text>
@@ -163,6 +165,7 @@ export default function LiveActivityScreen() {
     if (isSubmitted && result) {
         return (
             <View style={[styles.container, { paddingTop: insets.top }]}>
+                <StatusBar style="dark" />
                 <View style={styles.resultContainer}>
                     <Text style={styles.resultIcon}>
                         {activity.activity_type === 'quiz'
@@ -232,6 +235,7 @@ export default function LiveActivityScreen() {
 
         return (
             <View style={[styles.container, { paddingTop: insets.top }]}>
+                <StatusBar style="dark" />
                 {/* Header */}
                 <View style={styles.header}>
                     <View style={styles.headerLeft}>
@@ -354,6 +358,7 @@ export default function LiveActivityScreen() {
     // Render Open Question
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
+            <StatusBar style="dark" />
             {/* Header */}
             <View style={styles.header}>
                 <View style={styles.headerLeft}>
@@ -393,7 +398,7 @@ export default function LiveActivityScreen() {
                         value={textAnswer}
                         onChangeText={setTextAnswer}
                         placeholder="Digite sua resposta aqui..."
-                        placeholderTextColor={colors.zinc500}
+                        placeholderTextColor={colors.textSecondary}
                         editable={!isSubmitted}
                     />
 
@@ -432,7 +437,7 @@ export default function LiveActivityScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: colors.backgroundDark,
+        backgroundColor: colors.slate50,
     },
     header: {
         flexDirection: 'row',
@@ -447,11 +452,11 @@ const styles = StyleSheet.create({
     activityTitle: {
         fontSize: typography.fontSize.lg,
         fontWeight: typography.fontWeight.bold,
-        color: colors.white,
+        color: colors.textPrimary,
     },
     questionCounter: {
         fontSize: typography.fontSize.sm,
-        color: colors.zinc400,
+        color: colors.textSecondary,
     },
     timer: {
         flexDirection: 'row',
@@ -459,39 +464,43 @@ const styles = StyleSheet.create({
         gap: spacing.xs,
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.sm,
-        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
         borderRadius: borderRadius.full,
+        borderWidth: 1,
+        borderColor: 'rgba(16, 185, 129, 0.2)',
     },
     timerWarning: {
-        backgroundColor: 'rgba(245, 158, 11, 0.2)',
+        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+        borderColor: 'rgba(245, 158, 11, 0.2)',
     },
     timerDanger: {
-        backgroundColor: '#ef4444',
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        borderColor: 'rgba(239, 68, 68, 0.2)',
     },
     timerText: {
         fontSize: typography.fontSize.lg,
         fontWeight: typography.fontWeight.bold,
-        color: '#10b981',
+        color: colors.secondary,
     },
     timerTextWarning: {
         color: '#f59e0b',
     },
     timerTextDanger: {
-        color: colors.white,
+        color: colors.danger,
     },
     progressContainer: {
         paddingHorizontal: spacing.base,
         marginBottom: spacing.md,
     },
     progressBar: {
-        height: 4,
-        backgroundColor: colors.zinc700,
-        borderRadius: 2,
+        height: 8,
+        backgroundColor: colors.slate200,
+        borderRadius: 4,
     },
     progressFill: {
         height: '100%',
-        backgroundColor: '#10b981',
-        borderRadius: 2,
+        backgroundColor: colors.secondary,
+        borderRadius: 4,
     },
     scrollView: {
         flex: 1,
@@ -500,16 +509,21 @@ const styles = StyleSheet.create({
         padding: spacing.base,
     },
     questionCard: {
-        backgroundColor: 'rgba(39, 39, 42, 0.5)',
+        backgroundColor: colors.white,
         borderRadius: borderRadius.xl,
         padding: spacing.lg,
         borderWidth: 1,
-        borderColor: colors.zinc700,
+        borderColor: colors.slate200,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 6,
     },
     questionText: {
         fontSize: typography.fontSize.lg,
         fontWeight: typography.fontWeight.semibold,
-        color: colors.white,
+        color: colors.textPrimary,
         marginBottom: spacing.lg,
         lineHeight: 28,
     },
@@ -521,30 +535,38 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: spacing.md,
         padding: spacing.md,
-        backgroundColor: 'rgba(24, 24, 27, 0.5)',
+        backgroundColor: colors.slate50,
         borderRadius: borderRadius.lg,
-        borderWidth: 2,
-        borderColor: colors.zinc700,
+        borderWidth: 1,
+        borderColor: colors.slate200,
     },
     optionSelected: {
-        borderColor: '#10b981',
-        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+        borderColor: colors.secondary,
+        backgroundColor: 'rgba(16, 185, 129, 0.05)',
+        shadowColor: colors.secondary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
     },
     optionLetter: {
         width: 32,
         height: 32,
         borderRadius: 16,
-        backgroundColor: colors.zinc700,
+        backgroundColor: colors.white,
         justifyContent: 'center',
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: colors.slate200,
     },
     optionLetterSelected: {
-        backgroundColor: '#10b981',
+        backgroundColor: colors.secondary,
+        borderColor: colors.secondary,
     },
     optionLetterText: {
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.bold,
-        color: colors.zinc300,
+        color: colors.textSecondary,
     },
     optionLetterTextSelected: {
         color: colors.white,
@@ -552,26 +574,26 @@ const styles = StyleSheet.create({
     optionText: {
         flex: 1,
         fontSize: typography.fontSize.base,
-        color: colors.zinc300,
+        color: colors.textPrimary,
     },
     optionTextSelected: {
-        color: colors.white,
+        color: colors.textPrimary,
         fontWeight: typography.fontWeight.semibold,
     },
     textInput: {
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.slate50,
         borderRadius: borderRadius.lg,
         padding: spacing.md,
         fontSize: typography.fontSize.base,
-        color: colors.white,
+        color: colors.textPrimary,
         minHeight: 150,
         textAlignVertical: 'top',
         borderWidth: 1,
-        borderColor: colors.zinc700,
+        borderColor: colors.slate200,
     },
     charCount: {
         fontSize: typography.fontSize.sm,
-        color: colors.zinc500,
+        color: colors.textSecondary,
         textAlign: 'right',
         marginTop: spacing.sm,
     },
@@ -581,7 +603,8 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.base,
         paddingTop: spacing.md,
         borderTopWidth: 1,
-        borderTopColor: colors.zinc800,
+        borderTopColor: colors.slate200,
+        backgroundColor: colors.white,
     },
     navButton: {
         flexDirection: 'row',
@@ -589,27 +612,32 @@ const styles = StyleSheet.create({
         gap: spacing.sm,
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.lg,
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.white,
         borderRadius: borderRadius.lg,
+        borderWidth: 1,
+        borderColor: colors.slate200,
     },
     navButtonDisabled: {
         opacity: 0.5,
+        backgroundColor: colors.slate50,
     },
     navButtonText: {
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
-        color: colors.white,
+        color: colors.textPrimary,
     },
     cancelButton: {
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.lg,
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.white,
         borderRadius: borderRadius.lg,
+        borderWidth: 1,
+        borderColor: colors.slate200,
     },
     cancelButtonText: {
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
-        color: colors.zinc400,
+        color: colors.textSecondary,
     },
     submitButton: {
         flexDirection: 'row',
@@ -617,8 +645,13 @@ const styles = StyleSheet.create({
         gap: spacing.sm,
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.xl,
-        backgroundColor: '#10b981',
+        backgroundColor: colors.secondary,
         borderRadius: borderRadius.lg,
+        shadowColor: colors.secondary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 4,
     },
     submitButtonDisabled: {
         opacity: 0.7,
@@ -632,13 +665,15 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(245, 158, 11, 0.2)',
+        backgroundColor: 'rgba(245, 158, 11, 0.1)',
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.xs,
         borderRadius: borderRadius.full,
         marginTop: spacing.xs,
         marginBottom: spacing.xs,
         gap: spacing.xs,
+        borderWidth: 1,
+        borderColor: 'rgba(245, 158, 11, 0.3)',
     },
     pointsText: {
         fontSize: typography.fontSize.lg,
@@ -647,13 +682,13 @@ const styles = StyleSheet.create({
     },
     errorText: {
         fontSize: typography.fontSize.lg,
-        color: colors.zinc400,
+        color: colors.textSecondary,
         textAlign: 'center',
         marginTop: 100,
     },
     backLink: {
         fontSize: typography.fontSize.base,
-        color: '#10b981',
+        color: colors.secondary,
         textAlign: 'center',
         marginTop: spacing.md,
     },
@@ -671,55 +706,62 @@ const styles = StyleSheet.create({
     resultTitle: {
         fontSize: typography.fontSize['2xl'],
         fontWeight: typography.fontWeight.bold,
-        color: colors.white,
+        color: colors.textPrimary,
         marginBottom: spacing.sm,
     },
     resultScore: {
         fontSize: typography.fontSize['4xl'],
         fontWeight: typography.fontWeight.bold,
-        color: '#10b981',
+        color: colors.secondary,
         marginBottom: spacing.xs,
     },
     resultPercentage: {
         fontSize: typography.fontSize.lg,
-        color: colors.zinc300,
+        color: colors.textSecondary,
         marginBottom: spacing.lg,
     },
     resultBar: {
         width: '100%',
-        height: 8,
-        backgroundColor: colors.zinc700,
-        borderRadius: 4,
+        height: 12,
+        backgroundColor: colors.slate200,
+        borderRadius: 6,
         marginBottom: spacing.lg,
     },
     resultBarFill: {
         height: '100%',
-        borderRadius: 4,
+        borderRadius: 6,
     },
     resultBarGreen: {
-        backgroundColor: '#10b981',
+        backgroundColor: colors.secondary,
     },
     resultBarYellow: {
         backgroundColor: '#f59e0b',
     },
     resultBarRed: {
-        backgroundColor: '#ef4444',
+        backgroundColor: colors.danger,
     },
     resultMessage: {
         fontSize: typography.fontSize.base,
-        color: colors.zinc400,
+        color: colors.textSecondary,
         textAlign: 'center',
         marginBottom: spacing.xl,
     },
     resultButton: {
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.xl,
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.white,
         borderRadius: borderRadius.lg,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     resultButtonText: {
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
-        color: colors.white,
+        color: colors.textPrimary,
     },
 });

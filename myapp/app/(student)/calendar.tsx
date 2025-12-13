@@ -6,6 +6,7 @@ import {
     SafeAreaView,
     TouchableOpacity,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { BottomNav, NavItem } from '@/components/navigation/BottomNav';
@@ -45,20 +46,27 @@ export default function CalendarScreen() {
         <SafeAreaView style={styles.safeArea}>
             <View style={styles.container}>
                 {/* Header */}
-                <View style={styles.header}>
-                    <TouchableOpacity
-                        style={styles.backButton}
-                        onPress={() => router.back()}
-                    >
-                        <MaterialIcons name="arrow-back" size={24} color={colors.white} />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Calendário</Text>
-                    <View style={styles.placeholder} />
-                </View>
+                <LinearGradient
+                    colors={['#4f46e5', '#7c3aed']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.headerGradient}
+                >
+                    <View style={styles.headerContent}>
+                        <TouchableOpacity
+                            style={styles.backButton}
+                            onPress={() => router.back()}
+                        >
+                            <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
+                        </TouchableOpacity>
+                        <Text style={styles.headerTitle}>Calendário</Text>
+                        <View style={styles.placeholder} />
+                    </View>
+                </LinearGradient>
 
                 {/* Content */}
                 <View style={styles.content}>
-                    <MaterialIcons name="calendar-today" size={80} color={colors.zinc700} />
+                    <MaterialIcons name="calendar-today" size={80} color={colors.primary} />
                     <Text style={styles.title}>Em Desenvolvimento</Text>
                     <Text style={styles.description}>
                         O calendário acadêmico estará disponível em breve.
@@ -70,7 +78,6 @@ export default function CalendarScreen() {
                     items={navItems}
                     activeId={activeNavId}
                     onItemPress={handleNavPress}
-                    darkMode
                 />
             </View>
         </SafeAreaView>
@@ -80,24 +87,28 @@ export default function CalendarScreen() {
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
-        backgroundColor: colors.backgroundDark,
+        backgroundColor: colors.backgroundLight,
     },
     container: {
         flex: 1,
     },
-    header: {
+    headerGradient: {
+        paddingHorizontal: spacing.base,
+        paddingTop: spacing.md,
+        paddingBottom: spacing.base,
+    },
+    headerContent: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: spacing.base,
-        paddingVertical: spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.zinc800,
     },
     backButton: {
         width: 40,
         height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.2)',
         justifyContent: 'center',
         alignItems: 'center',
+        marginLeft: -8,
     },
     headerTitle: {
         flex: 1,
@@ -121,14 +132,14 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.xl,
         fontWeight: typography.fontWeight.bold,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
         marginTop: spacing.lg,
         marginBottom: spacing.sm,
     },
     description: {
         fontSize: typography.fontSize.base,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.textSecondary,
         textAlign: 'center',
     },
 });

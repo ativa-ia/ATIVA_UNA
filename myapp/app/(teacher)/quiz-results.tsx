@@ -95,7 +95,7 @@ export default function QuizResultsScreen() {
             {/* Header */}
             <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
                 <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-                    <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
+                    <MaterialIcons name="arrow-back-ios" size={20} color={colors.textPrimary} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Resultados ao Vivo</Text>
                 <View style={styles.placeholder} />
@@ -112,7 +112,7 @@ export default function QuizResultsScreen() {
                         <MaterialIcons
                             name={isActive ? "live-tv" : "check-circle"}
                             size={32}
-                            color={isActive ? "#10b981" : colors.zinc400}
+                            color={isActive ? "#10b981" : colors.slate400}
                         />
                         <View style={styles.statusInfo}>
                             <Text style={styles.statusTitle}>
@@ -227,7 +227,7 @@ export default function QuizResultsScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: colors.backgroundDark,
+        backgroundColor: colors.slate50, // Light Background
     },
     centered: {
         justifyContent: 'center',
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
     loadingText: {
         marginTop: spacing.md,
         fontSize: typography.fontSize.base,
-        color: colors.zinc400,
+        color: colors.textSecondary,
     },
     header: {
         flexDirection: 'row',
@@ -244,20 +244,23 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         paddingHorizontal: spacing.base,
         paddingBottom: spacing.md,
-        backgroundColor: colors.zinc900,
+        backgroundColor: colors.white, // White Header
+        borderBottomWidth: 1,
+        borderBottomColor: colors.slate200,
     },
     backButton: {
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.slate100,
         justifyContent: 'center',
         alignItems: 'center',
     },
     headerTitle: {
         fontSize: typography.fontSize.lg,
         fontWeight: typography.fontWeight.bold,
-        color: colors.white,
+        color: colors.textPrimary,
+        fontFamily: typography.fontFamily.display,
     },
     placeholder: {
         width: 40,
@@ -273,14 +276,22 @@ const styles = StyleSheet.create({
         borderRadius: borderRadius.xl,
         padding: spacing.lg,
         marginBottom: spacing.md,
+        backgroundColor: colors.white,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 3,
     },
     activeCard: {
-        backgroundColor: 'rgba(16, 185, 129, 0.15)',
+        backgroundColor: colors.white,
         borderWidth: 1,
-        borderColor: 'rgba(16, 185, 129, 0.3)',
+        borderColor: '#10b981', // Border indicates active
     },
     endedCard: {
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.white,
+        borderWidth: 1,
+        borderColor: colors.slate200,
     },
     statusHeader: {
         flexDirection: 'row',
@@ -295,12 +306,14 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.sm,
         color: '#10b981',
         fontWeight: typography.fontWeight.semibold,
+        fontFamily: typography.fontFamily.display,
     },
     quizTitle: {
         fontSize: typography.fontSize.lg,
         fontWeight: typography.fontWeight.bold,
-        color: colors.white,
+        color: colors.textPrimary,
         marginTop: spacing.xs,
+        fontFamily: typography.fontFamily.display,
     },
     statsRow: {
         flexDirection: 'row',
@@ -313,16 +326,18 @@ const styles = StyleSheet.create({
     statValue: {
         fontSize: typography.fontSize['2xl'],
         fontWeight: typography.fontWeight.bold,
-        color: colors.white,
+        color: colors.textPrimary,
+        fontFamily: typography.fontFamily.display,
     },
     statLabel: {
         fontSize: typography.fontSize.xs,
-        color: colors.zinc400,
+        color: colors.textSecondary,
         marginTop: spacing.xs,
+        fontFamily: typography.fontFamily.display,
     },
     statDivider: {
         width: 1,
-        backgroundColor: colors.zinc600,
+        backgroundColor: colors.slate200,
     },
     endButton: {
         flexDirection: 'row',
@@ -332,6 +347,11 @@ const styles = StyleSheet.create({
         backgroundColor: '#ef4444',
         paddingVertical: spacing.md,
         borderRadius: borderRadius.lg,
+        shadowColor: '#ef4444',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+        elevation: 2,
     },
     endButtonText: {
         fontSize: typography.fontSize.base,
@@ -339,17 +359,24 @@ const styles = StyleSheet.create({
         color: colors.white,
     },
     averageCard: {
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.white,
         borderRadius: borderRadius.xl,
         padding: spacing.lg,
         alignItems: 'center',
         marginBottom: spacing.md,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     averageCircle: {
         width: 100,
         height: 100,
         borderRadius: 50,
-        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
         borderWidth: 3,
         borderColor: '#10b981',
         justifyContent: 'center',
@@ -360,75 +387,88 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize['2xl'],
         fontWeight: typography.fontWeight.bold,
         color: '#10b981',
+        fontFamily: typography.fontFamily.display,
     },
     section: {
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.white,
         borderRadius: borderRadius.xl,
         padding: spacing.lg,
         marginBottom: spacing.md,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     sectionTitle: {
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
-        color: colors.white,
+        color: colors.textPrimary,
         marginBottom: spacing.md,
+        fontFamily: typography.fontFamily.display,
     },
     studentRow: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingVertical: spacing.sm,
         borderBottomWidth: 1,
-        borderBottomColor: colors.zinc700,
+        borderBottomColor: colors.slate100,
     },
     medal: {
         width: 32,
         height: 32,
         borderRadius: 16,
-        backgroundColor: colors.zinc600,
+        backgroundColor: colors.slate100,
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: spacing.md,
     },
     goldMedal: {
-        backgroundColor: '#fbbf24',
+        backgroundColor: '#fef3c7', // Yellow-100
     },
     silverMedal: {
-        backgroundColor: '#9ca3af',
+        backgroundColor: '#f3f4f6', // Gray-100
     },
     bronzeMedal: {
-        backgroundColor: '#d97706',
+        backgroundColor: '#ffedd5', // Orange-100
     },
     medalText: {
         fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.bold,
-        color: colors.white,
+        color: colors.textPrimary,
     },
     studentName: {
         flex: 1,
         fontSize: typography.fontSize.base,
-        color: colors.white,
+        color: colors.textPrimary,
+        fontFamily: typography.fontFamily.display,
     },
     studentScore: {
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.bold,
         color: '#10b981',
+        fontFamily: typography.fontFamily.display,
     },
     worstCard: {
-        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        backgroundColor: '#fef2f2', // Red-50
         padding: spacing.md,
         borderRadius: borderRadius.lg,
         borderWidth: 1,
-        borderColor: 'rgba(239, 68, 68, 0.3)',
+        borderColor: '#fecaca', // Red-200
     },
     worstQuestion: {
         fontSize: typography.fontSize.sm,
-        color: colors.white,
+        color: colors.textPrimary,
         marginBottom: spacing.sm,
+        fontFamily: typography.fontFamily.display,
     },
     worstRate: {
         fontSize: typography.fontSize.xs,
         color: '#ef4444',
         fontWeight: typography.fontWeight.semibold,
+        fontFamily: typography.fontFamily.display,
     },
     responseRow: {
         flexDirection: 'row',
@@ -436,11 +476,12 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         paddingVertical: spacing.sm,
         borderBottomWidth: 1,
-        borderBottomColor: colors.zinc700,
+        borderBottomColor: colors.slate100,
     },
     responseName: {
         fontSize: typography.fontSize.sm,
-        color: colors.white,
+        color: colors.textPrimary,
+        fontFamily: typography.fontFamily.display,
     },
     responseScore: {
         flexDirection: 'row',
@@ -449,13 +490,15 @@ const styles = StyleSheet.create({
     },
     responseScoreText: {
         fontSize: typography.fontSize.sm,
-        color: colors.zinc400,
+        color: colors.textSecondary,
+        fontFamily: typography.fontFamily.display,
     },
     responsePercent: {
         fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.bold,
         minWidth: 45,
         textAlign: 'right',
+        fontFamily: typography.fontFamily.display,
     },
     goodScore: {
         color: '#10b981',

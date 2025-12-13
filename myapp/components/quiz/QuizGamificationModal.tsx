@@ -84,7 +84,7 @@ export default function QuizGamificationModal({
                         {showPodium ? '🏆 Pódio Final' : '🏁 Ranking ao Vivo'}
                     </Text>
                     <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                        <MaterialIcons name="close" size={24} color={colors.white} />
+                        <MaterialIcons name="close" size={24} color={colors.textPrimary} />
                     </TouchableOpacity>
                 </View>
 
@@ -112,7 +112,7 @@ export default function QuizGamificationModal({
                         />
                     ) : (
                         <View style={styles.emptyState}>
-                            <MaterialIcons name="hourglass-empty" size={48} color={colors.zinc600} />
+                            <MaterialIcons name="hourglass-empty" size={48} color={colors.slate400} />
                             <Text style={styles.emptyText}>Aguardando respostas...</Text>
                         </View>
                     )}
@@ -145,7 +145,7 @@ export default function QuizGamificationModal({
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: colors.zinc900,
+        backgroundColor: colors.white,
     },
     header: {
         flexDirection: 'row',
@@ -153,35 +153,37 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: spacing.lg,
         borderBottomWidth: 1,
-        borderBottomColor: colors.zinc800,
+        borderBottomColor: colors.slate200,
     },
     title: {
         fontSize: typography.fontSize['2xl'],
         fontWeight: typography.fontWeight.bold,
-        color: colors.white,
+        color: colors.textPrimary,
     },
     closeButton: {
         padding: spacing.sm,
+        backgroundColor: colors.slate100,
+        borderRadius: borderRadius.full,
     },
     statusBar: {
         flexDirection: 'row',
         alignItems: 'center',
         padding: spacing.md,
-        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
         gap: spacing.sm,
     },
     statusDot: {
         width: 8,
         height: 8,
         borderRadius: 4,
-        backgroundColor: colors.zinc600,
+        backgroundColor: colors.slate400,
     },
     statusDotConnected: {
         backgroundColor: '#10b981',
     },
     statusText: {
         fontSize: typography.fontSize.sm,
-        color: colors.zinc400,
+        color: colors.textSecondary,
     },
     content: {
         flex: 1,
@@ -195,14 +197,15 @@ const styles = StyleSheet.create({
     },
     emptyText: {
         fontSize: typography.fontSize.lg,
-        color: colors.zinc600,
+        color: colors.textSecondary,
     },
     footer: {
         flexDirection: 'row',
         padding: spacing.lg,
         gap: spacing.md,
         borderTopWidth: 1,
-        borderTopColor: colors.zinc800,
+        borderTopColor: colors.slate200,
+        backgroundColor: colors.slate50,
     },
     pdfButton: {
         flex: 1,

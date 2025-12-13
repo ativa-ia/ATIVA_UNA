@@ -36,19 +36,24 @@ export default function TeacherSubjectDetailsScreen() {
     // Mock data - será substituído por dados reais do backend
     const subjectData = {
         name: subjectName,
-        code: 'MAT342',
+        code: 'SER360',
         imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAwv2wIhDYaEEhq6ALucXryaJd3_iE7nIannnYITlQ2lT4teSVDHhII-lZMdLI_-CeXo1rbJXxndpoYHZylIzN8qP0LlpRVW3TI0DNiM62qX7CyEKrECZt8X5h66V60-kJIqF7KcP6FkAqDXWoatiu-GhzOfViSnNRoVmijyHVoiVRpI9dfDA8nAe_PQ0_0IPimNJQEd7ofvcge2wVlwZ6VesOKtIbWIWaavtCusp6dpAu3_BFKA1wfZ2EeO6eIaKzLiC1SdUbL81E',
-        schedule: 'Terças e Quintas, 10:00 - 12:00',
-        location: 'Sala B-204',
-        totalStudents: 35,
-        presentToday: 28,
+        schedule: 'Quartas e Quintas, 10:00 - 12:00',
+        location: 'Sala l-102',
+        totalStudents: '---',
+        presentToday: '---',
     };
 
     return (
         <View style={styles.safeArea}>
             <View style={styles.container}>
                 {/* Header */}
-                <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
+                <LinearGradient
+                    colors={['#4f46e5', '#8b5cf6']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[styles.header, { paddingTop: insets.top + spacing.sm }]}
+                >
                     <TouchableOpacity
                         style={styles.backButton}
                         onPress={() => router.back()}
@@ -57,7 +62,7 @@ export default function TeacherSubjectDetailsScreen() {
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Detalhes da Disciplina</Text>
                     <View style={styles.placeholder} />
-                </View>
+                </LinearGradient>
 
                 <ScrollView
                     style={styles.scrollView}
@@ -133,7 +138,7 @@ export default function TeacherSubjectDetailsScreen() {
                             activeOpacity={0.8}
                             onPress={() => console.log('Atividades')}
                         >
-                            <MaterialIcons name="assignment" size={24} color={colors.white} />
+                            <MaterialIcons name="assignment" size={24} color={colors.textPrimary} />
                             <Text style={styles.secondaryButtonText}>Atividades e Quizzes</Text>
                         </TouchableOpacity>
                     </View>
@@ -146,7 +151,7 @@ export default function TeacherSubjectDetailsScreen() {
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
-        backgroundColor: colors.backgroundDark,
+        backgroundColor: colors.backgroundLight,
     },
     container: {
         flex: 1,
@@ -156,14 +161,16 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: spacing.base,
         paddingVertical: spacing.md,
-        backgroundColor: colors.backgroundDark,
+        // Background handled by LinearGradient or parent
     },
     backButton: {
-        width: 48,
-        height: 48,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.2)',
         justifyContent: 'center',
         alignItems: 'center',
-        marginLeft: -12,
+        marginLeft: -8,
     },
     headerTitle: {
         flex: 1,
@@ -182,21 +189,31 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         paddingBottom: spacing['3xl'],
+        paddingTop: spacing.base,
     },
     subjectCard: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: spacing.base,
-        backgroundColor: colors.backgroundDark,
-        paddingHorizontal: spacing.base,
-        paddingVertical: spacing.base,
-        minHeight: 72,
+        backgroundColor: colors.white,
+        paddingHorizontal: spacing.lg,
+        paddingVertical: spacing.lg,
+        marginHorizontal: spacing.base,
+        borderRadius: borderRadius.xl,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 4,
+        marginBottom: spacing.md,
     },
     avatar: {
         width: 64,
         height: 64,
         borderRadius: 32,
-        backgroundColor: colors.zinc700,
+        backgroundColor: colors.slate100,
     },
     subjectInfo: {
         flex: 1,
@@ -206,13 +223,13 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.xl,
         fontWeight: typography.fontWeight.bold,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
         marginBottom: 4,
     },
     codeInfo: {
         fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.textSecondary,
     },
     infoGrid: {
         flexDirection: 'row',
@@ -223,7 +240,7 @@ const styles = StyleSheet.create({
         flex: 1,
         gap: 4,
         borderTopWidth: 1,
-        borderTopColor: colors.zinc800,
+        borderTopColor: colors.slate200,
         paddingVertical: spacing.base,
     },
     infoItemLeft: {
@@ -235,13 +252,13 @@ const styles = StyleSheet.create({
     infoLabel: {
         fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.textSecondary,
     },
     infoValue: {
         fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.medium,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
     },
     statsRow: {
         flexDirection: 'row',
@@ -251,8 +268,15 @@ const styles = StyleSheet.create({
         paddingVertical: spacing.lg,
         marginHorizontal: spacing.base,
         marginTop: spacing.sm,
-        backgroundColor: 'rgba(39, 39, 42, 0.5)',
+        backgroundColor: colors.white,
         borderRadius: borderRadius.lg,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     statItem: {
         flex: 1,
@@ -262,21 +286,21 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize['2xl'],
         fontWeight: typography.fontWeight.bold,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
     },
     statValueGreen: {
-        color: '#10b981',
+        color: colors.secondary,
     },
     statLabel: {
         fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.textSecondary,
         marginTop: 4,
     },
     statDivider: {
         width: 1,
         height: 40,
-        backgroundColor: colors.zinc700,
+        backgroundColor: colors.slate200,
     },
     buttonGroup: {
         paddingHorizontal: spacing.base,
@@ -300,44 +324,44 @@ const styles = StyleSheet.create({
         gap: spacing.md,
     },
     aiButton: {
-        borderRadius: 16,
+        borderRadius: 20,
         overflow: 'hidden',
-        elevation: 4,
-        shadowColor: '#10b981',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
+        elevation: 6,
+        shadowColor: colors.secondary,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.25,
+        shadowRadius: 16,
     },
     transcriptionButton: {
-        borderRadius: 16,
+        borderRadius: 20,
         overflow: 'hidden',
-        elevation: 4,
-        shadowColor: '#8b5cf6',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
+        elevation: 6,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.25,
+        shadowRadius: 16,
     },
     aiButtonGradient: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: spacing.md,
-        paddingVertical: spacing.lg,
+        paddingVertical: spacing.xl,
         paddingHorizontal: spacing.lg,
     },
     aiTextContainer: {
         flex: 1,
     },
     aiButtonText: {
-        fontSize: typography.fontSize.base,
+        fontSize: typography.fontSize.lg,
         fontWeight: typography.fontWeight.bold,
         fontFamily: typography.fontFamily.display,
         color: colors.white,
     },
     aiButtonSubtext: {
-        fontSize: typography.fontSize.xs,
+        fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.display,
-        color: 'rgba(255,255,255,0.8)',
-        marginTop: 2,
+        color: 'rgba(255,255,255,0.9)',
+        marginTop: 4,
     },
     primaryButton: {
         flexDirection: 'row',
@@ -361,18 +385,25 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         gap: spacing.sm,
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.white,
         paddingVertical: spacing.base,
         paddingHorizontal: spacing.lg,
-        borderRadius: 12,
+        borderRadius: 16,
         height: 56,
         position: 'relative',
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     secondaryButtonText: {
         fontSize: typography.fontSize.base,
-        fontWeight: typography.fontWeight.bold,
+        fontWeight: typography.fontWeight.semibold,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
     },
     badge: {
         position: 'absolute',

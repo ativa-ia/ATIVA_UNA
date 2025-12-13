@@ -7,6 +7,7 @@ import {
     TouchableOpacity,
     TextInput,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -56,25 +57,31 @@ export default function UploadMaterialScreen() {
         <View style={styles.safeArea}>
             <View style={styles.container}>
                 {/* Header */}
-                <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-                    <TouchableOpacity
-                        style={styles.headerButton}
-                        onPress={handleCancel}
-                    >
-                        <Text style={styles.cancelText}>Cancelar</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Enviar Material</Text>
-                    <TouchableOpacity
-                        style={styles.headerButton}
-                        onPress={handleSubmit}
-                        disabled={!isFormValid}
-                    >
-                        <Text style={[
-                            styles.sendText,
-                            !isFormValid && styles.sendTextDisabled
-                        ]}>Enviar</Text>
-                    </TouchableOpacity>
-                </View>
+                <LinearGradient
+                    colors={['#4f46e5', '#7c3aed']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[styles.headerGradient, { paddingTop: insets.top + spacing.sm }]}>
+                    <View style={styles.headerContent}>
+                        <TouchableOpacity
+                            style={styles.headerButton}
+                            onPress={handleCancel}
+                        >
+                            <Text style={styles.cancelText}>Cancelar</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.headerTitle}>Enviar Material</Text>
+                        <TouchableOpacity
+                            style={styles.headerButton}
+                            onPress={handleSubmit}
+                            disabled={!isFormValid}
+                        >
+                            <Text style={[
+                                styles.sendText,
+                                !isFormValid && styles.sendTextDisabled
+                            ]}>Enviar</Text>
+                        </TouchableOpacity>
+                    </View>
+                </LinearGradient>
 
                 <ScrollView
                     style={styles.scrollView}
@@ -106,7 +113,7 @@ export default function UploadMaterialScreen() {
                         <TextInput
                             style={styles.textInput}
                             placeholder="Ex: Slides da Aula 5"
-                            placeholderTextColor={colors.zinc500}
+                            placeholderTextColor={colors.textSecondary}
                             value={title}
                             onChangeText={setTitle}
                         />
@@ -118,7 +125,7 @@ export default function UploadMaterialScreen() {
                         <TextInput
                             style={[styles.textInput, styles.textArea]}
                             placeholder="Adicione uma breve descrição sobre o conteúdo do material."
-                            placeholderTextColor={colors.zinc500}
+                            placeholderTextColor={colors.textSecondary}
                             value={description}
                             onChangeText={setDescription}
                             multiline
@@ -136,16 +143,16 @@ export default function UploadMaterialScreen() {
                         >
                             <View style={styles.selectorContent}>
                                 <View style={styles.selectorIcon}>
-                                    <MaterialIcons name="group" size={24} color={colors.zinc300} />
+                                    <MaterialIcons name="group" size={24} color={colors.primary} />
                                 </View>
                                 <Text style={[
                                     styles.selectorText,
-                                    selectedClass && styles.selectorTextSelected
+                                    selectedClass ? styles.selectorTextSelected : {} // Fixed ternary
                                 ]}>
                                     {selectedClass || 'Selecione a turma ou grupo'}
                                 </Text>
                             </View>
-                            <MaterialIcons name="arrow-forward-ios" size={20} color={colors.zinc500} />
+                            <MaterialIcons name="arrow-forward-ios" size={20} color={colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
                 </ScrollView>
@@ -171,19 +178,20 @@ export default function UploadMaterialScreen() {
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
-        backgroundColor: colors.backgroundDark,
+        backgroundColor: colors.backgroundLight,
     },
     container: {
         flex: 1,
     },
-    header: {
+    headerGradient: {
+        paddingHorizontal: spacing.base,
+        paddingTop: spacing.md,
+        paddingBottom: spacing.base,
+    },
+    headerContent: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingHorizontal: spacing.base,
-        paddingVertical: spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.zinc800,
     },
     headerButton: {
         width: 80,
@@ -200,17 +208,18 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.medium,
         fontFamily: typography.fontFamily.display,
-        color: colors.primary,
+        color: colors.white,
+        opacity: 0.8,
     },
     sendText: {
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.bold,
         fontFamily: typography.fontFamily.display,
-        color: colors.primary,
+        color: colors.white,
         textAlign: 'right',
     },
     sendTextDisabled: {
-        color: colors.primaryOpacity30,
+        opacity: 0.5,
     },
     scrollView: {
         flex: 1,
@@ -218,6 +227,7 @@ const styles = StyleSheet.create({
     scrollContent: {
         padding: spacing.base,
         gap: spacing.xl,
+        paddingTop: spacing.lg,
     },
     uploadSection: {
         // Container for upload box
@@ -227,7 +237,8 @@ const styles = StyleSheet.create({
         gap: spacing.lg,
         borderWidth: 2,
         borderStyle: 'dashed',
-        borderColor: colors.zinc700,
+        borderColor: colors.primary,
+        backgroundColor: 'rgba(79, 70, 229, 0.05)',
         borderRadius: borderRadius.xl,
         paddingHorizontal: spacing.xl,
         paddingVertical: spacing['3xl'],
@@ -236,13 +247,13 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.lg,
         fontWeight: typography.fontWeight.bold,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
         textAlign: 'center',
     },
     uploadDescription: {
         fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.textSecondary,
         textAlign: 'center',
     },
     uploadButton: {
@@ -251,8 +262,13 @@ const styles = StyleSheet.create({
         gap: spacing.sm,
         height: 40,
         paddingHorizontal: spacing.base,
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.primary,
         borderRadius: borderRadius.lg,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+        elevation: 2,
     },
     uploadButtonText: {
         fontSize: typography.fontSize.sm,
@@ -265,20 +281,26 @@ const styles = StyleSheet.create({
     },
     inputLabel: {
         fontSize: typography.fontSize.base,
-        fontWeight: typography.fontWeight.medium,
+        fontWeight: typography.fontWeight.semibold,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
+        marginLeft: spacing.xs,
     },
     textInput: {
         height: 56,
         paddingHorizontal: spacing.base,
-        backgroundColor: 'rgba(39, 39, 42, 0.5)',
+        backgroundColor: colors.white,
         borderWidth: 1,
-        borderColor: colors.zinc700,
+        borderColor: colors.slate200,
         borderRadius: borderRadius.lg,
         fontSize: typography.fontSize.base,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     textArea: {
         height: 144,
@@ -291,10 +313,15 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         height: 56,
         paddingHorizontal: spacing.base,
-        backgroundColor: 'rgba(39, 39, 42, 0.5)',
+        backgroundColor: colors.white,
         borderWidth: 1,
-        borderColor: colors.zinc700,
+        borderColor: colors.slate200,
         borderRadius: borderRadius.lg,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     selectorContent: {
         flexDirection: 'row',
@@ -306,19 +333,24 @@ const styles = StyleSheet.create({
         height: 40,
         justifyContent: 'center',
         alignItems: 'center',
+        backgroundColor: colors.slate50,
+        borderRadius: borderRadius.default,
     },
     selectorText: {
         fontSize: typography.fontSize.base,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.textSecondary,
     },
     selectorTextSelected: {
-        color: colors.white,
+        color: colors.textPrimary,
+        fontWeight: typography.fontWeight.medium,
     },
     actionContainer: {
         padding: spacing.base,
         paddingTop: spacing.sm,
-        backgroundColor: colors.backgroundDark,
+        backgroundColor: colors.white,
+        borderTopWidth: 1,
+        borderTopColor: colors.slate100,
     },
     submitButton: {
         height: 56,
@@ -333,7 +365,7 @@ const styles = StyleSheet.create({
         shadowRadius: 8,
     },
     submitButtonDisabled: {
-        backgroundColor: colors.primaryOpacity30,
+        backgroundColor: colors.slate300,
         elevation: 0,
         shadowOpacity: 0,
     },

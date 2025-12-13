@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Header } from '@/components/navigation/Header';
 import { BottomNav, NavItem } from '@/components/navigation/BottomNav';
 import { SubjectCard } from '@/components/cards/SubjectCard';
@@ -111,7 +112,12 @@ export default function TeacherDashboardScreen() {
                     showsVerticalScrollIndicator={false}
                 >
                     {/* Header Customizado */}
-                    <View style={styles.headerContainer}>
+                    <LinearGradient
+                        colors={['#4f46e5', '#7c3aed']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.headerGradient}
+                    >
                         <View style={styles.headerTop}>
                             <View>
                                 <Text style={styles.greeting}>Olá, {userName}</Text>
@@ -121,12 +127,13 @@ export default function TeacherDashboardScreen() {
                                 <TouchableOpacity
                                     style={styles.headerButton}
                                     onPress={() => router.push('/(teacher)/settings')}
+                                    activeOpacity={0.8}
                                 >
                                     <MaterialIcons name="settings" size={24} color={colors.white} />
                                 </TouchableOpacity>
                             </View>
                         </View>
-                    </View>
+                    </LinearGradient>
 
 
 
@@ -171,7 +178,6 @@ export default function TeacherDashboardScreen() {
                     items={navItems}
                     activeId={activeNavId}
                     onItemPress={handleNavPress}
-                    darkMode
                 />
             </View>
         </SafeAreaView>
@@ -181,7 +187,7 @@ export default function TeacherDashboardScreen() {
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
-        backgroundColor: colors.backgroundDark,
+        backgroundColor: colors.backgroundLight,
     },
     container: {
         flex: 1,
@@ -192,10 +198,12 @@ const styles = StyleSheet.create({
     scrollContent: {
         paddingBottom: spacing.base,
     },
-    headerContainer: {
+    headerGradient: {
         paddingHorizontal: spacing.base,
         paddingTop: spacing.md,
-        paddingBottom: spacing.base,
+        paddingBottom: spacing.xl,
+        borderBottomLeftRadius: 24,
+        borderBottomRightRadius: 24,
     },
     headerTop: {
         flexDirection: 'row',
@@ -211,7 +219,7 @@ const styles = StyleSheet.create({
     date: {
         fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.body,
-        color: colors.zinc400,
+        color: 'rgba(255,255,255,0.8)',
         marginTop: 4,
     },
     headerButtons: {
@@ -219,26 +227,24 @@ const styles = StyleSheet.create({
         gap: spacing.sm,
     },
     headerButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(255,255,255,0.2)',
         justifyContent: 'center',
         alignItems: 'center',
-        position: 'relative',
     },
     section: {
-        marginTop: spacing.base,
+        marginTop: spacing.lg,
     },
     sectionTitle: {
         fontSize: typography.fontSize.lg,
         fontWeight: typography.fontWeight.bold,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
         letterSpacing: typography.letterSpacing.tight,
         paddingHorizontal: spacing.base,
-        paddingBottom: spacing.sm,
-        paddingTop: spacing.base,
+        paddingBottom: spacing.md,
     },
     subjectsGrid: {
         flexDirection: 'row',
@@ -249,6 +255,8 @@ const styles = StyleSheet.create({
     subjectCard: {
         width: '47%',
         minWidth: 158,
+        // Shadow and bg handled by SubjectCard component, assuming it uses theme colors correctly
+        // If SubjectCard needs update, we check that next
     },
 
     loadingContainer: {
@@ -269,7 +277,7 @@ const styles = StyleSheet.create({
     errorText: {
         fontSize: typography.fontSize.base,
         fontFamily: typography.fontFamily.body,
-        color: '#ef4444',
+        color: colors.danger,
         marginBottom: spacing.md,
         textAlign: 'center',
     },
@@ -296,5 +304,4 @@ const styles = StyleSheet.create({
         color: colors.textSecondary,
         textAlign: 'center',
     },
-
 });
