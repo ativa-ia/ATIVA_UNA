@@ -62,7 +62,7 @@ export default function AdminLayout() {
         <Stack
             screenOptions={{
                 headerShown: false,
-                contentStyle: { backgroundColor: colors.backgroundDark },
+                contentStyle: { backgroundColor: colors.backgroundLight },
             }}
         >
             <Stack.Screen name="dashboard" />
@@ -75,6 +75,6 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: colors.backgroundDark,
+        backgroundColor: colors.backgroundLight,
     },
 });

@@ -35,7 +35,7 @@ def generate_summary(text: str, subject_name: str = "Aula") -> str:
     
     try:
         model = genai.GenerativeModel(
-            model_name='gemini-2.5-flash',
+            model_name='gemini-2.5-flash-lite',
             system_instruction=f"""Você é um assistente educacional especializado em criar resumos.
             
 Sua tarefa é criar um resumo claro, objetivo e bem estruturado do conteúdo fornecido.
@@ -81,7 +81,7 @@ def generate_quiz(text: str, subject_name: str = "Aula", num_questions: int = 20
     
     try:
         model = genai.GenerativeModel(
-            model_name='gemini-2.5-flash',
+            model_name='gemini-2.5-flash-lite',
             system_instruction=f"""Você é um assistente educacional especializado em criar quizzes sobre conteúdo de aulas.
 
 REGRA CRÍTICA: O texto abaixo é uma TRANSCRIÇÃO de uma aula. Você deve criar perguntas sobre o CONTEÚDO EDUCACIONAL que está sendo ENSINADO na aula, NÃO sobre o processo de transcrição em si.
@@ -213,7 +213,7 @@ Se tiver acesso a documentos abaixo, use-os como fonte principal."""
         sys_instruction += "\n\n" + system_context
 
     model = genai.GenerativeModel(
-        model_name='gemini-2.5-flash',
+        model_name='gemini-2.5-flash-lite',
         system_instruction=sys_instruction
     )
     chat = model.start_chat(history=chat_history)
@@ -306,7 +306,7 @@ def generate_study_questions(text: str) -> list[str]:
         return []
 
     try:
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash-lite')
         
         prompt = f"""Baseado no texto abaixo, gere 3 perguntas curtas e instigantes que um estudante poderia fazer para entender melhor o conteúdo.
         Retorne APENAS as perguntas separadas por quebra de linha. Nenhuma numeração ou texto adicional.

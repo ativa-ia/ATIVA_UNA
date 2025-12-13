@@ -39,4 +39,7 @@ wheels/
 
 # OS
 .DS_Store
-Thumbs.db
+
+# Documentation / Plans
+*.md
+!README.md
