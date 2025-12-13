@@ -659,7 +659,12 @@ export default function TranscriptionScreen() {
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
             {/* Header */}
-            <View style={styles.header}>
+            <LinearGradient
+                colors={['#4f46e5', '#8b5cf6']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.header, { paddingTop: insets.top + spacing.sm }]}
+            >
                 <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
                     <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
                 </TouchableOpacity>
@@ -669,14 +674,14 @@ export default function TranscriptionScreen() {
                 </View>
                 <View style={styles.saveIndicator}>
                     {isSaving ? (
-                        <ActivityIndicator size="small" color={colors.zinc400} />
+                        <ActivityIndicator size="small" color={colors.white} />
                     ) : lastSaved ? (
-                        <MaterialIcons name="cloud-done" size={20} color="#22c55e" />
+                        <MaterialIcons name="cloud-done" size={20} color="#bef264" />
                     ) : (
-                        <MaterialIcons name="cloud-off" size={20} color={colors.zinc500} />
+                        <MaterialIcons name="cloud-off" size={20} color="rgba(255,255,255,0.7)" />
                     )}
                 </View>
-            </View>
+            </LinearGradient>
 
             {/* Status Banner */}
             {isRecording && (
@@ -701,7 +706,7 @@ export default function TranscriptionScreen() {
                         <MaterialIcons
                             name={displayMode === 'quiz' ? 'quiz' : 'summarize'}
                             size={20}
-                            color={displayMode === 'quiz' ? '#8b5cf6' : '#22c55e'}
+                            color={displayMode === 'quiz' ? colors.primary : colors.secondary}
                         />
                         <Text style={styles.panelTitle}>
                             {displayMode === 'quiz' ? 'Quiz Gerado' : displayMode === 'summary' ? 'Resumo Gerado' : 'Aguardando...'}
@@ -714,7 +719,7 @@ export default function TranscriptionScreen() {
                     >
                         {isGenerating && displayMode !== 'none' ? (
                             <View style={styles.loadingContainer}>
-                                <ActivityIndicator size="large" color={displayMode === 'quiz' ? '#8b5cf6' : '#22c55e'} />
+                                <ActivityIndicator size="large" color={displayMode === 'quiz' ? colors.primary : colors.secondary} />
                                 <Text style={styles.loadingText}>Gerando com IA...</Text>
                             </View>
                         ) : displayMode === 'summary' && generatedSummary ? (
@@ -740,7 +745,7 @@ export default function TranscriptionScreen() {
                                             <View>
                                                 {/* Contador de questões */}
                                                 <View style={styles.questionCountBadge}>
-                                                    <MaterialIcons name="quiz" size={16} color="#8b5cf6" />
+                                                    <MaterialIcons name="quiz" size={16} color={colors.primary} />
                                                     <Text style={styles.questionCountText}>
                                                         {questions.length} {questions.length === 1 ? 'questão' : 'questões'}
                                                     </Text>
@@ -768,7 +773,7 @@ export default function TranscriptionScreen() {
                                                                 <MaterialIcons
                                                                     name={visibleAnswers.has(i) ? 'visibility-off' : 'visibility'}
                                                                     size={18}
-                                                                    color={visibleAnswers.has(i) ? '#22c55e' : colors.zinc400}
+                                                                    color={visibleAnswers.has(i) ? colors.secondary : colors.slate400}
                                                                 />
                                                             </TouchableOpacity>
                                                         </View>
@@ -835,7 +840,7 @@ export default function TranscriptionScreen() {
                             </View>
                         ) : (
                             <View style={styles.emptyState}>
-                                <MaterialIcons name="auto-awesome" size={48} color={colors.zinc600} />
+                                <MaterialIcons name="auto-awesome" size={48} color={colors.slate400} />
                                 <Text style={styles.emptyStateText}>
                                     Clique em "Resumo" ou "Quiz" para gerar conteúdo com IA
                                 </Text>
@@ -847,7 +852,7 @@ export default function TranscriptionScreen() {
                 {/* Painel Direito - Transcrição */}
                 <View style={styles.rightPanel}>
                     <View style={styles.panelHeader}>
-                        <MaterialIcons name="mic" size={20} color="#8b5cf6" />
+                        <MaterialIcons name="mic" size={20} color={colors.primary} />
                         <Text style={styles.panelTitle}>Transcrição</Text>
                         <Text style={styles.wordCount}>{wordCount} palavras</Text>
                     </View>
@@ -865,7 +870,7 @@ export default function TranscriptionScreen() {
                             placeholder="O texto transcrito aparecerá aqui...
 
 Pressione o botão do microfone para começar a falar."
-                            placeholderTextColor={colors.zinc500}
+                            placeholderTextColor={colors.slate400}
                             editable={!isRecording}
                         />
                     </ScrollView>
@@ -1066,7 +1071,7 @@ Pressione o botão do microfone para começar a falar."
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: colors.backgroundDark,
+        backgroundColor: colors.backgroundLight,
     },
     loadingContainer: {
         justifyContent: 'center',
@@ -1074,7 +1079,7 @@ const styles = StyleSheet.create({
     },
     loadingText: {
         marginTop: spacing.md,
-        color: colors.zinc400,
+        color: colors.textSecondary,
         fontSize: typography.fontSize.base,
     },
     header: {
@@ -1082,13 +1087,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: spacing.base,
         paddingVertical: spacing.md,
-        backgroundColor: colors.zinc900,
     },
     backButton: {
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: colors.zinc800,
+        backgroundColor: 'rgba(255,255,255,0.2)',
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -1103,7 +1107,7 @@ const styles = StyleSheet.create({
     },
     headerSubtitle: {
         fontSize: typography.fontSize.sm,
-        color: colors.zinc400,
+        color: 'rgba(255,255,255,0.8)',
     },
     saveIndicator: {
         width: 40,
@@ -1116,7 +1120,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         gap: spacing.sm,
-        backgroundColor: 'rgba(239, 68, 68, 0.2)',
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
         paddingVertical: spacing.sm,
     },
     recordingDot: {
@@ -1135,7 +1139,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         gap: spacing.sm,
-        backgroundColor: 'rgba(245, 158, 11, 0.2)',
+        backgroundColor: 'rgba(245, 158, 11, 0.1)',
         paddingVertical: spacing.sm,
     },
     pausedText: {
@@ -1152,15 +1156,22 @@ const styles = StyleSheet.create({
     },
     textContainer: {
         flex: 1,
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.white,
         borderRadius: borderRadius.xl,
         padding: spacing.lg,
         minHeight: 300,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 12,
+        elevation: 4,
     },
     textInput: {
         flex: 1,
         fontSize: typography.fontSize.base,
-        color: colors.white,
+        color: colors.textPrimary,
         lineHeight: 28,
         textAlignVertical: 'top',
     },
@@ -1173,11 +1184,11 @@ const styles = StyleSheet.create({
     },
     wordCount: {
         fontSize: typography.fontSize.sm,
-        color: colors.zinc500,
+        color: colors.textSecondary,
     },
     infoText: {
         fontSize: typography.fontSize.sm,
-        color: colors.zinc400,
+        color: colors.textSecondary,
     },
     // Split-screen layout
     contentContainer: {
@@ -1188,30 +1199,44 @@ const styles = StyleSheet.create({
     },
     leftPanel: {
         flex: 1,
-        backgroundColor: colors.zinc900,
+        backgroundColor: colors.white,
         borderRadius: borderRadius.xl,
         overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 12,
+        elevation: 4,
     },
     rightPanel: {
         flex: 1,
-        backgroundColor: colors.zinc900,
+        backgroundColor: colors.white,
         borderRadius: borderRadius.xl,
         overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 12,
+        elevation: 4,
     },
     panelHeader: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: spacing.sm,
         padding: spacing.md,
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.slate50,
         borderBottomWidth: 1,
-        borderBottomColor: colors.zinc700,
+        borderBottomColor: colors.slate200,
     },
     panelTitle: {
         flex: 1,
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
-        color: colors.white,
+        color: colors.textPrimary,
     },
     panelScroll: {
         flex: 1,
@@ -1223,7 +1248,7 @@ const styles = StyleSheet.create({
     transcriptionInfo: {
         padding: spacing.md,
         borderTopWidth: 1,
-        borderTopColor: colors.zinc800,
+        borderTopColor: colors.slate100,
         alignItems: 'center',
     },
     // Generated content styles
@@ -1235,7 +1260,7 @@ const styles = StyleSheet.create({
     },
     emptyStateText: {
         fontSize: typography.fontSize.base,
-        color: colors.zinc500,
+        color: colors.textSecondary,
         textAlign: 'center',
         maxWidth: 250,
     },
@@ -1244,28 +1269,30 @@ const styles = StyleSheet.create({
     },
     generatedText: {
         fontSize: typography.fontSize.base,
-        color: colors.white,
+        color: colors.textPrimary,
         lineHeight: 24,
     },
     quizContent: {
         gap: spacing.lg,
     },
     quizQuestion: {
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.slate50,
         borderRadius: borderRadius.lg,
         padding: spacing.md,
         gap: spacing.sm,
+        borderWidth: 1,
+        borderColor: colors.slate200,
     },
     questionNumber: {
         fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.bold,
-        color: '#8b5cf6',
+        color: colors.primary,
         marginBottom: spacing.xs,
     },
     questionText: {
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
-        color: colors.white,
+        color: colors.textPrimary,
         marginBottom: spacing.sm,
     },
     questionOption: {
@@ -1273,9 +1300,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: spacing.sm,
         padding: spacing.sm,
-        backgroundColor: colors.zinc700,
+        backgroundColor: colors.white,
         borderRadius: borderRadius.default,
         marginTop: spacing.xs,
+        borderWidth: 1,
+        borderColor: colors.slate200,
     },
     correctOption: {
         backgroundColor: 'rgba(34, 197, 94, 0.1)',
@@ -1285,24 +1314,29 @@ const styles = StyleSheet.create({
     optionLetter: {
         fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.bold,
-        color: colors.zinc400,
+        color: colors.textSecondary,
         width: 20,
     },
     optionText: {
         flex: 1,
         fontSize: typography.fontSize.sm,
-        color: colors.white,
+        color: colors.textPrimary,
     },
     sendButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         gap: spacing.sm,
-        backgroundColor: '#8b5cf6',
+        backgroundColor: colors.primary,
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.lg,
         borderRadius: borderRadius.lg,
         marginTop: spacing.md,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 4,
     },
     sendButtonText: {
         fontSize: typography.fontSize.base,
@@ -1313,8 +1347,9 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.base,
         paddingTop: spacing.lg,
         borderTopWidth: 1,
-        borderTopColor: colors.zinc800,
+        borderTopColor: colors.slate200,
         alignItems: 'center',
+        backgroundColor: colors.backgroundLight,
     },
     footerButtons: {
         flexDirection: 'row',
@@ -1332,6 +1367,11 @@ const styles = StyleSheet.create({
         borderRadius: 35,
         justifyContent: 'center',
         alignItems: 'center',
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
     },
     summaryButton: {
     },
@@ -1342,6 +1382,11 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         gap: 2,
+        shadowColor: colors.secondary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        elevation: 4,
     },
     quizButton: {
     },
@@ -1352,6 +1397,11 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         gap: 2,
+        shadowColor: '#f59e0b',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        elevation: 4,
     },
     buttonLabel: {
         fontSize: 10,
@@ -1370,7 +1420,7 @@ const styles = StyleSheet.create({
     questionCountLabel: {
         fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.semibold,
-        color: colors.white,
+        color: colors.textSecondary,
     },
     questionCountOptions: {
         flexDirection: 'row',
@@ -1380,20 +1430,20 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.sm,
         borderRadius: borderRadius.lg,
-        backgroundColor: colors.zinc800,
-        borderWidth: 2,
-        borderColor: colors.zinc700,
+        backgroundColor: colors.white,
+        borderWidth: 1,
+        borderColor: colors.slate200,
         minWidth: 40,
         alignItems: 'center',
     },
     questionCountOptionActive: {
-        backgroundColor: '#8b5cf6',
-        borderColor: '#a855f7',
+        backgroundColor: colors.primary,
+        borderColor: colors.primary,
     },
     questionCountOptionText: {
         fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.semibold,
-        color: colors.zinc400,
+        color: colors.textSecondary,
     },
     questionCountOptionTextActive: {
         color: colors.white,
@@ -1415,44 +1465,51 @@ const styles = StyleSheet.create({
     footerHint: {
         marginTop: spacing.sm,
         fontSize: typography.fontSize.sm,
-        color: colors.zinc400,
+        color: colors.textSecondary,
     },
     // Modal styles
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'flex-end',
     },
     modalOverlayFullScreen: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.95)',
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
         justifyContent: 'center',
         alignItems: 'center',
     },
     closeIconButton: {
         padding: spacing.sm,
+        backgroundColor: 'rgba(0,0,0,0.05)',
+        borderRadius: borderRadius.full,
     },
     gamificationContent: {
         padding: spacing.lg,
         maxHeight: '75%',
     },
     modalContent: {
-        backgroundColor: colors.zinc900,
+        backgroundColor: colors.white,
         borderTopLeftRadius: borderRadius.xl,
         borderTopRightRadius: borderRadius.xl,
         padding: spacing.lg,
         paddingBottom: spacing.xl,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 8,
     },
     modalTitle: {
         fontSize: typography.fontSize.xl,
         fontWeight: typography.fontWeight.bold,
-        color: colors.white,
+        color: colors.textPrimary,
         textAlign: 'center',
         marginBottom: spacing.xs,
     },
     modalSubtitle: {
         fontSize: typography.fontSize.sm,
-        color: colors.zinc400,
+        color: colors.textSecondary,
         textAlign: 'center',
         marginBottom: spacing.lg,
     },
@@ -1462,16 +1519,23 @@ const styles = StyleSheet.create({
     },
     generatingText: {
         marginTop: spacing.md,
-        color: colors.zinc400,
+        color: colors.textSecondary,
         fontSize: typography.fontSize.base,
     },
     activityOption: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.white,
         borderRadius: borderRadius.lg,
         padding: spacing.md,
         marginBottom: spacing.sm,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     activityIcon: {
         width: 44,
@@ -1479,6 +1543,7 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         justifyContent: 'center',
         alignItems: 'center',
+        backgroundColor: colors.slate50,
     },
     activityInfo: {
         flex: 1,
@@ -1487,11 +1552,11 @@ const styles = StyleSheet.create({
     activityName: {
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
-        color: colors.white,
+        color: colors.textPrimary,
     },
     activityDesc: {
         fontSize: typography.fontSize.sm,
-        color: colors.zinc400,
+        color: colors.textSecondary,
     },
     cancelButton: {
         marginTop: spacing.md,
@@ -1499,16 +1564,22 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     cancelButtonText: {
-        color: colors.zinc400,
+        color: colors.textSecondary,
         fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.medium,
     },
     // Summary Modal
     summaryModalContent: {
-        backgroundColor: colors.zinc900,
+        backgroundColor: colors.white,
         borderTopLeftRadius: borderRadius.xl,
         borderTopRightRadius: borderRadius.xl,
         padding: spacing.lg,
         maxHeight: '80%',
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 8,
     },
     summaryScroll: {
         maxHeight: 300,
@@ -1516,7 +1587,7 @@ const styles = StyleSheet.create({
     },
     summaryText: {
         fontSize: typography.fontSize.base,
-        color: colors.white,
+        color: colors.textPrimary,
         lineHeight: 24,
     },
     summaryButtons: {
@@ -1528,37 +1599,49 @@ const styles = StyleSheet.create({
         padding: spacing.md,
         borderRadius: borderRadius.lg,
         borderWidth: 1,
-        borderColor: colors.zinc600,
+        borderColor: colors.slate200,
         alignItems: 'center',
+        backgroundColor: colors.white,
     },
     secondaryButtonText: {
-        color: colors.zinc300,
+        color: colors.textSecondary,
         fontSize: typography.fontSize.sm,
+        fontWeight: typography.fontWeight.medium,
     },
     primaryButton: {
         flex: 1,
         flexDirection: 'row',
         padding: spacing.md,
         borderRadius: borderRadius.lg,
-        backgroundColor: '#8b5cf6',
+        backgroundColor: colors.primary,
         alignItems: 'center',
         justifyContent: 'center',
         gap: spacing.xs,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 4,
     },
     primaryButtonText: {
         color: colors.white,
         fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.semibold,
     },
-    // Ranking Modal - Premium Dark Theme with Primary Accents
+    // Ranking Modal - Premium Light Theme with Primary Accents
     rankingModalContent: {
-        backgroundColor: colors.backgroundDark,
+        backgroundColor: colors.white,
         borderRadius: borderRadius.xl,
         padding: spacing.lg,
         width: '95%',
         height: '90%',
-        borderWidth: 3,
-        borderColor: colors.primary,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 8,
     },
     rankingScroll: {
         maxHeight: 400,
@@ -1567,23 +1650,33 @@ const styles = StyleSheet.create({
     waitingContainer: {
         alignItems: 'center',
         paddingVertical: spacing.xl,
-        backgroundColor: 'rgba(19, 91, 236, 0.05)',
+        backgroundColor: 'rgba(79, 70, 229, 0.05)',
         borderRadius: borderRadius.lg,
         marginTop: spacing.md,
+        borderWidth: 1,
+        borderStyle: 'dashed',
+        borderColor: colors.primary,
     },
     waitingText: {
         marginTop: spacing.md,
-        color: colors.white,
+        color: colors.primary,
         fontSize: typography.fontSize.lg,
         fontWeight: 'bold',
     },
     rankingItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.white,
         borderRadius: borderRadius.lg,
         padding: spacing.md,
         marginBottom: spacing.sm,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     rankingPositionOld: {
         fontSize: typography.fontSize.lg,
@@ -1596,18 +1689,23 @@ const styles = StyleSheet.create({
     },
     rankingNameOld: {
         fontSize: typography.fontSize.base,
-        color: colors.white,
+        color: colors.textPrimary,
         fontWeight: typography.fontWeight.medium,
     },
     rankingScoreOld: {
         fontSize: typography.fontSize.sm,
-        color: colors.zinc400,
+        color: colors.textSecondary,
     },
     endActivityButton: {
-        backgroundColor: '#ef4444',
+        backgroundColor: colors.danger,
         borderRadius: borderRadius.lg,
         padding: spacing.md,
         alignItems: 'center',
+        shadowColor: colors.danger,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 4,
     },
     endActivityButtonText: {
         color: colors.white,
@@ -1616,13 +1714,18 @@ const styles = StyleSheet.create({
     },
     // Leaderboard Styles - Premium Design
     leaderboardContainer: {
-        backgroundColor: 'rgba(19, 91, 236, 0.03)',
+        backgroundColor: colors.white,
         borderRadius: borderRadius.xl,
         padding: spacing.lg,
         marginBottom: spacing.md,
         borderWidth: 1,
-        borderColor: 'rgba(19, 91, 236, 0.15)',
+        borderColor: colors.slate200,
         height: 450,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 4,
     },
     leaderboardHeader: {
         flexDirection: 'row',
@@ -1631,7 +1734,7 @@ const styles = StyleSheet.create({
         marginBottom: spacing.lg,
         paddingBottom: spacing.md,
         borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255,255,255,0.1)',
+        borderBottomColor: colors.slate200,
     },
     leaderboardStats: {
         flexDirection: 'row',
@@ -1641,7 +1744,7 @@ const styles = StyleSheet.create({
     rankingHeader: {
         padding: spacing.lg,
         borderBottomWidth: 1,
-        borderBottomColor: colors.zinc700,
+        borderBottomColor: colors.slate200,
     },
     statsRow: {
         flexDirection: 'row',
@@ -1650,21 +1753,21 @@ const styles = StyleSheet.create({
     },
     statCard: {
         flex: 1,
-        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+        backgroundColor: colors.slate50,
         padding: spacing.md,
         borderRadius: borderRadius.lg,
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: 'rgba(139, 92, 246, 0.3)',
+        borderColor: colors.slate200,
     },
     statNumber: {
         fontSize: typography.fontSize['2xl'],
         fontWeight: typography.fontWeight.bold,
-        color: '#a78bfa',
+        color: colors.primary,
     },
     statLabel: {
         fontSize: typography.fontSize.xs,
-        color: colors.zinc400,
+        color: colors.textSecondary,
         marginTop: 4,
     },
     studentList: {
@@ -1675,29 +1778,37 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         padding: spacing.md,
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.white,
         borderRadius: borderRadius.lg,
         marginBottom: spacing.sm,
         borderWidth: 1,
-        borderColor: colors.zinc700,
+        borderColor: colors.slate200,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
     },
     studentRowWaiting: {
         opacity: 0.6,
         borderStyle: 'dashed',
+        backgroundColor: colors.slate50,
     },
     positionBadge: {
         width: 32,
         height: 32,
         borderRadius: 16,
-        backgroundColor: colors.zinc700,
+        backgroundColor: colors.slate100,
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: spacing.md,
+        borderWidth: 1,
+        borderColor: colors.slate200,
     },
     positionText: {
         fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.bold,
-        color: colors.white,
+        color: colors.textPrimary,
     },
     studentInfo: {
         flex: 1,
@@ -1705,18 +1816,18 @@ const styles = StyleSheet.create({
     studentName: {
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
-        color: colors.white,
+        color: colors.textPrimary,
     },
     studentNameWaiting: {
-        color: colors.zinc500,
+        color: colors.textSecondary,
     },
     studentScore: {
         fontSize: typography.fontSize.xs,
-        color: colors.zinc400,
+        color: colors.textSecondary,
         marginTop: 2,
     },
     resultBadge: {
-        backgroundColor: '#10b981',
+        backgroundColor: colors.secondary,
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.xs,
         borderRadius: borderRadius.full,
@@ -1728,7 +1839,7 @@ const styles = StyleSheet.create({
     },
     waitingTextSmall: {
         fontSize: typography.fontSize.xs,
-        color: colors.zinc500,
+        color: colors.textSecondary,
         fontStyle: 'italic',
     },
     emptyStateRanking: {
@@ -1739,11 +1850,11 @@ const styles = StyleSheet.create({
     },
     emptyText: {
         fontSize: typography.fontSize.base,
-        color: colors.zinc400,
+        color: colors.textSecondary,
         marginTop: spacing.md,
     },
     closeButton: {
-        backgroundColor: '#ef4444',
+        backgroundColor: colors.danger,
         padding: spacing.md,
         borderRadius: borderRadius.lg,
         margin: spacing.base,
@@ -1759,7 +1870,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         gap: spacing.sm,
-        backgroundColor: '#8b5cf6',
+        backgroundColor: colors.primary,
         padding: spacing.md,
         borderRadius: borderRadius.lg,
         margin: spacing.base,
@@ -1783,7 +1894,7 @@ const styles = StyleSheet.create({
     leaderboardTitle: {
         fontSize: typography.fontSize.xl,
         fontWeight: typography.fontWeight.bold,
-        color: colors.white,
+        color: colors.textPrimary,
     },
     leaderboardScroll: {
         flex: 1,
@@ -1793,26 +1904,31 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.md,
-        backgroundColor: 'rgba(255,255,255,0.03)',
+        backgroundColor: colors.white,
         borderRadius: borderRadius.lg,
         marginBottom: spacing.xs,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
+        borderColor: colors.slate200,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
     },
-    rank1: { backgroundColor: 'rgba(255, 215, 0, 0.1)', borderColor: 'rgba(255, 215, 0, 0.3)' },
-    rank2: { backgroundColor: 'rgba(192, 192, 192, 0.1)', borderColor: 'rgba(192, 192, 192, 0.3)' },
-    rank3: { backgroundColor: 'rgba(205, 127, 50, 0.1)', borderColor: 'rgba(205, 127, 50, 0.3)' },
-    rankWaiting: { opacity: 0.5, borderStyle: 'dashed' },
+    rank1: { backgroundColor: '#fffbeb', borderColor: '#fcd34d' },
+    rank2: { backgroundColor: '#f8fafc', borderColor: '#e2e8f0' },
+    rank3: { backgroundColor: '#fff7ed', borderColor: '#fdba74' },
+    rankWaiting: { opacity: 0.6, borderStyle: 'dashed', backgroundColor: colors.slate50 },
 
     // rankText definitions
     rankText: {
         fontSize: typography.fontSize.base,
         fontWeight: 'bold',
-        color: colors.zinc400,
+        color: colors.textSecondary,
     },
     rankTextTop: {
         fontSize: typography.fontSize.lg,
-        color: colors.white,
+        color: colors.textPrimary,
     },
 
     rankingPosition: {
@@ -1820,7 +1936,7 @@ const styles = StyleSheet.create({
         height: 44,
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(19, 91, 236, 0.15)',
+        backgroundColor: 'rgba(79, 70, 229, 0.1)',
         borderRadius: 22,
     },
     rankingInfo: {
@@ -1830,15 +1946,15 @@ const styles = StyleSheet.create({
     rankingName: {
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
-        color: colors.white,
+        color: colors.textPrimary,
     },
     rankingNameWaiting: {
-        color: colors.zinc500,
+        color: colors.textSecondary,
         fontStyle: 'italic',
     },
     statusWaiting: {
         fontSize: 11,
-        color: colors.zinc500,
+        color: colors.textSecondary,
     },
     rankingScore: {
         alignItems: 'flex-end',
@@ -1853,18 +1969,20 @@ const styles = StyleSheet.create({
     rankPoints: {
         fontSize: typography.fontSize.xs,
         fontWeight: 'bold',
-        color: '#D97706', // Amber 600
+        color: colors.white,
     },
     rankPercentage: {
         fontSize: 10,
-        color: colors.zinc500,
+        color: colors.textSecondary,
     },
     previewQuestionCard: {
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.slate50,
         padding: spacing.lg,
         borderRadius: borderRadius.lg,
         marginBottom: spacing.md,
         position: 'relative',  // Para posicionar o botão de exclusão
+        borderWidth: 1,
+        borderColor: colors.slate200,
     },
     questionHeader: {
         flexDirection: 'row',
@@ -1876,12 +1994,12 @@ const styles = StyleSheet.create({
     previewQuestionTitle: {
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.bold,
-        color: colors.white,
+        color: colors.textPrimary,
         marginBottom: spacing.sm,
     },
     previewOption: {
         fontSize: typography.fontSize.sm,
-        color: colors.zinc400,
+        color: colors.textSecondary,
         marginLeft: spacing.sm,
         marginBottom: 2,
     },
@@ -1898,6 +2016,11 @@ const styles = StyleSheet.create({
         padding: spacing.md,
         borderRadius: borderRadius.lg,
         marginTop: spacing.lg,
+        shadowColor: '#f59e0b',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 4,
     },
     toggleAnswerKeyText: {
         fontSize: typography.fontSize.base,
@@ -1915,11 +2038,13 @@ const styles = StyleSheet.create({
         borderRadius: borderRadius.default,
         marginBottom: spacing.md,
         alignSelf: 'flex-start',
+        borderWidth: 1,
+        borderColor: 'rgba(139, 92, 246, 0.2)',
     },
     questionCountText: {
         fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.medium,
-        color: '#8b5cf6',
+        color: colors.primary,
     },
     // Question actions row (delete + visibility buttons)
     questionActionsRow: {
@@ -1938,26 +2063,30 @@ const styles = StyleSheet.create({
         right: spacing.sm,
         padding: spacing.sm,
         borderRadius: borderRadius.default,
-        backgroundColor: 'rgba(239, 68, 68, 0.15)',
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
     },
     individualAnswerButton: {
         padding: spacing.xs,
         borderRadius: borderRadius.default,
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        backgroundColor: 'rgba(79, 70, 229, 0.1)',
     },
 
     listContainer: {
-        backgroundColor: colors.zinc50,
+        backgroundColor: colors.slate50,
         borderRadius: borderRadius.lg,
         padding: spacing.sm,
+        borderWidth: 1,
+        borderColor: colors.slate200,
     },
     waitingSubtext: {
         fontSize: typography.fontSize.sm,
-        color: colors.zinc400,
+        color: colors.textSecondary,
         marginTop: 4,
     },
     leaderboardRowWaiting: {
         opacity: 0.5,
+        borderStyle: 'dashed',
+        backgroundColor: colors.slate50,
     },
     rankPointsList: {
         fontSize: typography.fontSize.sm,

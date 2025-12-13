@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
 import { colors } from '@/constants/colors';
@@ -76,77 +77,100 @@ export default function LoginScreen() {
     };
 
     return (
-        <SafeAreaView style={styles.safeArea}>
-            <ScrollView
-                style={styles.container}
-                contentContainerStyle={styles.content}
-                showsVerticalScrollIndicator={false}
+        <View style={styles.mainContainer}>
+            {/* Header com Gradiente */}
+            <LinearGradient
+                colors={['#4f46e5', '#8b5cf6']}
+                style={styles.headerGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
             >
-                {/* Logo */}
-                <View style={styles.logoContainer}>
-                    <MaterialIcons name="school" size={60} color={colors.primary} />
-                </View>
-
-                {/* Header */}
-                <View style={styles.header}>
+                <SafeAreaView style={styles.safeAreaHeader}>
+                    <View style={styles.logoContainer}>
+                        <MaterialIcons name="school" size={48} color={colors.white} />
+                    </View>
                     <Text style={styles.title}>Ativa AI</Text>
-                    <Text style={styles.subtitle}>
-                        Acesso Rápido
-                    </Text>
-                </View>
+                    <Text style={styles.subtitle}>Acesso Rápido</Text>
+                </SafeAreaView>
+            </LinearGradient>
 
-                {/* Form */}
-                <View style={styles.form}>
-                    <Input
-                        iconName="person"
-                        placeholder="Seu Nome"
-                        value={name}
-                        onChangeText={setName}
-                        darkMode
-                    />
-                    <Input
-                        iconName="email"
-                        placeholder="E-mail"
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                        value={email}
-                        onChangeText={setEmail}
-                        darkMode
-                    />
-                </View>
+            <SafeAreaView style={styles.safeAreaContent}>
+                <ScrollView
+                    style={styles.container}
+                    contentContainerStyle={styles.content}
+                    showsVerticalScrollIndicator={false}
+                >
+                    <View style={styles.card}>
+                        {/* Form */}
+                        <View style={styles.form}>
+                            <Input
+                                iconName="person"
+                                placeholder="Seu Nome"
+                                value={name}
+                                onChangeText={setName}
+                            />
+                            <Input
+                                iconName="email"
+                                placeholder="E-mail"
+                                keyboardType="email-address"
+                                autoCapitalize="none"
+                                value={email}
+                                onChangeText={setEmail}
+                            />
+                        </View>
 
-                {/* Status Message */}
-                {statusMessage ? (
-                    <Text style={styles.statusText}>{statusMessage}</Text>
-                ) : null}
+                        {/* Status Message */}
+                        {statusMessage ? (
+                            <Text style={styles.statusText}>{statusMessage}</Text>
+                        ) : null}
 
-                {/* Actions */}
-                <View style={styles.actions}>
-                    <Button
-                        title="Acessar"
-                        onPress={handleAccess}
-                        variant="primary"
-                        loading={isLoading}
-                        disabled={isLoading}
-                    />
-                </View>
+                        {/* Actions */}
+                        <View style={styles.actions}>
+                            <Button
+                                title="Acessar"
+                                onPress={handleAccess}
+                                variant="primary"
+                                loading={isLoading}
+                                disabled={isLoading}
+                            />
+                        </View>
+                    </View>
 
-                <View style={styles.footer}>
-                    <Text style={styles.footerText}>
-                        Digite seu nome e email para acessar.{'\n'}
-                        Se você já tem conta, será conectado automaticamente.{'\n'}
-                        Caso contrário, uma conta será criada para você.
-                    </Text>
-                </View>
-            </ScrollView>
-        </SafeAreaView>
+                    <View style={styles.footer}>
+                        <Text style={styles.footerText}>
+                            Digite seu nome e email para acessar.{'\n'}
+                            Se você já tem conta, será conectado automaticamente.{'\n'}
+                            Caso contrário, uma conta será criada para você.
+                        </Text>
+                    </View>
+                </ScrollView>
+            </SafeAreaView>
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
-    safeArea: {
+    mainContainer: {
         flex: 1,
-        backgroundColor: colors.backgroundDark,
+        backgroundColor: colors.slate50,
+    },
+    headerGradient: {
+        width: '100%',
+        paddingBottom: spacing.lg,
+        borderBottomLeftRadius: 24,
+        borderBottomRightRadius: 24,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 8,
+    },
+    safeAreaHeader: {
+        alignItems: 'center',
+        paddingTop: spacing.md,
+    },
+    safeAreaContent: {
+        flex: 1,
     },
     container: {
         flex: 1,
@@ -154,42 +178,43 @@ const styles = StyleSheet.create({
     content: {
         flexGrow: 1,
         alignItems: 'center',
-        maxWidth: 448,
-        width: '100%',
-        alignSelf: 'center',
-        paddingHorizontal: spacing.base,
-        paddingTop: spacing['3xl'],
+        paddingHorizontal: spacing.lg,
+        paddingTop: spacing.md,
         paddingBottom: spacing['4xl'],
     },
     logoContainer: {
-        width: 80,
-        height: 80,
-        borderRadius: borderRadius.full,
-        backgroundColor: colors.primaryOpacity30,
+        marginBottom: spacing.xs,
+        alignItems: 'center',
         justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: spacing.lg,
-    },
-    header: {
-        alignItems: 'center',
-        marginBottom: spacing.xl,
     },
     title: {
-        fontSize: typography.fontSize['3xl'],
+        fontSize: typography.fontSize.xl,
         fontWeight: typography.fontWeight.bold,
         color: colors.white,
         letterSpacing: typography.letterSpacing.tight,
         textAlign: 'center',
     },
     subtitle: {
-        fontSize: typography.fontSize.lg,
-        color: colors.primary,
-        marginTop: spacing.xs,
+        fontSize: typography.fontSize.sm,
+        color: 'rgba(255, 255, 255, 0.9)',
+        marginTop: 0,
         fontWeight: typography.fontWeight.medium,
+    },
+    card: {
+        width: '100%',
+        maxWidth: 400,
+        backgroundColor: colors.white,
+        borderRadius: borderRadius.xl,
+        padding: spacing.xl,
+        marginTop: spacing.lg, // Add space between header and card
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 6,
     },
     form: {
         width: '100%',
-        marginTop: spacing.lg,
         gap: spacing.base,
     },
     actions: {
@@ -197,16 +222,17 @@ const styles = StyleSheet.create({
         marginTop: spacing.xl,
     },
     statusText: {
-        color: colors.slate400,
+        color: colors.textSecondary,
         marginTop: spacing.md,
         fontSize: typography.fontSize.sm,
+        textAlign: 'center',
     },
     footer: {
         marginTop: spacing['2xl'],
         paddingHorizontal: spacing.xl,
     },
     footerText: {
-        color: colors.slate500,
+        color: colors.textSecondary,
         fontSize: typography.fontSize.xs,
         textAlign: 'center',
         lineHeight: 20,

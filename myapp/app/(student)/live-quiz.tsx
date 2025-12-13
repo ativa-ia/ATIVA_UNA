@@ -8,6 +8,7 @@ import {
     ActivityIndicator,
     Alert,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -38,6 +39,7 @@ export default function LiveQuizScreen() {
 
     // Timer countdown
     useEffect(() => {
+        Alert.alert("DEBUG", "Versão Light Mode Carregada!"); // Debug
         if (isSubmitted || !quiz) return;
 
         timerRef.current = setInterval(() => {
@@ -216,6 +218,7 @@ export default function LiveQuizScreen() {
 
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
+            <StatusBar style="dark" />
             {/* Header with timer */}
             <View style={styles.header}>
                 <View style={styles.headerLeft}>
@@ -376,7 +379,7 @@ export default function LiveQuizScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: colors.backgroundDark,
+        backgroundColor: colors.slate50,
     },
     header: {
         flexDirection: 'row',
@@ -392,12 +395,12 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.lg,
         fontWeight: typography.fontWeight.bold,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
     },
     questionCounter: {
         fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.textSecondary,
     },
     timer: {
         flexDirection: 'row',
@@ -405,40 +408,44 @@ const styles = StyleSheet.create({
         gap: spacing.xs,
         paddingHorizontal: spacing.md,
         paddingVertical: spacing.sm,
-        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+        backgroundColor: 'rgba(16, 185, 129, 0.1)',
         borderRadius: borderRadius.full,
+        borderWidth: 1,
+        borderColor: 'rgba(16, 185, 129, 0.2)',
     },
     timerWarning: {
-        backgroundColor: 'rgba(245, 158, 11, 0.2)',
+        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+        borderColor: 'rgba(245, 158, 11, 0.2)',
     },
     timerDanger: {
-        backgroundColor: '#ef4444',
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        borderColor: 'rgba(239, 68, 68, 0.2)',
     },
     timerText: {
         fontSize: typography.fontSize.lg,
         fontWeight: typography.fontWeight.bold,
         fontFamily: typography.fontFamily.display,
-        color: '#10b981',
+        color: colors.secondary,
     },
     timerTextWarning: {
         color: '#f59e0b',
     },
     timerTextDanger: {
-        color: colors.white,
+        color: colors.danger,
     },
     progressContainer: {
         paddingHorizontal: spacing.base,
         marginBottom: spacing.md,
     },
     progressBar: {
-        height: 4,
-        backgroundColor: colors.zinc700,
-        borderRadius: 2,
+        height: 8,
+        backgroundColor: colors.slate200,
+        borderRadius: 4,
     },
     progressFill: {
         height: '100%',
-        backgroundColor: '#10b981',
-        borderRadius: 2,
+        backgroundColor: colors.secondary,
+        borderRadius: 4,
     },
     scrollView: {
         flex: 1,
@@ -447,17 +454,22 @@ const styles = StyleSheet.create({
         padding: spacing.base,
     },
     questionCard: {
-        backgroundColor: 'rgba(39, 39, 42, 0.5)',
+        backgroundColor: colors.white,
         borderRadius: borderRadius.xl,
         padding: spacing.lg,
         borderWidth: 1,
-        borderColor: colors.zinc700,
+        borderColor: colors.slate200,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 6,
     },
     questionText: {
         fontSize: typography.fontSize.lg,
         fontWeight: typography.fontWeight.semibold,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
         marginBottom: spacing.lg,
         lineHeight: 28,
     },
@@ -469,31 +481,39 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: spacing.md,
         padding: spacing.md,
-        backgroundColor: 'rgba(24, 24, 27, 0.5)',
+        backgroundColor: colors.slate50,
         borderRadius: borderRadius.lg,
-        borderWidth: 2,
-        borderColor: colors.zinc700,
+        borderWidth: 1,
+        borderColor: colors.slate200,
     },
     optionSelected: {
-        borderColor: '#10b981',
-        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+        borderColor: colors.secondary,
+        backgroundColor: 'rgba(16, 185, 129, 0.05)',
+        shadowColor: colors.secondary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
     },
     optionLetter: {
         width: 32,
         height: 32,
         borderRadius: 16,
-        backgroundColor: colors.zinc700,
+        backgroundColor: colors.white,
         justifyContent: 'center',
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: colors.slate200,
     },
     optionLetterSelected: {
-        backgroundColor: '#10b981',
+        backgroundColor: colors.secondary,
+        borderColor: colors.secondary,
     },
     optionLetterText: {
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.bold,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc300,
+        color: colors.textSecondary,
     },
     optionLetterTextSelected: {
         color: colors.white,
@@ -502,10 +522,10 @@ const styles = StyleSheet.create({
         flex: 1,
         fontSize: typography.fontSize.base,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc300,
+        color: colors.textPrimary,
     },
     optionTextSelected: {
-        color: colors.white,
+        color: colors.textPrimary,
         fontWeight: typography.fontWeight.semibold,
     },
     quickNav: {
@@ -514,7 +534,7 @@ const styles = StyleSheet.create({
     quickNavLabel: {
         fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.textSecondary,
         marginBottom: spacing.sm,
     },
     quickNavButtons: {
@@ -525,34 +545,35 @@ const styles = StyleSheet.create({
         width: 36,
         height: 36,
         borderRadius: 18,
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.white,
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: colors.zinc700,
+        borderColor: colors.slate200,
     },
     quickNavBtnActive: {
-        backgroundColor: '#10b981',
-        borderColor: '#10b981',
+        backgroundColor: colors.secondary,
+        borderColor: colors.secondary,
     },
     quickNavBtnAnswered: {
-        borderColor: '#10b981',
+        borderColor: colors.secondary,
+        backgroundColor: 'rgba(16, 185, 129, 0.05)',
     },
     quickNavBtnUnanswered: {
-        borderColor: '#ef4444',
-        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        borderColor: colors.danger,
+        backgroundColor: 'rgba(239, 68, 68, 0.05)',
     },
     quickNavBtnText: {
         fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.semibold,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.textSecondary,
     },
     quickNavBtnTextActive: {
         color: colors.white,
     },
     quickNavBtnTextUnanswered: {
-        color: '#ef4444',
+        color: colors.danger,
     },
     quickNavHeader: {
         flexDirection: 'row',
@@ -563,7 +584,7 @@ const styles = StyleSheet.create({
     answeredCount: {
         fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.display,
-        color: '#10b981',
+        color: colors.secondary,
         fontWeight: typography.fontWeight.semibold,
     },
     footer: {
@@ -572,7 +593,8 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.base,
         paddingTop: spacing.md,
         borderTopWidth: 1,
-        borderTopColor: colors.zinc800,
+        borderTopColor: colors.slate200,
+        backgroundColor: colors.white,
     },
     navButton: {
         flexDirection: 'row',
@@ -580,17 +602,20 @@ const styles = StyleSheet.create({
         gap: spacing.sm,
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.lg,
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.white,
         borderRadius: borderRadius.lg,
+        borderWidth: 1,
+        borderColor: colors.slate200,
     },
     navButtonDisabled: {
         opacity: 0.5,
+        backgroundColor: colors.slate50,
     },
     navButtonText: {
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
     },
     submitButton: {
         flexDirection: 'row',
@@ -598,8 +623,13 @@ const styles = StyleSheet.create({
         gap: spacing.sm,
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.xl,
-        backgroundColor: '#10b981',
+        backgroundColor: colors.secondary,
         borderRadius: borderRadius.lg,
+        shadowColor: colors.secondary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 4,
     },
     submitButtonDisabled: {
         opacity: 0.7,
@@ -613,14 +643,14 @@ const styles = StyleSheet.create({
     errorText: {
         fontSize: typography.fontSize.lg,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.textSecondary,
         textAlign: 'center',
         marginTop: 100,
     },
     backLink: {
         fontSize: typography.fontSize.base,
         fontFamily: typography.fontFamily.display,
-        color: '#10b981',
+        color: colors.secondary,
         textAlign: 'center',
         marginTop: spacing.md,
     },
@@ -639,22 +669,22 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize['2xl'],
         fontWeight: typography.fontWeight.bold,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
         marginBottom: spacing.sm,
     },
     pointsContainer: {
-        backgroundColor: 'rgba(139, 92, 246, 0.2)',
+        backgroundColor: 'rgba(79, 70, 229, 0.05)',
         paddingHorizontal: spacing.lg,
         paddingVertical: spacing.md,
         borderRadius: borderRadius.full,
         marginBottom: spacing.md,
-        borderWidth: 2,
-        borderColor: '#8b5cf6',
+        borderWidth: 1,
+        borderColor: colors.primary,
     },
     pointsLabel: {
         fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.display,
-        color: '#a78bfa',
+        color: colors.textSecondary,
         textAlign: 'center',
         marginBottom: 4,
     },
@@ -662,59 +692,66 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize['3xl'],
         fontWeight: typography.fontWeight.bold,
         fontFamily: typography.fontFamily.display,
-        color: '#8b5cf6',
+        color: colors.primary,
         textAlign: 'center',
     },
     resultScore: {
         fontSize: typography.fontSize['4xl'],
         fontWeight: typography.fontWeight.bold,
         fontFamily: typography.fontFamily.display,
-        color: '#10b981',
+        color: colors.secondary,
         marginBottom: spacing.xs,
     },
     resultPercentage: {
         fontSize: typography.fontSize.lg,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc300,
+        color: colors.textSecondary,
         marginBottom: spacing.lg,
     },
     resultBar: {
         width: '100%',
-        height: 8,
-        backgroundColor: colors.zinc700,
-        borderRadius: 4,
+        height: 12,
+        backgroundColor: colors.slate200,
+        borderRadius: 6,
         marginBottom: spacing.lg,
     },
     resultBarFill: {
         height: '100%',
-        borderRadius: 4,
+        borderRadius: 6,
     },
     resultBarGreen: {
-        backgroundColor: '#10b981',
+        backgroundColor: colors.secondary,
     },
     resultBarYellow: {
         backgroundColor: '#f59e0b',
     },
     resultBarRed: {
-        backgroundColor: '#ef4444',
+        backgroundColor: colors.danger,
     },
     resultMessage: {
         fontSize: typography.fontSize.base,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.textSecondary,
         textAlign: 'center',
         marginBottom: spacing.xl,
     },
     resultButton: {
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.xl,
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.white,
         borderRadius: borderRadius.lg,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     resultButtonText: {
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
     },
 });

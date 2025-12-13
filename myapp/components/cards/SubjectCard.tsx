@@ -60,25 +60,30 @@ export const SubjectCard: React.FC<SubjectCardProps> = ({
 
 const styles = StyleSheet.create({
     container: {
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.white,
         borderRadius: borderRadius.lg,
         padding: spacing.md,
         minHeight: 100,
         justifyContent: 'space-between',
         borderWidth: 1,
-        borderColor: colors.zinc700,
+        borderColor: colors.slate200,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 4,
     },
     iconContainer: {
         width: 48,
         height: 48,
         borderRadius: 24,
-        backgroundColor: colors.primaryOpacity20,
+        backgroundColor: 'rgba(79, 70, 229, 0.1)', // colors.primary with opacity
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: spacing.sm,
     },
     title: {
-        color: colors.white,
+        color: colors.textPrimary,
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
         fontFamily: typography.fontFamily.display,

@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
@@ -155,12 +156,12 @@ export default function SubjectDetailsScreen() {
     // Mock data - será substituído por dados reais do backend
     const subjectData = {
         name: subjectName,
-        professor: 'Prof. Dr. Arnaldo Silva',
-        code: 'MAT342',
+        professor: 'Prof. Wendel Castro',
+        code: 'SER360',
         imageUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAwv2wIhDYaEEhq6ALucXryaJd3_iE7nIannnYITlQ2lT4teSVDHhII-lZMdLI_-CeXo1rbJXxndpoYHZylIzN8qP0LlpRVW3TI0DNiM62qX7CyEKrECZt8X5h66V60-kJIqF7KcP6FkAqDXWoatiu-GhzOfViSnNRoVmijyHVoiVRpI9dfDA8nAe_PQ0_0IPimNJQEd7ofvcge2wVlwZ6VesOKtIbWIWaavtCusp6dpAu3_BFKA1wfZ2EeO6eIaKzLiC1SdUbL81E',
-        schedule: 'Terças e Quintas, 10:00 - 12:00',
-        location: 'Sala B-204',
-        pendingActivities: 3,
+        schedule: 'Quartas e Quintas, 10:00 - 12:00',
+        location: 'Sala l-102',
+        pendingActivities: 3
     };
 
 
@@ -168,7 +169,12 @@ export default function SubjectDetailsScreen() {
         <View style={styles.safeArea}>
             <View style={styles.container}>
                 {/* Header */}
-                <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
+                <LinearGradient
+                    colors={['#4f46e5', '#8b5cf6']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[styles.header, { paddingTop: insets.top + spacing.sm }]}
+                >
                     <TouchableOpacity
                         style={styles.backButton}
                         onPress={() => router.back()}
@@ -177,18 +183,9 @@ export default function SubjectDetailsScreen() {
                     </TouchableOpacity>
                     <Text style={styles.headerTitle}>Detalhes da Disciplina</Text>
                     <View style={styles.placeholder} />
-                </View>
+                </LinearGradient>
 
-                {/* Debug Info - Remover depois */}
-                {/* Debug Info */}
-                <View style={{ padding: 5, backgroundColor: '#333', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10 }}>
-                    <Text style={{ color: '#fff', fontSize: 10, flex: 1 }}>
-                        P:{quizStarted ? 'Strt' : 'Chk'} | Q:{activeQuiz ? 'Y' : 'N'} | L:{liveActivity?.status || 'N'} | ID:{subjectId}
-                    </Text>
-                    <TouchableOpacity onPress={() => checkForActivities()} style={{ padding: 4, backgroundColor: '#555', borderRadius: 4 }}>
-                        <Text style={{ color: 'white', fontSize: 10 }}>REFRESH</Text>
-                    </TouchableOpacity>
-                </View>
+
 
                 <ScrollView
                     style={styles.scrollView}
@@ -244,7 +241,7 @@ export default function SubjectDetailsScreen() {
                             activeOpacity={0.8}
                             onPress={() => console.log('Ver atividades')}
                         >
-                            <MaterialIcons name="assignment" size={24} color={colors.white} />
+                            <MaterialIcons name="assignment" size={24} color={colors.textPrimary} />
                             <Text style={styles.secondaryButtonText}>Ver Atividades e Quizzes</Text>
                             {subjectData.pendingActivities > 0 && (
                                 <View style={styles.badge}>
@@ -278,13 +275,13 @@ export default function SubjectDetailsScreen() {
 
                         <View style={styles.quizInfo}>
                             <View style={styles.quizInfoItem}>
-                                <MaterialIcons name="quiz" size={20} color="#10b981" />
+                                <MaterialIcons name="quiz" size={20} color={colors.secondary} />
                                 <Text style={styles.quizInfoText}>
                                     {activeQuiz?.question_count || 10} perguntas
                                 </Text>
                             </View>
                             <View style={styles.quizInfoItem}>
-                                <MaterialIcons name="timer" size={20} color="#f59e0b" />
+                                <MaterialIcons name="timer" size={20} color={colors.warning} />
                                 <Text style={styles.quizInfoText}>
                                     {formatTime(activeQuiz?.time_remaining || 300)} restantes
                                 </Text>
@@ -331,7 +328,7 @@ export default function SubjectDetailsScreen() {
                                 <MaterialIcons
                                     name={liveActivity?.activity_type === 'quiz' ? 'quiz' : 'assignment'}
                                     size={20}
-                                    color="#10b981"
+                                    color={colors.secondary}
                                 />
                                 <Text style={styles.quizInfoText}>
                                     {liveActivity?.activity_type === 'quiz'
@@ -357,7 +354,7 @@ export default function SubjectDetailsScreen() {
             {/* Indicador de quiz já respondido */}
             {activeQuiz && alreadyAnswered && (
                 <View style={styles.quizAnsweredBanner}>
-                    <MaterialIcons name="check-circle" size={20} color="#10b981" />
+                    <MaterialIcons name="check-circle" size={20} color={colors.secondary} />
                     <Text style={styles.quizAnsweredText}>
                         Você já respondeu o quiz atual
                     </Text>
@@ -370,7 +367,7 @@ export default function SubjectDetailsScreen() {
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
-        backgroundColor: colors.backgroundDark,
+        backgroundColor: colors.backgroundLight,
     },
     container: {
         flex: 1,
@@ -380,14 +377,16 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: spacing.base,
         paddingVertical: spacing.md,
-        backgroundColor: colors.backgroundDark,
+        // Background handled by LinearGradient
     },
     backButton: {
-        width: 48,
-        height: 48,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.2)',
         justifyContent: 'center',
         alignItems: 'center',
-        marginLeft: -12,
+        marginLeft: -8,
     },
     headerTitle: {
         flex: 1,
@@ -406,21 +405,32 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         paddingBottom: spacing.xl,
+        paddingTop: spacing.base,
     },
     subjectCard: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: spacing.base,
-        backgroundColor: colors.backgroundDark,
+        backgroundColor: colors.white,
         paddingHorizontal: spacing.base,
         paddingVertical: spacing.base,
         minHeight: 72,
+        marginHorizontal: spacing.base,
+        borderRadius: borderRadius.xl,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 4,
+        marginBottom: spacing.md,
     },
     avatar: {
         width: 64,
         height: 64,
         borderRadius: 32,
-        backgroundColor: colors.zinc700,
+        backgroundColor: colors.slate100,
     },
     subjectInfo: {
         flex: 1,
@@ -430,13 +440,13 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.xl,
         fontWeight: typography.fontWeight.bold,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
         marginBottom: 4,
     },
     professorInfo: {
         fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.textSecondary,
     },
     infoGrid: {
         flexDirection: 'row',
@@ -447,7 +457,7 @@ const styles = StyleSheet.create({
         flex: 1,
         gap: 4,
         borderTopWidth: 1,
-        borderTopColor: colors.zinc800,
+        borderTopColor: colors.slate200,
         paddingVertical: spacing.base,
     },
     infoItemLeft: {
@@ -459,13 +469,13 @@ const styles = StyleSheet.create({
     infoLabel: {
         fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.textSecondary,
     },
     infoValue: {
         fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.medium,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
     },
     buttonGroup: {
         paddingHorizontal: spacing.base,
@@ -485,6 +495,11 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.lg,
         borderRadius: 12,
         height: 56,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 4,
     },
     primaryButtonText: {
         fontSize: typography.fontSize.base,
@@ -497,29 +512,38 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         gap: spacing.sm,
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.white,
         paddingVertical: spacing.base,
         paddingHorizontal: spacing.lg,
-        borderRadius: 12,
+        borderRadius: 16,
         height: 56,
         position: 'relative',
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     secondaryButtonText: {
         fontSize: typography.fontSize.base,
-        fontWeight: typography.fontWeight.bold,
+        fontWeight: typography.fontWeight.semibold,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
     },
     badge: {
         position: 'absolute',
         top: 12,
         right: 16,
-        backgroundColor: '#ef4444',
+        backgroundColor: colors.danger,
         width: 24,
         height: 24,
         borderRadius: 12,
         alignItems: 'center',
         justifyContent: 'center',
+        borderWidth: 2,
+        borderColor: colors.white,
     },
     badgeText: {
         fontSize: typography.fontSize.xs,
@@ -530,29 +554,36 @@ const styles = StyleSheet.create({
     // Quiz popup styles
     quizModalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.85)',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'center',
         alignItems: 'center',
         padding: spacing.base,
     },
     quizPopup: {
-        backgroundColor: colors.zinc900,
+        backgroundColor: colors.white,
         borderRadius: borderRadius.xl,
         padding: spacing.xl,
         width: '100%',
         maxWidth: 350,
         alignItems: 'center',
-        borderWidth: 2,
-        borderColor: '#10b981',
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.2,
+        shadowRadius: 20,
+        elevation: 10,
     },
     quizPopupIcon: {
         width: 80,
         height: 80,
         borderRadius: 40,
-        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+        backgroundColor: colors.slate50,
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: spacing.md,
+        borderWidth: 1,
+        borderColor: colors.slate200,
     },
     quizPopupEmoji: {
         fontSize: 40,
@@ -561,13 +592,13 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize['2xl'],
         fontWeight: typography.fontWeight.bold,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
         marginBottom: spacing.xs,
     },
     quizPopupSubtitle: {
         fontSize: typography.fontSize.base,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc300,
+        color: colors.textSecondary,
         textAlign: 'center',
         marginBottom: spacing.lg,
     },
@@ -584,7 +615,7 @@ const styles = StyleSheet.create({
     quizInfoText: {
         fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc300,
+        color: colors.textSecondary,
     },
     startQuizButton: {
         flexDirection: 'row',
@@ -592,8 +623,13 @@ const styles = StyleSheet.create({
         gap: spacing.sm,
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.xl,
-        backgroundColor: '#10b981',
+        backgroundColor: colors.secondary,
         borderRadius: borderRadius.lg,
+        shadowColor: colors.secondary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
     },
     startQuizButtonText: {
         fontSize: typography.fontSize.lg,
@@ -613,12 +649,13 @@ const styles = StyleSheet.create({
         paddingVertical: spacing.md,
         backgroundColor: 'rgba(16, 185, 129, 0.1)',
         borderTopWidth: 1,
-        borderTopColor: 'rgba(16, 185, 129, 0.3)',
+        borderTopColor: colors.secondary,
     },
     quizAnsweredText: {
         fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.display,
-        color: '#10b981',
+        color: colors.secondary,
+        fontWeight: '600',
     },
     // Live Activity Banner
     liveActivityBanner: {
@@ -627,9 +664,14 @@ const styles = StyleSheet.create({
         marginHorizontal: spacing.base,
         marginTop: spacing.md,
         padding: spacing.md,
-        backgroundColor: '#8b5cf6',
+        backgroundColor: colors.primary,
         borderRadius: borderRadius.xl,
         gap: spacing.md,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
     },
     liveActivityIcon: {
         width: 44,
@@ -649,6 +691,6 @@ const styles = StyleSheet.create({
     },
     liveActivityDesc: {
         fontSize: typography.fontSize.sm,
-        color: 'rgba(255,255,255,0.8)',
+        color: 'rgba(255,255,255,0.9)',
     },
 });

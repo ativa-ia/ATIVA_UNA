@@ -106,7 +106,7 @@ function PodiumPlace({ student, position, height, delay }: PodiumPlaceProps) {
             case 1: return '#FFD700'; // Ouro
             case 2: return '#C0C0C0'; // Prata
             case 3: return '#CD7F32'; // Bronze
-            default: return colors.zinc600;
+            default: return colors.slate400;
         }
     };
 
@@ -125,7 +125,7 @@ function PodiumPlace({ student, position, height, delay }: PodiumPlaceProps) {
                 <View style={styles.emptyPlace}>
                     <Text style={styles.emptyText}>-</Text>
                 </View>
-                <View style={[styles.podiumBase, { height, backgroundColor: colors.zinc800 }]}>
+                <View style={[styles.podiumBase, { height, backgroundColor: colors.slate200 }]}>
                     <Text style={styles.positionNumber}>{position}º</Text>
                 </View>
             </View>
@@ -249,12 +249,12 @@ const styles = StyleSheet.create({
     title: {
         fontSize: typography.fontSize['3xl'],
         fontWeight: typography.fontWeight.bold,
-        color: colors.white,
+        color: colors.textPrimary,
         marginBottom: spacing.xs,
     },
     subtitle: {
         fontSize: typography.fontSize.base,
-        color: colors.zinc400,
+        color: colors.textSecondary,
     },
     podiumContainer: {
         flexDirection: 'row',
@@ -268,14 +268,19 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     studentCard: {
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.white,
         padding: spacing.md,
         borderRadius: borderRadius.lg,
         alignItems: 'center',
         marginBottom: spacing.sm,
         minWidth: 100,
-        borderWidth: 2,
-        borderColor: colors.zinc700,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 4,
     },
     medalEmoji: {
         fontSize: 40,
@@ -284,7 +289,7 @@ const styles = StyleSheet.create({
     studentName: {
         fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.semibold,
-        color: colors.white,
+        color: colors.textPrimary,
         textAlign: 'center',
         marginBottom: spacing.sm,
     },
@@ -295,15 +300,17 @@ const styles = StyleSheet.create({
         marginBottom: spacing.xs,
         minWidth: 60,
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.1)',
     },
     pointsText: {
         fontSize: typography.fontSize.lg,
         fontWeight: typography.fontWeight.bold,
-        color: colors.white,
+        color: colors.textPrimary,
     },
     pointsLabel: {
         fontSize: typography.fontSize.xs,
-        color: colors.white,
+        color: colors.textPrimary,
         opacity: 0.8,
     },
     percentage: {
@@ -314,7 +321,7 @@ const styles = StyleSheet.create({
     },
     score: {
         fontSize: typography.fontSize.xs,
-        color: colors.zinc400,
+        color: colors.textSecondary,
     },
     podiumBase: {
         width: '100%',
@@ -322,31 +329,36 @@ const styles = StyleSheet.create({
         borderTopRightRadius: borderRadius.lg,
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 2,
-        borderColor: 'rgba(0, 0, 0, 0.2)',
+        borderWidth: 1,
+        borderColor: 'rgba(0, 0, 0, 0.1)',
+        shadowColor: colors.black,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
     },
     positionNumber: {
         fontSize: typography.fontSize['2xl'],
         fontWeight: typography.fontWeight.bold,
-        color: colors.white,
-        textShadowColor: 'rgba(0, 0, 0, 0.3)',
+        color: colors.textPrimary,
+        textShadowColor: 'rgba(255, 255, 255, 0.5)',
         textShadowOffset: { width: 1, height: 1 },
         textShadowRadius: 2,
     },
     emptyPlace: {
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.slate50,
         padding: spacing.md,
         borderRadius: borderRadius.lg,
         alignItems: 'center',
         marginBottom: spacing.sm,
         minWidth: 100,
-        borderWidth: 2,
-        borderColor: colors.zinc700,
+        borderWidth: 1,
+        borderColor: colors.slate200,
         borderStyle: 'dashed',
     },
     emptyText: {
         fontSize: typography.fontSize['2xl'],
-        color: colors.zinc600,
+        color: colors.textSecondary,
     },
     confettiContainer: {
         position: 'absolute',

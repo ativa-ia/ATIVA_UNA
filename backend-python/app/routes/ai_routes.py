@@ -270,46 +270,88 @@ Responda em formato JSON:
 def upload_context(current_user):
     """
     Endpoint para upload de arquivos de contexto (NotebookLM style)
-    Suporta PDF e TXT
+    Suporta PDF e TXT via Upload Direto ou URL (Supabase Storage)
     """
-    if 'file' not in request.files:
-        return jsonify({'success': False, 'error': 'Arquivo não enviado'}), 400
+    import io
+    import requests
+    from app import db
+    from app.models.ai_session import AIContextFile
+    from pypdf import PdfReader
     
-    file = request.files['file']
-    subject_id = request.form.get('subject_id')
+    file_stream = None
+    filename = None
+    subject_id = None
+    file_type = "text"
     
-    if not file or file.filename == '':
-        return jsonify({'success': False, 'error': 'Arquivo inválido'}), 400
+    # 1. Check if JSON (URL from Supabase)
+    if request.is_json:
+        data = request.get_json()
+        file_url = data.get('file_url')
+        subject_id = data.get('subject_id')
+        filename = data.get('filename', 'downloaded_file.pdf')
+        
+        if not file_url:
+            return jsonify({'success': False, 'error': 'URL do arquivo não fornecida'}), 400
+            
+        try:
+            # Download file from Storage
+            response = requests.get(file_url)
+            response.raise_for_status()
+            file_stream = io.BytesIO(response.content)
+        except Exception as e:
+            return jsonify({'success': False, 'error': f'Erro ao baixar arquivo do Storage: {str(e)}'}), 400
+
+    # 2. Check if Multipart Form Data (Direct Upload)
+    elif 'file' in request.files:
+        file = request.files['file']
+        subject_id = request.form.get('subject_id')
+        filename = file.filename
+        
+        if not file or filename == '':
+            return jsonify({'success': False, 'error': 'Arquivo inválido'}), 400
+            
+        file_stream = file
+    
+    else:
+        return jsonify({'success': False, 'error': 'Requisição inválida (esperado arquivo ou url)'}), 400
+    
     
     if not subject_id:
         return jsonify({'success': False, 'error': 'ID da disciplina não fornecido'}), 400
         
     try:
-        from app import db
-        from app.models.ai_session import AIContextFile
-        import io
-        from pypdf import PdfReader
-        
-        filename = file.filename
         content = ""
-        file_type = "text"
         
-        # Extração de texto
         # Extração de texto
         if filename.lower().endswith('.pdf'):
             file_type = "pdf"
-            pdf_reader = PdfReader(file)
-            for page in pdf_reader.pages:
-                content += page.extract_text() + "\n"
+            try:
+                pdf_reader = PdfReader(file_stream)
+                for page in pdf_reader.pages:
+                    content += page.extract_text() + "\n"
+            except Exception as e:
+                # Fallback for some PDFs or connection issues
+                print(f"Error reading PDF: {e}")
+                return jsonify({'success': False, 'error': 'Erro ao ler PDF. O arquivo pode estar corrompido ou protegido.'}), 400
+                
         elif filename.lower().endswith('.docx'):
             file_type = "docx"
             from docx import Document as DocxDocument
-            doc = DocxDocument(file)
-            for para in doc.paragraphs:
-                content += para.text + "\n"
+            try:
+                doc = DocxDocument(file_stream)
+                for para in doc.paragraphs:
+                    content += para.text + "\n"
+            except Exception as e:
+                 return jsonify({'success': False, 'error': 'Erro ao ler DOCX.'}), 400
         else:
             # Assume text/plain
-            content = file.read().decode('utf-8', errors='ignore')
+            if isinstance(file_stream, io.BytesIO):
+                 content = file_stream.getvalue().decode('utf-8', errors='ignore')
+            else:
+                 content = file_stream.read().decode('utf-8', errors='ignore')
+            
+        if not content.strip():
+            return jsonify({'success': False, 'error': 'Não foi possível extrair texto do arquivo (conteúdo vazio ou imagem)'}), 400
             
         if not content.strip():
             return jsonify({'success': False, 'error': 'Não foi possível extrair texto do arquivo'}), 400

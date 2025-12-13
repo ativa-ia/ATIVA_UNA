@@ -8,6 +8,7 @@ import {
     TouchableOpacity,
     Switch,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '@/constants/colors';
@@ -33,16 +34,23 @@ export default function SettingsScreen() {
         <SafeAreaView style={styles.safeArea}>
             <View style={styles.container}>
                 {/* Header */}
-                <View style={styles.header}>
-                    <TouchableOpacity
-                        style={styles.backButton}
-                        onPress={() => router.back()}
-                    >
-                        <MaterialIcons name="arrow-back" size={24} color={colors.white} />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Configurações</Text>
-                    <View style={styles.headerSpacer} />
-                </View>
+                <LinearGradient
+                    colors={['#4f46e5', '#7c3aed']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.headerGradient}
+                >
+                    <View style={styles.headerContent}>
+                        <TouchableOpacity
+                            style={styles.backButton}
+                            onPress={() => router.back()}
+                        >
+                            <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
+                        </TouchableOpacity>
+                        <Text style={styles.headerTitle}>Configurações</Text>
+                        <View style={styles.headerSpacer} />
+                    </View>
+                </LinearGradient>
 
                 <ScrollView
                     style={styles.scrollView}
@@ -66,7 +74,7 @@ export default function SettingsScreen() {
                             <Switch
                                 value={darkMode}
                                 onValueChange={setDarkMode}
-                                trackColor={{ false: colors.zinc700, true: colors.primary }}
+                                trackColor={{ false: colors.slate300, true: colors.primary }}
                                 thumbColor={colors.white}
                             />
                         </View>
@@ -89,7 +97,7 @@ export default function SettingsScreen() {
                             <Switch
                                 value={notifications}
                                 onValueChange={setNotifications}
-                                trackColor={{ false: colors.zinc700, true: colors.primary }}
+                                trackColor={{ false: colors.slate300, true: colors.primary }}
                                 thumbColor={colors.white}
                             />
                         </View>
@@ -107,7 +115,7 @@ export default function SettingsScreen() {
                             <Switch
                                 value={emailNotifications}
                                 onValueChange={setEmailNotifications}
-                                trackColor={{ false: colors.zinc700, true: colors.primary }}
+                                trackColor={{ false: colors.slate300, true: colors.primary }}
                                 thumbColor={colors.white}
                             />
                         </View>
@@ -127,7 +135,7 @@ export default function SettingsScreen() {
                                     </Text>
                                 </View>
                             </View>
-                            <MaterialIcons name="chevron-right" size={24} color={colors.zinc500} />
+                            <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
                         </TouchableOpacity>
 
                         <TouchableOpacity style={styles.settingItem} activeOpacity={0.7}>
@@ -140,7 +148,7 @@ export default function SettingsScreen() {
                                     </Text>
                                 </View>
                             </View>
-                            <MaterialIcons name="chevron-right" size={24} color={colors.zinc500} />
+                            <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
                         </TouchableOpacity>
                     </View>
 
@@ -162,24 +170,28 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
-        backgroundColor: colors.backgroundDark,
+        backgroundColor: colors.backgroundLight,
     },
     container: {
         flex: 1,
     },
-    header: {
+    headerGradient: {
+        paddingHorizontal: spacing.base,
+        paddingTop: spacing.md,
+        paddingBottom: spacing.base,
+    },
+    headerContent: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: spacing.base,
-        paddingVertical: spacing.md,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.zinc800,
     },
     backButton: {
         width: 40,
         height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.2)',
         justifyContent: 'center',
         alignItems: 'center',
+        marginLeft: -8,
     },
     headerTitle: {
         flex: 1,
@@ -191,33 +203,43 @@ const styles = StyleSheet.create({
     },
     headerSpacer: {
         width: 40,
+        height: 40,
     },
     scrollView: {
         flex: 1,
     },
     scrollContent: {
         padding: spacing.base,
+        paddingTop: spacing.lg,
     },
     section: {
         marginBottom: spacing.xl,
     },
     sectionTitle: {
         fontSize: typography.fontSize.sm,
-        fontWeight: typography.fontWeight.semibold,
+        fontWeight: typography.fontWeight.bold,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.primary,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
         marginBottom: spacing.md,
+        marginLeft: spacing.xs,
     },
     settingItem: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: spacing.base,
-        backgroundColor: 'rgba(39, 39, 42, 0.5)',
+        backgroundColor: colors.white,
         borderRadius: borderRadius.lg,
         marginBottom: spacing.sm,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
     },
     settingInfo: {
         flexDirection: 'row',
@@ -230,25 +252,25 @@ const styles = StyleSheet.create({
     },
     settingLabel: {
         fontSize: typography.fontSize.base,
-        fontWeight: typography.fontWeight.medium,
+        fontWeight: typography.fontWeight.semibold,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
         marginBottom: 2,
     },
     settingDescription: {
         fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.textSecondary,
     },
     logoutButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         padding: spacing.base,
-        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        backgroundColor: '#fee2e2', // Light red
         borderRadius: borderRadius.lg,
         borderWidth: 1,
-        borderColor: '#ef4444',
+        borderColor: '#fca5a5',
         marginTop: spacing.xl,
         gap: spacing.sm,
     },
@@ -256,6 +278,6 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
         fontFamily: typography.fontFamily.display,
-        color: '#ef4444',
+        color: colors.danger,
     },
 });
