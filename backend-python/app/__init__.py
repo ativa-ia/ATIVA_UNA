@@ -33,7 +33,7 @@ def create_app(config_name=None):
         db.init_app(app)
         migrate.init_app(app, db)
         socketio.init_app(app)
-        CORS(app)  # Permitir requisições do React Native
+        CORS(app, expose_headers=["Content-Disposition"])  # Permitir requisições do React Native
         logger.info("Extensoes inicializadas com sucesso.")
     except Exception as e:
         logger.error(f"Erro ao inicializar extensoes: {e}")

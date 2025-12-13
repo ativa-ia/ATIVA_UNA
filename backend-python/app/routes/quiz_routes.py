@@ -368,7 +368,7 @@ def export_quiz_pdf(current_user, quiz_id):
     """
     from flask import send_file
     from app.services.pdf_service import generate_quiz_report_pdf
-    import tempfile
+    import io
     
     quiz = Quiz.query.get(quiz_id)
     
@@ -405,17 +405,18 @@ def export_quiz_pdf(current_user, quiz_id):
         'ranking': ranking
     }
     
-    # Gerar PDF em arquivo temporário
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
-    pdf_path = generate_quiz_report_pdf(
+    # Gerar PDF em memória (BytesIO)
+    buffer = io.BytesIO()
+    generate_quiz_report_pdf(
         quiz.to_dict(),
         ranking_data,
-        temp_file.name
+        buffer
     )
+    buffer.seek(0)
     
     # Enviar arquivo
     return send_file(
-        pdf_path,
+        buffer,
         mimetype='application/pdf',
         as_attachment=True,
         download_name=f'relatorio_quiz_{quiz_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
