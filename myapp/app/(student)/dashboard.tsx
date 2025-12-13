@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Header } from '@/components/navigation/Header';
 import { BottomNav, NavItem } from '@/components/navigation/BottomNav';
 import { SubjectCard } from '@/components/cards/SubjectCard';
@@ -183,7 +184,12 @@ export default function StudentDashboardScreen() {
                     showsVerticalScrollIndicator={false}
                 >
                     {/* Header Customizado com Botões */}
-                    <View style={styles.headerContainer}>
+                    <LinearGradient
+                        colors={['#4f46e5', '#7c3aed']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={styles.headerGradient}
+                    >
                         <View style={styles.headerTop}>
                             <View>
                                 <Text style={styles.greeting}>Olá, {userName}</Text>
@@ -205,7 +211,7 @@ export default function StudentDashboardScreen() {
                                 </TouchableOpacity>
                             </View>
                         </View>
-                    </View>
+                    </LinearGradient>
 
                     {/* Banner de Atividade Ao Vivo */}
                     {liveActivity && !isActivitySubmitted(liveActivity.id) && (
@@ -277,7 +283,6 @@ export default function StudentDashboardScreen() {
                     items={navItems}
                     activeId={activeNavId}
                     onItemPress={handleNavPress}
-                    darkMode
                 />
             </View>
         </SafeAreaView>
@@ -287,7 +292,7 @@ export default function StudentDashboardScreen() {
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
-        backgroundColor: colors.backgroundDark,
+        backgroundColor: colors.backgroundLight,
     },
     container: {
         flex: 1,
@@ -298,10 +303,12 @@ const styles = StyleSheet.create({
     scrollContent: {
         paddingBottom: spacing.base,
     },
-    headerContainer: {
+    headerGradient: {
         paddingHorizontal: spacing.base,
         paddingTop: spacing.md,
-        paddingBottom: spacing.base,
+        paddingBottom: spacing.xl,
+        borderBottomLeftRadius: 24,
+        borderBottomRightRadius: 24,
     },
     headerTop: {
         flexDirection: 'row',
@@ -317,14 +324,14 @@ const styles = StyleSheet.create({
     date: {
         fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.body,
-        color: colors.zinc400,
+        color: 'rgba(255,255,255,0.8)',
         marginTop: 4,
     },
     notificationButton: {
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        backgroundColor: 'rgba(255,255,255,0.2)',
         justifyContent: 'center',
         alignItems: 'center',
         position: 'relative',
@@ -334,13 +341,13 @@ const styles = StyleSheet.create({
         gap: spacing.sm,
     },
     headerButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(255,255,255,0.2)',
         justifyContent: 'center',
         alignItems: 'center',
-        position: 'relative',
+        position: 'relative', // For badge positioning
     },
     badge: {
         position: 'absolute',
@@ -349,22 +356,21 @@ const styles = StyleSheet.create({
         width: 8,
         height: 8,
         borderRadius: 4,
-        backgroundColor: '#ef4444',
+        backgroundColor: colors.danger,
         borderWidth: 1,
-        borderColor: colors.backgroundDark,
+        borderColor: colors.white,
     },
     section: {
-        marginTop: spacing.base,
+        marginTop: spacing.lg,
     },
     sectionTitle: {
         fontSize: typography.fontSize.lg,
         fontWeight: typography.fontWeight.bold,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
         letterSpacing: typography.letterSpacing.tight,
         paddingHorizontal: spacing.base,
-        paddingBottom: spacing.sm,
-        paddingTop: spacing.base,
+        paddingBottom: spacing.md,
     },
     subjectsGrid: {
         flexDirection: 'row',
@@ -373,8 +379,9 @@ const styles = StyleSheet.create({
         gap: spacing.md,
     },
     subjectCard: {
-        width: '47%', // Approximately 2 columns with gap
+        width: '47%',
         minWidth: 158,
+        // Shadow and bg handled by SubjectCard component
     },
     loadingContainer: {
         padding: spacing.xl,
@@ -384,7 +391,7 @@ const styles = StyleSheet.create({
     loadingText: {
         fontSize: typography.fontSize.base,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.textSecondary,
     },
     errorContainer: {
         padding: spacing.xl,
@@ -395,7 +402,7 @@ const styles = StyleSheet.create({
     errorText: {
         fontSize: typography.fontSize.base,
         fontFamily: typography.fontFamily.display,
-        color: '#ef4444',
+        color: colors.danger,
         textAlign: 'center',
     },
     retryButton: {
@@ -418,7 +425,7 @@ const styles = StyleSheet.create({
     emptyText: {
         fontSize: typography.fontSize.base,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.textSecondary,
         textAlign: 'center',
     },
     // Live Activity Banner
@@ -428,9 +435,14 @@ const styles = StyleSheet.create({
         marginHorizontal: spacing.base,
         marginTop: spacing.md,
         padding: spacing.md,
-        backgroundColor: '#8b5cf6',
+        backgroundColor: colors.primary,
         borderRadius: borderRadius.xl,
         gap: spacing.md,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
     },
     liveActivityIcon: {
         width: 44,
@@ -450,6 +462,6 @@ const styles = StyleSheet.create({
     },
     liveActivityDesc: {
         fontSize: typography.fontSize.sm,
-        color: 'rgba(255,255,255,0.8)',
+        color: 'rgba(255,255,255,0.9)',
     },
 });

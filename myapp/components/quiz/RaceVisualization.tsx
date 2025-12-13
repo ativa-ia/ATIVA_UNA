@@ -97,21 +97,18 @@ function RaceTrack({ student, maxPoints, isTop3 }: RaceTrackProps) {
             case 1: return '#FFD700'; // Ouro
             case 2: return '#C0C0C0'; // Prata
             case 3: return '#CD7F32'; // Bronze
-            default: return colors.zinc600;
+            default: return colors.slate400;
         }
     };
 
     const getTrackColor = (position: number) => {
-        switch (position) {
-            case 1: return 'rgba(255, 215, 0, 0.2)';
-            case 2: return 'rgba(192, 192, 192, 0.2)';
-            case 3: return 'rgba(205, 127, 50, 0.2)';
-            default: return 'rgba(139, 92, 246, 0.1)';
-        }
+        // Keep white background for all tracks in light mode to ensure consistency
+        // Highlight top 3 with very subtle border or shadow instead (handled in styles)
+        return colors.white;
     };
 
     return (
-        <View style={[styles.track, { backgroundColor: getTrackColor(student.position) }]}>
+        <View style={styles.track}>
             {/* Posição e Avatar */}
             <View style={styles.trackLeft}>
                 <View style={[styles.positionBadge, { backgroundColor: getMedalColor(student.position) }]}>
@@ -168,26 +165,32 @@ const styles = StyleSheet.create({
     },
     statBox: {
         flex: 1,
-        backgroundColor: 'rgba(139, 92, 246, 0.1)',
+        backgroundColor: colors.white,
         padding: spacing.md,
         borderRadius: borderRadius.lg,
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: 'rgba(139, 92, 246, 0.3)',
+        borderColor: colors.slate200,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
     },
     statNumber: {
         fontSize: typography.fontSize['2xl'],
         fontWeight: typography.fontWeight.bold,
-        color: colors.white,
+        color: colors.primary,
         marginTop: spacing.xs,
     },
     statLabel: {
         fontSize: typography.fontSize.xs,
-        color: colors.zinc400,
+        color: colors.textSecondary,
         marginTop: 4,
     },
     raceContainer: {
         gap: spacing.sm,
+        paddingBottom: spacing.xl,
     },
     track: {
         flexDirection: 'row',
@@ -195,7 +198,13 @@ const styles = StyleSheet.create({
         padding: spacing.md,
         borderRadius: borderRadius.lg,
         borderWidth: 1,
-        borderColor: colors.zinc700,
+        borderColor: colors.slate200,
+        backgroundColor: colors.white,
+        shadowColor: colors.black,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
     },
     trackLeft: {
         flexDirection: 'row',
@@ -210,11 +219,13 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: spacing.md,
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.1)',
     },
     positionText: {
         fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.bold,
-        color: colors.white,
+        color: colors.textPrimary,
     },
     studentInfo: {
         flex: 1,
@@ -222,11 +233,11 @@ const styles = StyleSheet.create({
     studentName: {
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
-        color: colors.white,
+        color: colors.textPrimary,
     },
     studentStats: {
         fontSize: typography.fontSize.xs,
-        color: colors.zinc400,
+        color: colors.textSecondary,
         marginTop: 2,
     },
     trackRight: {
@@ -236,10 +247,12 @@ const styles = StyleSheet.create({
     progressBar: {
         width: '100%',
         height: 8,
-        backgroundColor: colors.zinc700,
+        backgroundColor: colors.slate100,
         borderRadius: 4,
         overflow: 'hidden',
         marginBottom: 4,
+        borderWidth: 1,
+        borderColor: colors.slate200,
     },
     progressFill: {
         height: '100%',
@@ -248,14 +261,14 @@ const styles = StyleSheet.create({
     pointsText: {
         fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.bold,
-        color: '#8b5cf6',
+        color: colors.primary,
     },
     waitingSection: {
         padding: spacing.lg,
-        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+        backgroundColor: colors.slate50,
         borderRadius: borderRadius.lg,
         borderWidth: 1,
-        borderColor: 'rgba(245, 158, 11, 0.3)',
+        borderColor: colors.slate200,
         borderStyle: 'dashed',
         alignItems: 'center',
         marginTop: spacing.md,
@@ -263,11 +276,11 @@ const styles = StyleSheet.create({
     waitingTitle: {
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
-        color: '#f59e0b',
+        color: colors.textSecondary,
         marginBottom: spacing.xs,
     },
     waitingCount: {
         fontSize: typography.fontSize.sm,
-        color: colors.zinc400,
+        color: colors.textSecondary,
     },
 });

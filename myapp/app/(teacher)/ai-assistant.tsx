@@ -235,8 +235,11 @@ export default function AIAssistantScreen() {
 
             if (result.canceled) return;
 
+            const file = result.assets[0];
+            // 4MB limit removed - using Supabase Storage now
+
             setIsUploading(true);
-            const uploadResult = await uploadContextFile(subjectId, result.assets[0]);
+            const uploadResult = await uploadContextFile(subjectId, file);
 
             if (uploadResult.success) {
                 Alert.alert('Sucesso', 'Arquivo adicionado ao contexto da IA!');
@@ -273,9 +276,9 @@ export default function AIAssistantScreen() {
             <View style={styles.container}>
                 {/* Header */}
                 <LinearGradient
-                    colors={['#10b981', '#14b8a6', '#3B82F6']}
+                    colors={['#4f46e5', '#8b5cf6']} // Indigo to Violet
                     start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
+                    end={{ x: 1, y: 1 }}
                     style={[styles.header, { paddingTop: insets.top + spacing.sm }]}
                 >
                     <TouchableOpacity
@@ -393,7 +396,7 @@ export default function AIAssistantScreen() {
                                         onPress={() => handleQuickAction(action)}
                                         activeOpacity={0.7}
                                     >
-                                        <MaterialIcons name={action.icon} size={16} color={colors.white} />
+                                        <MaterialIcons name={action.icon} size={16} color={colors.primary} />
                                         <Text style={styles.quickActionChipText}>{action.title}</Text>
                                     </TouchableOpacity>
                                 ))}
@@ -416,7 +419,7 @@ export default function AIAssistantScreen() {
                                             onPress={() => setInputText((prev) => prev + (prev ? ' ' : '') + `Sobre o arquivo "${file.filename}": `)}
                                             activeOpacity={0.7}
                                         >
-                                            <MaterialIcons name="description" size={12} color={colors.zinc400} />
+                                            <MaterialIcons name="description" size={12} color={colors.slate400} />
                                             <Text style={styles.fileChipText} numberOfLines={1}>
                                                 {file.filename}
                                             </Text>
@@ -432,7 +435,7 @@ export default function AIAssistantScreen() {
                                 <TextInput
                                     style={styles.textInput}
                                     placeholder="Digite sua mensagem..."
-                                    placeholderTextColor={colors.zinc500}
+                                    placeholderTextColor={colors.slate500}
                                     value={inputText}
                                     onChangeText={setInputText}
                                     multiline
@@ -449,7 +452,7 @@ export default function AIAssistantScreen() {
                                     <MaterialIcons
                                         name="send"
                                         size={24}
-                                        color={inputText.trim() && !isChatLoading ? colors.white : colors.zinc600}
+                                        color={inputText.trim() && !isChatLoading ? colors.white : colors.slate600}
                                     />
                                 </TouchableOpacity>
                             </View>
@@ -478,7 +481,7 @@ export default function AIAssistantScreen() {
                                 style={styles.closeButton}
                                 onPress={() => setShowContextSidebar(false)}
                             >
-                                <MaterialIcons name="close" size={24} color={colors.zinc400} />
+                                <MaterialIcons name="close" size={24} color={colors.slate400} />
                             </TouchableOpacity>
                         </View>
 
@@ -500,7 +503,7 @@ export default function AIAssistantScreen() {
                         <ScrollView style={styles.fileList}>
                             {contextFiles.length === 0 ? (
                                 <View style={styles.emptyState}>
-                                    <MaterialIcons name="library-books" size={48} color={colors.zinc800} />
+                                    <MaterialIcons name="library-books" size={48} color={colors.slate800} />
                                     <Text style={styles.emptyStateText}>
                                         Nenhum arquivo de contexto.{'\n'}Adicione PDFs para a IA usar como base.
                                     </Text>
@@ -523,7 +526,7 @@ export default function AIAssistantScreen() {
                                             style={styles.deleteFileButton}
                                             onPress={() => handleDeleteFile(file.id)}
                                         >
-                                            <MaterialIcons name="delete" size={20} color={colors.zinc600} />
+                                            <MaterialIcons name="delete" size={20} color={colors.slate600} />
                                         </TouchableOpacity>
                                     </View>
                                 ))
@@ -540,7 +543,7 @@ export default function AIAssistantScreen() {
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
-        backgroundColor: colors.backgroundDark,
+        backgroundColor: colors.backgroundLight,
     },
     container: {
         flex: 1,
@@ -576,7 +579,7 @@ const styles = StyleSheet.create({
     headerSubtitle: {
         fontSize: typography.fontSize.xs,
         fontFamily: typography.fontFamily.display,
-        color: 'rgba(255,255,255,0.8)',
+        color: 'rgba(255,255,255,0.9)',
     },
     placeholder: {
         width: 48,
@@ -588,6 +591,7 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         justifyContent: 'center',
         alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.2)'
     },
     keyboardAvoid: {
         flex: 1,
@@ -599,7 +603,7 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
         paddingHorizontal: spacing.base,
         marginBottom: spacing.sm,
     },
@@ -610,16 +614,21 @@ const styles = StyleSheet.create({
     quickActionCard: {
         width: 140,
         padding: spacing.base,
-        backgroundColor: 'rgba(39, 39, 42, 0.5)',
+        backgroundColor: colors.white,
         borderRadius: borderRadius.lg,
         borderWidth: 1,
-        borderColor: colors.zinc800,
+        borderColor: colors.slate200,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 2,
     },
     quickActionIcon: {
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: colors.primaryOpacity20,
+        backgroundColor: colors.slate100,
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: spacing.sm,
@@ -628,19 +637,20 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.semibold,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
         marginBottom: 4,
     },
     quickActionDescription: {
         fontSize: typography.fontSize.xs,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.slate500,
     },
     messagesContainer: {
         flex: 1,
     },
     messagesContent: {
         padding: spacing.base,
+        paddingBottom: 20,
         gap: spacing.md,
     },
     messageBubble: {
@@ -657,22 +667,33 @@ const styles = StyleSheet.create({
         width: 32,
         height: 32,
         borderRadius: 16,
-        backgroundColor: '#10b981',
+        backgroundColor: colors.primary,
         justifyContent: 'center',
         alignItems: 'center',
+        marginTop: 4,
     },
     messageContent: {
-        maxWidth: '80%',
-        padding: spacing.base,
-        borderRadius: borderRadius.lg,
+        maxWidth: '85%',
+        padding: spacing.md,
+        borderRadius: 20,
+        shadowColor: "#000",
+        shadowOffset: {
+            width: 0,
+            height: 1,
+        },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
     },
     userMessageContent: {
-        backgroundColor: colors.primary,
+        backgroundColor: colors.secondary, // Emerald Green
         borderBottomRightRadius: 4,
     },
     aiMessageContent: {
-        backgroundColor: 'rgba(39, 39, 42, 0.8)',
+        backgroundColor: colors.white,
         borderBottomLeftRadius: 4,
+        borderWidth: 1,
+        borderColor: colors.slate100,
     },
     notifyButton: {
         flexDirection: 'row',
@@ -681,18 +702,19 @@ const styles = StyleSheet.create({
         marginTop: 8,
         paddingTop: 8,
         borderTopWidth: 1,
-        borderTopColor: 'rgba(255,255,255,0.1)',
+        borderTopColor: colors.slate200,
         alignSelf: 'flex-start',
     },
     notifyButtonText: {
         fontSize: typography.fontSize.xs,
-        color: colors.zinc400,
+        color: colors.primary,
         fontFamily: typography.fontFamily.display,
+        fontWeight: '500',
     },
     messageText: {
         fontSize: typography.fontSize.base,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
         lineHeight: 22,
     },
     userMessageText: {
@@ -702,17 +724,17 @@ const styles = StyleSheet.create({
         paddingTop: spacing.sm,
         paddingHorizontal: spacing.base,
         borderTopWidth: 1,
-        borderTopColor: colors.zinc800,
-        backgroundColor: colors.backgroundDark,
+        borderTopColor: colors.slate200,
+        backgroundColor: colors.white,
     },
     inputWrapper: {
         flexDirection: 'row',
         alignItems: 'flex-end',
         gap: spacing.sm,
-        backgroundColor: 'rgba(39, 39, 42, 0.5)',
-        borderRadius: borderRadius.xl,
+        backgroundColor: colors.slate50,
+        borderRadius: 24,
         borderWidth: 1,
-        borderColor: colors.zinc700,
+        borderColor: colors.slate200,
         paddingHorizontal: spacing.base,
         paddingVertical: spacing.sm,
     },
@@ -720,7 +742,7 @@ const styles = StyleSheet.create({
         flex: 1,
         fontSize: typography.fontSize.base,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
         maxHeight: 100,
         paddingVertical: spacing.xs,
     },
@@ -728,12 +750,12 @@ const styles = StyleSheet.create({
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.primary,
         justifyContent: 'center',
         alignItems: 'center',
     },
     sendButtonDisabled: {
-        opacity: 0.5,
+        backgroundColor: colors.slate300,
     },
     // Empty State Styles
     emptyContainer: {
@@ -747,22 +769,24 @@ const styles = StyleSheet.create({
         width: 80,
         height: 80,
         borderRadius: 40,
-        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+        backgroundColor: colors.slate50,
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: spacing.sm,
+        borderWidth: 1,
+        borderColor: colors.slate200,
     },
     emptyTitle: {
         fontSize: typography.fontSize['2xl'],
         fontWeight: typography.fontWeight.bold,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
         textAlign: 'center',
     },
     emptyDescription: {
         fontSize: typography.fontSize.base,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.textSecondary,
         textAlign: 'center',
         maxWidth: 300,
         lineHeight: 24,
@@ -774,8 +798,13 @@ const styles = StyleSheet.create({
         backgroundColor: colors.primary,
         paddingHorizontal: spacing.xl,
         paddingVertical: spacing.md,
-        borderRadius: borderRadius.lg, // Using standard radius instead of pill for consistency
+        borderRadius: 12,
         marginTop: spacing.lg,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
     },
     ctaButtonText: {
         color: colors.white,
@@ -783,17 +812,17 @@ const styles = StyleSheet.create({
         fontWeight: typography.fontWeight.semibold,
         fontFamily: typography.fontFamily.display,
     },
-    // Context Sidebar Styles
+    // Context Sidebar Styles - Adjusted for Light Mode
     badge: {
         position: 'absolute',
-        top: -2,
-        right: -2,
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: '#ef4444',
+        top: 0,
+        right: 0,
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: colors.danger,
         borderWidth: 1.5,
-        borderColor: colors.zinc800,
+        borderColor: colors.white,
     },
     sidebarOverlay: {
         flex: 1,
@@ -801,39 +830,45 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-end',
     },
     sidebarContainer: {
-        width: '80%',
+        width: '85%',
         height: '100%',
-        backgroundColor: colors.zinc900,
+        backgroundColor: colors.white,
         position: 'absolute',
         right: 0,
         paddingTop: 50, // Safe Area
         paddingHorizontal: spacing.md,
         borderLeftWidth: 1,
-        borderLeftColor: colors.zinc800,
+        borderLeftColor: colors.slate200,
+        shadowColor: "#000",
+        shadowOffset: { width: -4, height: 0 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 10,
     },
     sidebarHeader: {
         flexDirection: 'row',
-        alignItems: 'center',
         justifyContent: 'space-between',
+        alignItems: 'center',
         marginBottom: spacing.lg,
         paddingBottom: spacing.md,
         borderBottomWidth: 1,
-        borderBottomColor: colors.zinc800,
+        borderBottomColor: colors.slate100,
     },
     sidebarTitle: {
         fontSize: typography.fontSize.lg,
         fontWeight: typography.fontWeight.bold,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+        color: colors.textPrimary,
     },
     closeButton: {
-        padding: spacing.sm,
+        padding: 4,
     },
     uploadButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: colors.primary,
+        marginHorizontal: spacing.lg,
         padding: spacing.md,
         borderRadius: borderRadius.lg,
         gap: spacing.sm,
@@ -841,75 +876,48 @@ const styles = StyleSheet.create({
     },
     uploadButtonText: {
         color: colors.white,
+        fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
         fontFamily: typography.fontFamily.display,
-        fontSize: typography.fontSize.base,
     },
     fileList: {
         flex: 1,
+        paddingHorizontal: spacing.lg,
     },
     fileItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'rgba(39, 39, 42, 0.5)',
         padding: spacing.md,
+        backgroundColor: colors.slate50,
         borderRadius: borderRadius.lg,
         marginBottom: spacing.sm,
-        gap: spacing.sm,
+        borderWidth: 1,
+        borderColor: colors.slate200,
     },
     fileIcon: {
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        alignItems: 'center',
+        backgroundColor: colors.white,
         justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: spacing.md,
+        borderWidth: 1,
+        borderColor: colors.slate100,
     },
     fileInfo: {
         flex: 1,
     },
     fileName: {
-        color: colors.white,
-        fontSize: typography.fontSize.sm,
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.semibold,
         fontFamily: typography.fontFamily.display,
-        fontWeight: typography.fontWeight.medium,
-    },
-    // File Chips
-    fileChipsContainer: {
-        paddingHorizontal: spacing.base,
-        paddingBottom: spacing.sm,
-        gap: spacing.xs,
-    },
-    fileChipsLabel: {
-        fontSize: typography.fontSize.xs,
-        color: colors.zinc500,
-        fontFamily: typography.fontFamily.display,
-        marginBottom: 4,
-    },
-    fileChipsScroll: {
-        gap: spacing.sm,
-    },
-    fileChip: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: colors.zinc800,
-        paddingVertical: 6,
-        paddingHorizontal: 10,
-        borderRadius: borderRadius.lg,
-        borderWidth: 1,
-        borderColor: colors.zinc600,
-        gap: 6,
-    },
-    fileChipText: {
-        fontSize: typography.fontSize.xs,
-        color: colors.zinc300,
-        fontFamily: typography.fontFamily.display,
-        maxWidth: 120,
+        color: colors.textPrimary,
+        marginBottom: 2,
     },
     fileDate: {
-        color: colors.zinc500,
         fontSize: typography.fontSize.xs,
-        marginTop: 2,
+        color: colors.textSecondary,
     },
     deleteFileButton: {
         padding: spacing.sm,
@@ -922,49 +930,87 @@ const styles = StyleSheet.create({
         gap: spacing.md,
     },
     emptyStateText: {
-        color: colors.zinc500,
+        color: colors.textSecondary,
         textAlign: 'center',
         fontSize: typography.fontSize.sm,
+        marginTop: spacing.md,
     },
-    // Compact Quick Actions (Pinned)
+    // Top Quick Actions
     quickActionsContainerCompact: {
         paddingVertical: spacing.sm,
-        // backgroundColor: colors.zinc900, // removed to blend
+        backgroundColor: colors.slate50,
         borderTopWidth: 1,
-        borderTopColor: 'rgba(255,255,255,0.05)',
+        borderTopColor: colors.slate200,
     },
     quickActionsScrollCompact: {
-        paddingHorizontal: spacing.md,
+        paddingHorizontal: spacing.base,
         gap: spacing.sm,
     },
     quickActionChip: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: spacing.xs,
-        paddingHorizontal: spacing.md,
+        gap: 6,
+        paddingHorizontal: 12,
         paddingVertical: 8,
-        backgroundColor: colors.zinc800,
-        borderRadius: borderRadius.lg,
+        backgroundColor: colors.white,
+        borderRadius: 20,
         borderWidth: 1,
-        borderColor: colors.zinc700,
+        borderColor: colors.primary,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 2,
     },
     quickActionChipText: {
-        fontSize: typography.fontSize.xs,
-        fontWeight: typography.fontWeight.medium,
+        fontSize: typography.fontSize.sm,
+        fontWeight: '500',
+        color: colors.primary,
         fontFamily: typography.fontFamily.display,
-        color: colors.white,
+    },
+    // File Chips
+    fileChipsContainer: {
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.base,
+        backgroundColor: colors.white,
+    },
+    fileChipsLabel: {
+        fontSize: typography.fontSize.xs,
+        color: colors.textSecondary,
+        fontFamily: typography.fontFamily.display,
+        marginBottom: 4,
+    },
+    fileChipsScroll: {
+        gap: spacing.sm,
+    },
+    fileChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: colors.slate100,
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderRadius: borderRadius.lg,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        gap: 6,
+    },
+    fileChipText: {
+        color: colors.textPrimary,
+        fontFamily: typography.fontFamily.display,
+        maxWidth: 120,
+        fontSize: typography.fontSize.xs,
     },
 });
 
 const markdownStyles = StyleSheet.create({
-    body: { color: colors.white, fontSize: 16, fontFamily: typography.fontFamily.body },
-    heading1: { color: colors.white, marginTop: 10, marginBottom: 10, fontWeight: 'bold', fontSize: 24 },
-    heading2: { color: colors.zinc200, marginTop: 10, marginBottom: 5, fontWeight: 'bold', fontSize: 20 },
-    strong: { fontWeight: 'bold', color: colors.white },
-    em: { fontStyle: 'italic', color: colors.zinc300 },
+    body: { color: colors.textPrimary, fontSize: 16, fontFamily: typography.fontFamily.body },
+    heading1: { color: colors.primary, marginTop: 10, marginBottom: 10, fontWeight: 'bold', fontSize: 24 },
+    heading2: { color: colors.primaryDark, marginTop: 10, marginBottom: 5, fontWeight: 'bold', fontSize: 20 },
+    strong: { fontWeight: 'bold', color: colors.textPrimary },
+    em: { fontStyle: 'italic', color: colors.slate500 },
     bullet_list: { marginBottom: 10 },
     ordered_list: { marginBottom: 10 },
-    code_inline: { backgroundColor: colors.zinc800, padding: 4, borderRadius: 4, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: colors.zinc200 },
-    code_block: { backgroundColor: colors.zinc800, padding: 10, borderRadius: 8, marginVertical: 8, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: colors.zinc200 },
-    fence: { backgroundColor: colors.zinc800, padding: 10, borderRadius: 8, marginVertical: 8, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: colors.zinc200 },
+    code_inline: { backgroundColor: colors.slate100, padding: 4, borderRadius: 4, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: colors.primary },
+    code_block: { backgroundColor: colors.slate100, padding: 10, borderRadius: 8, marginVertical: 8, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: colors.slate700 },
+    fence: { backgroundColor: colors.slate100, padding: 10, borderRadius: 8, marginVertical: 8, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', color: colors.slate700 },
 });
