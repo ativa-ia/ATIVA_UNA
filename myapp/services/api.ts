@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // URL da API (mude para seu IP local se testar em dispositivo físico)
 // Para desenvolvimento local, use localhost
-// export const API_URL = 'http://localhost:3000/api';
+//export const API_URL = 'http://localhost:3000/api';
 
 // Para produção/Vercel, use:
 export const API_URL = 'https://ativa-ia-9rkb.vercel.app/api';

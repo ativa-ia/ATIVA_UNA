@@ -905,7 +905,7 @@ def get_activity_report(current_user, activity_id):
     })
 
 
-@transcription_bp.route('/activities/\u003cint:activity_id\u003e/export-pdf', methods=['GET'])
+@transcription_bp.route('/activities/<int:activity_id>/export-pdf', methods=['GET'])
 @token_required
 def export_activity_pdf(current_user, activity_id):
     """
@@ -913,7 +913,7 @@ def export_activity_pdf(current_user, activity_id):
     """
     from flask import send_file
     from app.services.pdf_service import generate_activity_report_pdf
-    import tempfile
+    import io
     
     activity = LiveActivity.query.get(activity_id)
     
@@ -958,17 +958,18 @@ def export_activity_pdf(current_user, activity_id):
         'time_limit': activity.time_limit,
     }
     
-    # Gerar PDF em arquivo temporário
-    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
-    pdf_path = generate_activity_report_pdf(
+    # Gerar PDF em memória (BytesIO)
+    buffer = io.BytesIO()
+    generate_activity_report_pdf(
         activity_data,
         ranking_data,
-        temp_file.name
+        buffer
     )
+    buffer.seek(0)
     
     # Enviar arquivo
     return send_file(
-        pdf_path,
+        buffer,
         mimetype='application/pdf',
         as_attachment=True,
         download_name=f'relatorio_atividade_{activity_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
