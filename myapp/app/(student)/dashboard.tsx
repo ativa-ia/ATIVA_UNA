@@ -232,7 +232,9 @@ export default function StudentDashboardScreen() {
                                     <Text style={styles.liveActivityTitle}>
                                         {liveActivity.activity_type === 'quiz'
                                             ? `🎯 Quiz: ${liveActivity.subject_name || 'Nova Atividade'}`
-                                            : '💬 Pergunta do Professor!'}
+                                            : liveActivity.activity_type === 'summary'
+                                                ? '📝 Resumo da Aula Disponível'
+                                                : '💬 Pergunta do Professor!'}
                                     </Text>
                                     <Text style={styles.liveActivityDesc}>
                                         Toque para responder agora

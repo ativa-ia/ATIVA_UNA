@@ -17,7 +17,90 @@ import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { checkActiveQuiz, Quiz } from '@/services/quiz';
-import { getActiveActivity, LiveActivity, isActivitySubmitted } from '@/services/api';
+import { getActiveActivity, LiveActivity, isActivitySubmitted, getStudentHistory } from '@/services/api';
+
+const SavedContentSection = ({ subjectId }: { subjectId: number }) => {
+    const [history, setHistory] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useFocusEffect(
+        useCallback(() => {
+            const loadHistory = async () => {
+                try {
+                    const res = await getStudentHistory(subjectId);
+                    if (res.success) {
+                        setHistory(res.history);
+                    }
+                } catch (e) {
+                    console.error(e);
+                } finally {
+                    setLoading(false);
+                }
+            };
+            loadHistory();
+        }, [subjectId])
+    );
+
+    if (loading) return <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.base }} />;
+    if (history.length === 0) return null;
+
+    return (
+        <View style={{ marginTop: spacing.lg }}>
+            <Text style={{ fontSize: typography.fontSize.lg, fontWeight: 'bold', color: colors.textPrimary, marginBottom: spacing.sm, paddingHorizontal: spacing.base }}>
+                Conteúdo Salvo 📚
+            </Text>
+            {history.map((item, index) => (
+                <TouchableOpacity
+                    key={index}
+                    style={{
+                        backgroundColor: colors.white,
+                        marginHorizontal: spacing.base,
+                        marginBottom: spacing.sm,
+                        padding: spacing.base,
+                        borderRadius: borderRadius.lg,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        borderWidth: 1,
+                        borderColor: colors.slate200
+                    }}
+                    onPress={() => {
+                        // Open activity in read-only mode (or same mode for now)
+                        router.push({
+                            pathname: '/(student)/live-activity',
+                            params: { activity: JSON.stringify(item.activity) }
+                        });
+                    }}
+                >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                        <View style={{
+                            width: 40, height: 40, borderRadius: 20,
+                            backgroundColor: item.activity.activity_type === 'quiz' ? '#EEF2FF' : '#FFF7ED',
+                            alignItems: 'center', justifyContent: 'center', marginRight: spacing.base
+                        }}>
+                            <MaterialIcons
+                                name={item.activity.activity_type === 'quiz' ? 'quiz' : 'article'}
+                                size={24}
+                                color={item.activity.activity_type === 'quiz' ? colors.primary : '#F59E0B'}
+                            />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: typography.fontSize.base, fontWeight: '600', color: colors.textPrimary }}>
+                                {item.activity.title}
+                            </Text>
+                            <Text style={{ fontSize: typography.fontSize.sm, color: colors.textSecondary }}>
+                                {item.activity.activity_type === 'quiz' ? 'Quiz' : 'Resumo'} • {new Date(item.activity.created_at).toLocaleDateString()}
+                            </Text>
+                        </View>
+                    </View>
+                    {item.status === 'completed' && (
+                        <MaterialIcons name="check-circle" size={20} color={colors.secondary} />
+                    )}
+                </TouchableOpacity>
+            ))}
+        </View>
+    );
+};
 
 /**
  * SubjectDetailsScreen - Detalhes da Disciplina (Aluno)
@@ -251,9 +334,10 @@ export default function SubjectDetailsScreen() {
                                 </View>
                             )}
                         </TouchableOpacity>
-
-
                     </View>
+
+                    {/* Saved Content Section Removed per user request */}
+
                 </ScrollView>
             </View>
 
@@ -322,7 +406,7 @@ export default function SubjectDetailsScreen() {
                                 liveActivity?.activity_type === 'summary' ? 'Resumo Disponível!' : 'Atividade ao Vivo!'}
                         </Text>
                         <Text style={styles.quizPopupSubtitle}>
-                            {liveActivity?.title}
+                            {liveActivity?.activity_type === 'summary' ? 'Resumo da Aula' : liveActivity?.title}
                         </Text>
 
                         <View style={styles.quizInfo}>
