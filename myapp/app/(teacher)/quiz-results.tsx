@@ -14,7 +14,10 @@ import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { getQuizReport, endQuiz, QuizReport } from '@/services/quiz';
-import { getLiveActivityReport, endLiveActivity } from '@/services/api';
+import { getLiveActivityReport, endLiveActivity, exportActivityPDF } from '@/services/api';
+import RaceVisualization from '@/components/quiz/RaceVisualization';
+import PodiumDisplay from '@/components/quiz/PodiumDisplay';
+import { useWebSocket } from '@/hooks/useWebSocket';
 
 /**
  * QuizResultsScreen - Resultados do Quiz em Tempo Real (Professor)
@@ -30,11 +33,91 @@ export default function QuizResultsScreen() {
     const [report, setReport] = useState<QuizReport | null>(null);
     const [loading, setLoading] = useState(true);
     const [ending, setEnding] = useState(false);
-    const pollingRef = useRef<any>(null);
+    const [showPodium, setShowPodium] = useState(false);
+    const [ranking, setRanking] = useState<any[]>([]);
+    const [isExportingPDF, setIsExportingPDF] = useState(false);
 
-    // Polling para atualizar resultados em tempo real
+    // WebSocket para atualizações em tempo real
+    const { isConnected, ranking: wsRanking } = useWebSocket({
+        quizId: activityId > 0 ? activityId : quizId,
+        enabled: true
+    });
+
+    // Log connection status
     useEffect(() => {
-        const fetchReport = async () => {
+        console.log('[QUIZ-RESULTS] ========================================');
+        console.log('[QUIZ-RESULTS] WebSocket Status:', isConnected ? 'CONECTADO ✅' : 'DESCONECTADO ❌');
+        console.log('[QUIZ-RESULTS] Quiz ID:', activityId > 0 ? activityId : quizId);
+        console.log('[QUIZ-RESULTS] ========================================');
+    }, [isConnected]);
+
+    // Atualizar ranking quando receber dados do WebSocket
+    useEffect(() => {
+        console.log('[QUIZ-RESULTS] ========================================');
+        console.log('[QUIZ-RESULTS] wsRanking mudou!');
+        console.log('[QUIZ-RESULTS] wsRanking:', wsRanking);
+
+        if (wsRanking && wsRanking.ranking) {
+            console.log('[QUIZ-RESULTS] ✅ Ranking recebido do WebSocket!');
+            console.log('[QUIZ-RESULTS] Número de alunos:', wsRanking.ranking.length);
+            console.log('[QUIZ-RESULTS] Dados:', wsRanking.ranking);
+
+            const updatedRanking = wsRanking.ranking.map((r: any) => ({
+                ...r,
+                status: 'submitted'
+            }));
+
+            console.log('[QUIZ-RESULTS] Atualizando state do ranking...');
+            setRanking(updatedRanking);
+        } else {
+            console.log('[QUIZ-RESULTS] ⚠️ wsRanking vazio ou sem ranking');
+        }
+        console.log('[QUIZ-RESULTS] ========================================');
+    }, [wsRanking]);
+
+    // Fallback: Polling a cada 5s caso WebSocket não esteja funcionando
+    useEffect(() => {
+        const pollingRef = setInterval(async () => {
+            if (!showPodium) {
+                console.log('[FALLBACK POLLING] Buscando ranking...');
+                try {
+                    let result;
+                    if (activityId > 0) {
+                        result = await getLiveActivityReport(activityId);
+                    } else {
+                        result = await getQuizReport(quizId);
+                    }
+
+                    if (result.success && result.report) {
+                        setReport(result.report);
+                        if (result.report.all_responses) {
+                            const transformedRanking = result.report.all_responses.map((r: any, index: number) => ({
+                                position: index + 1,
+                                student_id: r.student_id || r.id,
+                                student_name: r.student_name || 'Aluno',
+                                points: r.score * 100,
+                                score: r.score,
+                                total: r.total,
+                                percentage: r.percentage || 0,
+                                time_taken: r.time_taken || 0,
+                                status: 'submitted'
+                            }));
+                            console.log('[FALLBACK POLLING] Ranking atualizado:', transformedRanking.length, 'alunos');
+                            setRanking(transformedRanking);
+                        }
+                    }
+                } catch (error) {
+                    console.log('[FALLBACK POLLING] Erro:', error);
+                }
+            }
+        }, 5000);
+
+        return () => clearInterval(pollingRef);
+    }, [quizId, activityId, showPodium]);
+
+    // Buscar relatório inicial
+    useEffect(() => {
+        const fetchInitialReport = async () => {
             try {
                 let result;
                 if (activityId > 0) {
@@ -45,50 +128,121 @@ export default function QuizResultsScreen() {
 
                 if (result.success && result.report) {
                     setReport(result.report);
+                    // Atualizar ranking inicial
+                    if (result.report.all_responses) {
+                        console.log('[INITIAL] Raw responses:', result.report.all_responses);
+                        const transformedRanking = result.report.all_responses.map((r: any, index: number) => ({
+                            position: index + 1,
+                            student_id: r.student_id || r.id,
+                            student_name: r.student_name || 'Aluno',
+                            points: r.score * 100,
+                            score: r.score,
+                            total: r.total,
+                            percentage: r.percentage || 0,
+                            time_taken: r.time_taken || 0,
+                            status: 'submitted'
+                        }));
+                        console.log('[INITIAL] Transformed ranking:', transformedRanking);
+                        setRanking(transformedRanking);
+                    }
                 }
             } catch (error) {
-                console.log('Erro ao buscar relatório:', error);
+                console.log('Erro ao buscar relatório inicial:', error);
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchReport();
-        pollingRef.current = setInterval(fetchReport, 3000); // Atualiza a cada 3s
-
-        return () => {
-            if (pollingRef.current) clearInterval(pollingRef.current);
-        };
+        fetchInitialReport();
     }, [quizId, activityId]);
 
     const handleEndQuiz = async () => {
-        setEnding(true);
-        try {
-            if (activityId > 0) {
-                await endLiveActivity(activityId);
-            } else {
-                await endQuiz(quizId);
-            }
-
-            // Para o polling
-            if (pollingRef.current) clearInterval(pollingRef.current);
-
-            // Busca relatório final
-            let result;
-            if (activityId > 0) {
-                result = await getLiveActivityReport(activityId);
-            } else {
-                result = await getQuizReport(quizId);
-            }
-
-            if (result.success && result.report) {
-                setReport(result.report);
-            }
-        } catch (error) {
-            console.log('Erro ao encerrar quiz:', error);
-        } finally {
-            setEnding(false);
+        // Se já está mostrando o pódio, voltar para a tela anterior
+        if (showPodium) {
+            router.back();
+            return;
         }
+
+        // Primeira vez: verificar se há respostas submetidas
+        const submittedCount = ranking.filter((r: any) => r.status === 'submitted').length;
+
+        console.log('[END QUIZ] Respostas submetidas:', submittedCount);
+        console.log('[END QUIZ] Ranking completo:', ranking);
+
+        if (submittedCount >= 1) {
+            setEnding(true);
+            try {
+                // Encerrar a atividade no backend
+                if (activityId > 0) {
+                    await endLiveActivity(activityId);
+                } else {
+                    await endQuiz(quizId);
+                }
+
+
+
+                // Busca relatório final
+                let result;
+                if (activityId > 0) {
+                    result = await getLiveActivityReport(activityId);
+                } else {
+                    result = await getQuizReport(quizId);
+                }
+
+                if (result.success && result.report) {
+                    setReport(result.report);
+                    // Atualizar ranking final
+                    if (result.report.all_responses) {
+                        setRanking(result.report.all_responses.map((r: any, index: number) => ({
+                            position: index + 1,
+                            student_id: r.student_id || r.id,
+                            student_name: r.student_name || 'Aluno',
+                            points: r.score * 100,
+                            score: r.score,
+                            total: r.total,
+                            percentage: r.percentage || 0,
+                            time_taken: r.time_taken || 0,
+                            status: 'submitted'
+                        })));
+                    }
+                }
+
+                // Mostrar pódio
+                setShowPodium(true);
+                console.log('[END QUIZ] Mostrando pódio');
+            } catch (error) {
+                console.log('Erro ao encerrar quiz:', error);
+            } finally {
+                setEnding(false);
+            }
+        } else {
+            // Se não houver respostas, voltar direto
+            console.log('[END QUIZ] Sem respostas, voltando direto');
+            router.back();
+        }
+    };
+
+    const handleExportPDF = async () => {
+        if (!activityId && !quizId) return;
+
+        setIsExportingPDF(true);
+        try {
+            const id = activityId > 0 ? activityId : quizId;
+            const blob = await exportActivityPDF(id);
+
+            // Criar URL do blob e fazer download
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `relatorio_quiz_${id}_${new Date().toISOString().slice(0, 10)}.pdf`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Erro ao exportar PDF:', error);
+        }
+        setIsExportingPDF(false);
     };
 
     const isActive = report?.quiz?.status === 'active';
@@ -110,7 +264,21 @@ export default function QuizResultsScreen() {
                     <MaterialIcons name="arrow-back-ios" size={20} color={colors.textPrimary} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Resultados ao Vivo</Text>
-                <View style={styles.placeholder} />
+                {showPodium ? (
+                    <TouchableOpacity
+                        style={styles.pdfButton}
+                        onPress={handleExportPDF}
+                        disabled={isExportingPDF}
+                    >
+                        {isExportingPDF ? (
+                            <ActivityIndicator size="small" color={colors.primary} />
+                        ) : (
+                            <MaterialIcons name="picture-as-pdf" size={24} color={colors.primary} />
+                        )}
+                    </TouchableOpacity>
+                ) : (
+                    <View style={styles.placeholder} />
+                )}
             </View>
 
             <ScrollView
@@ -153,7 +321,7 @@ export default function QuizResultsScreen() {
                     </View>
 
                     {/* End Quiz Button */}
-                    {isActive && (
+                    {(isActive || showPodium) && (
                         <TouchableOpacity
                             style={styles.endButton}
                             onPress={handleEndQuiz}
@@ -163,8 +331,10 @@ export default function QuizResultsScreen() {
                                 <ActivityIndicator size="small" color={colors.white} />
                             ) : (
                                 <>
-                                    <MaterialIcons name="stop" size={20} color={colors.white} />
-                                    <Text style={styles.endButtonText}>Encerrar Quiz</Text>
+                                    <MaterialIcons name={showPodium ? "close" : "stop"} size={20} color={colors.white} />
+                                    <Text style={styles.endButtonText}>
+                                        {showPodium ? 'Fechar' : 'Encerrar e Ver Pódio'}
+                                    </Text>
                                 </>
                             )}
                         </TouchableOpacity>
@@ -179,21 +349,43 @@ export default function QuizResultsScreen() {
                     </View>
                 </View>
 
-                {/* Top Students */}
-                {report?.top_students && report.top_students.length > 0 && (
+                {/* Live Ranking / Podium */}
+                {showPodium && ranking.filter((r: any) => r.status === 'submitted').length >= 1 ? (
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>🏆 Top Alunos</Text>
-                        {report.top_students.map((student, index) => (
-                            <View key={student.id} style={styles.studentRow}>
-                                <View style={[styles.medal, index === 0 && styles.goldMedal, index === 1 && styles.silverMedal, index === 2 && styles.bronzeMedal]}>
-                                    <Text style={styles.medalText}>{index + 1}º</Text>
-                                </View>
-                                <Text style={styles.studentName}>{student.student_name || 'Aluno'}</Text>
-                                <Text style={styles.studentScore}>{student.percentage?.toFixed(0)}%</Text>
-                            </View>
-                        ))}
+                        <PodiumDisplay
+                            topStudents={ranking
+                                .filter((r: any) => r.status === 'submitted')
+                                .slice(0, 3)
+                                .map((student: any, index: number) => ({
+                                    position: index + 1,
+                                    student_name: student.student_name,
+                                    points: student.points || (student.score * 100),
+                                    percentage: student.percentage || 0,
+                                    score: student.score || 0,
+                                    total: student.total || 0,
+                                }))}
+                        />
                     </View>
-                )}
+                ) : ranking.length > 0 ? (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>🏁 Ranking ao Vivo</Text>
+                        <RaceVisualization
+                            ranking={ranking
+                                .filter((r: any) => r.status === 'submitted')
+                                .map((student: any, index: number) => ({
+                                    position: index + 1,
+                                    student_id: student.student_id,
+                                    student_name: student.student_name,
+                                    points: student.points || (student.score * 100),
+                                    score: student.score || 0,
+                                    total: student.total || 0,
+                                    percentage: student.percentage || 0,
+                                    time_taken: student.time_taken || 0,
+                                }))}
+                            enrolledCount={report?.enrolled_count || ranking.length}
+                        />
+                    </View>
+                ) : null}
 
                 {/* Worst Question */}
                 {report?.worst_question && (
@@ -276,6 +468,14 @@ const styles = StyleSheet.create({
     },
     placeholder: {
         width: 40,
+    },
+    pdfButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: colors.slate100,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     scrollView: {
         flex: 1,

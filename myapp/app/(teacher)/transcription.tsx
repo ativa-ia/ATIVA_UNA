@@ -25,7 +25,6 @@ import {
     updateTranscription,
     shareSummary,
     getTranscriptionSession,
-    getActivityRanking,
     TranscriptionSession,
     LiveActivity,
     resumeSession,
@@ -34,12 +33,8 @@ import {
     generateSummary,
     createOpenQuestion,
     broadcastActivity,
-    endActivity,
-    exportActivityPDF,
     updateActivity,
 } from '@/services/api';
-import RaceVisualization from '@/components/quiz/RaceVisualization';
-import PodiumDisplay from '@/components/quiz/PodiumDisplay';
 // import { useAuth } from '@/context/AuthContext'; // Ajuste o caminho se necessário
 import { useRouter } from 'expo-router';
 
@@ -69,9 +64,6 @@ export default function TranscriptionScreen() {
     const [showActivityModal, setShowActivityModal] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
     const [currentActivity, setCurrentActivity] = useState<LiveActivity | null>(null);
-    const [showRankingModal, setShowRankingModal] = useState(false);
-    const [ranking, setRanking] = useState<any[]>([]);
-    const [showPodium, setShowPodium] = useState(false); // Controla exibição do pódio
     const [showAnswerKey, setShowAnswerKey] = useState(false); // Controla exibição do gabarito
     const [visibleAnswers, setVisibleAnswers] = useState<Set<number>>(new Set()); // Controla quais questões mostram resposta
     const [numQuestions, setNumQuestions] = useState(5); // Quantidade de questões do quiz
@@ -89,7 +81,6 @@ export default function TranscriptionScreen() {
     const processedResultsRef = useRef<Set<number>>(new Set());
     const lastFinalTextRef = useRef('');
     const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const rankingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     // Animação
     const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -100,7 +91,6 @@ export default function TranscriptionScreen() {
         initSession();
         return () => {
             if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
-            if (rankingIntervalRef.current) clearInterval(rankingIntervalRef.current);
         };
     }, []);
 
@@ -512,11 +502,18 @@ export default function TranscriptionScreen() {
                 console.log('[BROADCAST] Alunos matriculados:', result.enrolled_students);
                 setCurrentActivity(result.activity);
                 Alert.alert('Atividade Iniciada!', `Enviada para ${result.enrolled_students || 0} alunos.`);
-                // Se for quiz, abrir ranking
+
+                // Se for quiz, redirecionar para tela de resultados
                 if (result.activity?.activity_type === 'quiz') {
-                    console.log('[BROADCAST] Tipo é quiz, abrindo modal de ranking...');
-                    setShowRankingModal(true);
-                    startRankingPolling(activityId);
+                    console.log('[BROADCAST] Tipo é quiz, redirecionando para quiz-results...');
+                    router.push({
+                        pathname: '/(teacher)/quiz-results',
+                        params: {
+                            subjectId: subjectId,
+                            activityId: activityId,
+                            subject: subjectName
+                        }
+                    });
                 }
             } else {
                 console.log('[BROADCAST] Erro no broadcast:', result);
@@ -525,71 +522,6 @@ export default function TranscriptionScreen() {
         } catch (error) {
             console.error('[BROADCAST] Exceção ao iniciar atividade:', error);
             Alert.alert('Erro', 'Erro ao iniciar atividade.');
-        }
-    };
-
-    // Polling do ranking
-    const startRankingPolling = (activityId: number) => {
-        if (rankingIntervalRef.current) clearInterval(rankingIntervalRef.current);
-
-        const fetchRanking = async () => {
-            try {
-                const result = await getActivityRanking(activityId);
-                if (result.success) {
-                    setRanking(result.ranking || []);
-                }
-            } catch (error) {
-                console.error('Erro ao buscar ranking:', error);
-            }
-        };
-
-        fetchRanking(); // Primeira vez imediato
-        rankingIntervalRef.current = setInterval(fetchRanking, 2000);
-    };
-
-    // Encerrar atividade
-    const handleEndActivity = async () => {
-        if (!currentActivity) return;
-
-        // Se já está mostrando o pódio, fechar tudo
-        if (showPodium) {
-            try {
-                const activityId = currentActivity.id;
-                if (rankingIntervalRef.current) clearInterval(rankingIntervalRef.current);
-                await endActivity(activityId);
-                setShowRankingModal(false);
-                setCurrentActivity(null);
-                setShowPodium(false);
-
-                // Retomar sessão
-                if (session) {
-                    await resumeSession(session.id);
-                }
-            } catch (error) {
-                console.error('Erro ao encerrar:', error);
-            }
-            return;
-        }
-
-        // Primeira vez: mostrar pódio se houver pelo menos 1 resposta
-        const submittedCount = ranking.filter((r: any) => r.status === 'submitted').length;
-        if (submittedCount >= 1) {
-            setShowPodium(true);
-        } else {
-            // Se não houver respostas, encerrar direto
-            try {
-                const activityId = currentActivity.id;
-                if (rankingIntervalRef.current) clearInterval(rankingIntervalRef.current);
-                await endActivity(activityId);
-                setShowRankingModal(false);
-                setCurrentActivity(null);
-
-                if (session) {
-                    await resumeSession(session.id);
-                }
-            } catch (error) {
-                console.error('Erro ao encerrar:', error);
-            }
         }
     };
 
@@ -615,34 +547,6 @@ export default function TranscriptionScreen() {
         if (session) {
             await resumeSession(session.id);
         }
-    };
-
-    // Exportar PDF do ranking
-    const [isExportingPDF, setIsExportingPDF] = useState(false);
-
-    const handleExportPDF = async () => {
-        if (!currentActivity) return;
-
-        setIsExportingPDF(true);
-        try {
-            const blob = await exportActivityPDF(currentActivity.id);
-
-            // Criar URL do blob e fazer download
-            const url = window.URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `relatorio_atividade_${currentActivity.id}_${new Date().toISOString().slice(0, 10)}.pdf`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            window.URL.revokeObjectURL(url);
-
-            Alert.alert('Sucesso', 'Relatório PDF exportado com sucesso!');
-        } catch (error) {
-            console.error('Erro ao exportar PDF:', error);
-            Alert.alert('Erro', 'Não foi possível exportar o relatório em PDF.');
-        }
-        setIsExportingPDF(false);
     };
 
     const wordCount = transcribedText.split(/\s+/).filter(w => w).length;
@@ -967,103 +871,6 @@ Pressione o botão do microfone para começar a falar."
                 </Text>
             </View>
 
-
-            {/* Modal de Ranking - COM GAMIFICAÇÃO */}
-            <Modal
-                visible={showRankingModal}
-                transparent
-                animationType="slide"
-                onRequestClose={handleEndActivity}
-            >
-                <View style={styles.modalOverlayFullScreen}>
-                    <View style={styles.rankingModalContent}>
-                        {/* Header */}
-                        <View style={styles.rankingHeader}>
-                            <Text style={styles.modalTitle}>
-                                {currentActivity?.status === 'ended' ? '🏆 Pódio Final' : '🏁 Ranking ao Vivo'}
-                            </Text>
-                            <TouchableOpacity onPress={handleEndActivity} style={styles.closeIconButton}>
-                                <MaterialIcons name="close" size={24} color={colors.white} />
-                            </TouchableOpacity>
-                        </View>
-
-                        {/* Conteúdo com Gamificação */}
-                        <View style={styles.gamificationContent}>
-                            {showPodium && ranking.filter((r: any) => r.status === 'submitted').length >= 1 ? (
-                                // Pódio quando encerrado (funciona com 1, 2 ou 3+ alunos)
-                                <PodiumDisplay
-                                    topStudents={ranking
-                                        .filter((r: any) => r.status === 'submitted')
-                                        .slice(0, 3)
-                                        .map((student: any, index: number) => ({
-                                            position: index + 1,
-                                            student_name: student.student_name,
-                                            points: student.points || (student.score * 100),
-                                            percentage: student.percentage || 0,
-                                            score: student.score || 0,
-                                            total: student.total || 0,
-                                        }))
-                                    }
-                                />
-                            ) : ranking.length > 0 ? (
-                                // Visualização de corrida em tempo real
-                                <RaceVisualization
-                                    ranking={ranking
-                                        .filter((r: any) => r.status === 'submitted')
-                                        .map((student: any, index: number) => ({
-                                            position: index + 1,
-                                            student_id: student.student_id,
-                                            student_name: student.student_name,
-                                            points: student.points || (student.score * 100),
-                                            score: student.score || 0,
-                                            total: student.total || 0,
-                                            percentage: student.percentage || 0,
-                                            time_taken: student.time_taken || 0,
-                                        }))
-                                    }
-                                    enrolledCount={ranking.length}
-                                />
-                            ) : (
-                                <View style={styles.emptyStateRanking}>
-                                    <ActivityIndicator size="large" color="#8b5cf6" />
-                                    <Text style={styles.emptyText}>Aguardando respostas...</Text>
-                                </View>
-                            )}
-                        </View>
-
-                        {/* Botões - lado a lado */}
-                        <View style={styles.modalButtonsRow}>
-                            {/* Botão Exportar PDF - apenas quando pódio estiver visível */}
-                            {showPodium && (
-                                <TouchableOpacity
-                                    style={[styles.exportPdfButton, styles.buttonHalf]}
-                                    onPress={handleExportPDF}
-                                    disabled={isExportingPDF}
-                                >
-                                    {isExportingPDF ? (
-                                        <ActivityIndicator size="small" color={colors.white} />
-                                    ) : (
-                                        <MaterialIcons name="picture-as-pdf" size={20} color={colors.white} />
-                                    )}
-                                    <Text style={styles.exportPdfButtonText}>
-                                        {isExportingPDF ? 'Gerando...' : 'Exportar PDF'}
-                                    </Text>
-                                </TouchableOpacity>
-                            )}
-
-                            {/* Botão Encerrar/Fechar */}
-                            <TouchableOpacity
-                                style={[styles.closeButton, showPodium && styles.buttonHalf]}
-                                onPress={handleEndActivity}
-                            >
-                                <Text style={styles.closeButtonText}>
-                                    {showPodium ? 'Fechar' : 'Encerrar e Ver Pódio'}
-                                </Text>
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-                </View>
-            </Modal>
         </View>
     );
 }
