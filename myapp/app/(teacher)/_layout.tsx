@@ -62,7 +62,7 @@ export default function TeacherLayout() {
         <Stack
             screenOptions={{
                 headerShown: false,
-                contentStyle: { backgroundColor: colors.backgroundDark },
+                contentStyle: { backgroundColor: colors.backgroundLight },
             }}
         />
     );
@@ -73,6 +73,6 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: colors.backgroundDark,
+        backgroundColor: colors.backgroundLight,
     },
 });

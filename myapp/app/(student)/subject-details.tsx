@@ -53,11 +53,11 @@ export default function SubjectDetailsScreen() {
 
         // 1. Verificar Quiz (sistema de Quiz)
         try {
-            console.log(`[Activity Poll] Checking for quiz in subject ${subjectId}...`);
+
             const quizResult = await checkActiveQuiz(subjectId);
 
             if (quizResult.success && quizResult.active && quizResult.quiz) {
-                console.log('[Activity Poll] Quiz ATIVO encontrado:', quizResult.quiz.title);
+
                 setActiveQuiz(quizResult.quiz);
                 setAlreadyAnswered(quizResult.already_answered || false);
                 if (!quizResult.already_answered) {
@@ -69,25 +69,25 @@ export default function SubjectDetailsScreen() {
                 setShowQuizPopup(false);
             }
         } catch (error) {
-            console.log('[Activity Poll] Erro ao verificar quiz:', error);
+
         }
 
         // 2. Verificar LiveActivity (sistema de Transcrição)
         try {
             const activityResult = await getActiveActivity(subjectId);
-            console.log('[Activity Poll] LiveActivity result:', JSON.stringify(activityResult, null, 2));
+
 
             if (activityResult.success && activityResult.active && activityResult.activity) {
-                console.log('[Activity Poll] LiveActivity ATIVA encontrada:', activityResult.activity.title);
+
                 setLiveActivity(activityResult.activity);
                 setShowActivityPopup(true);
             } else {
-                console.log('[Activity Poll] Nenhuma atividade ativa');
+
                 setLiveActivity(null);
                 setShowActivityPopup(false);
             }
         } catch (error) {
-            console.log('[Activity Poll] Erro ao verificar live activity:', error);
+
         }
     }, [subjectId, quizStarted, activityStarted]);
 
@@ -201,14 +201,16 @@ export default function SubjectDetailsScreen() {
                         >
                             <View style={styles.liveActivityIcon}>
                                 <MaterialIcons
-                                    name={liveActivity.activity_type === 'quiz' ? 'quiz' : 'help-outline'}
+                                    name={liveActivity.activity_type === 'quiz' ? 'quiz' :
+                                        liveActivity.activity_type === 'summary' ? 'summarize' : 'help-outline'}
                                     size={24}
                                     color={colors.white}
                                 />
                             </View>
                             <View style={styles.liveActivityInfo}>
                                 <Text style={styles.liveActivityTitle}>
-                                    {liveActivity.activity_type === 'quiz' ? '🎯 Quiz em Andamento!' : '💬 Pergunta Disponível!'}
+                                    {liveActivity.activity_type === 'quiz' ? '🎯 Quiz em Andamento!' :
+                                        liveActivity.activity_type === 'summary' ? '📝 Resumo Disponível!' : '💬 Pergunta Disponível!'}
                                 </Text>
                                 <Text style={styles.liveActivityDesc}>
                                     Toque para participar agora

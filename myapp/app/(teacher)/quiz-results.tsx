@@ -14,7 +14,7 @@ import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { getQuizReport, endQuiz, QuizReport } from '@/services/quiz';
-import { getLiveActivityReport } from '@/services/api';
+import { getLiveActivityReport, endLiveActivity } from '@/services/api';
 
 /**
  * QuizResultsScreen - Resultados do Quiz em Tempo Real (Professor)
@@ -64,11 +64,23 @@ export default function QuizResultsScreen() {
     const handleEndQuiz = async () => {
         setEnding(true);
         try {
-            await endQuiz(quizId);
+            if (activityId > 0) {
+                await endLiveActivity(activityId);
+            } else {
+                await endQuiz(quizId);
+            }
+
             // Para o polling
             if (pollingRef.current) clearInterval(pollingRef.current);
+
             // Busca relatório final
-            const result = await getQuizReport(quizId);
+            let result;
+            if (activityId > 0) {
+                result = await getLiveActivityReport(activityId);
+            } else {
+                result = await getQuizReport(quizId);
+            }
+
             if (result.success && result.report) {
                 setReport(result.report);
             }
