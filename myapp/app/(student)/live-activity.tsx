@@ -413,7 +413,25 @@ export default function LiveActivityScreen() {
                 <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
                     <TouchableOpacity
                         style={[styles.submitButton, { width: '100%', justifyContent: 'center' }]}
-                        onPress={() => handleSubmit(true)}
+                        onPress={async () => {
+                            // Mark as read without showing result screen
+                            setIsSubmitting(true);
+                            try {
+                                const response = await submitActivityResponse(activity.id, { read: true });
+                                // Navigate back immediately if success or already read, no blocking Alert
+                                if (response.success || response.already_answered) {
+                                    router.back();
+                                } else {
+                                    // Only show alert on error, but still offer way out? No, just go back.
+                                    router.back();
+                                }
+                            } catch (e) {
+                                console.log(e);
+                                router.back();
+                            } finally {
+                                setIsSubmitting(false);
+                            }
+                        }}
                     >
                         <Text style={styles.submitButtonText}>Entendi</Text>
                         <MaterialIcons name="check" size={24} color={colors.white} />

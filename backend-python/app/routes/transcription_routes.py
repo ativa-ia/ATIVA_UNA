@@ -767,149 +767,196 @@ def get_active_activity(current_user, subject_id):
 
 
 
+@transcription_bp.route('/subjects/<int:subject_id>/history', methods=['GET'])
+@token_required
+def get_student_history(current_user, subject_id):
+    """
+    Retorna histórico de atividades do aluno na disciplina
+    """
+    try:
+        # 1. Buscar todas as atividades compartilhadas da disciplina
+        activities = LiveActivity.query.join(TranscriptionSession)\
+            .filter(
+                TranscriptionSession.subject_id == subject_id,
+                LiveActivity.shared_with_students == True
+            ).order_by(LiveActivity.created_at.desc()).all()
+            
+        history = []
+        
+        for activity in activities:
+            try:
+                # Verificar se aluno respondeu
+                response = LiveActivityResponse.query.filter_by(
+                    activity_id=activity.id,
+                    student_id=current_user.id
+                ).first()
+                
+                status = 'pending'
+                if response:
+                    status = 'completed' if response.submitted_at else 'in_progress'
+                elif not activity.is_active and activity.activity_type == 'quiz':
+                    status = 'missed'
+                    
+                history.append({
+                    'activity': activity.to_dict(include_responses=False),
+                    'status': status,
+                    'my_score': response.score if response else None,
+                    'my_percentage': response.percentage if response else None
+                })
+            except Exception as inner_e:
+                print(f"Error processing activity {activity.id}: {inner_e}")
+                continue
+            
+        return jsonify({
+            'success': True,
+            'history': history
+        })
+    except Exception as e:
+        print(f"Error in get_student_history: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @transcription_bp.route('/activities/<int:activity_id>/progress', methods=['POST'])
 @token_required
 def update_activity_progress(current_user, activity_id):
     """
     Aluno envia progresso parcial (quiz) para LiveActivity
     """
-    activity = LiveActivity.query.get(activity_id)
-    
-    if not activity:
-        return jsonify({'success': False, 'error': 'Atividade não encontrada'}), 404
-    
-    if not activity.is_active:
-        return jsonify({'success': False, 'error': 'Atividade encerrada'}), 400
+    try:
+        activity = LiveActivity.query.get(activity_id)
         
-    data = request.get_json() or {}
-    answers = data.get('answers', {})
-    time_taken = data.get('time_taken', 0)
-    
-    # Buscar ou criar resposta
-    response = LiveActivityResponse.query.filter_by(
-        activity_id=activity_id,
-        student_id=current_user.id
-    ).first()
-    
-    if not response:
-        response = LiveActivityResponse(
+        if not activity:
+            return jsonify({'success': False, 'error': 'Atividade não encontrada'}), 404
+        
+        if not activity.is_active:
+            return jsonify({'success': False, 'error': 'Atividade encerrada'}), 400
+            
+        data = request.get_json() or {}
+        answers = data.get('answers', {})
+        
+        # Buscar ou criar resposta
+        response = LiveActivityResponse.query.filter_by(
             activity_id=activity_id,
-            student_id=current_user.id,
-            response_data={'answers': answers}, # Field is response_data
-            score=0,
-            submitted_at=None
-        )
-        db.session.add(response)
-    else:
-        # Merge answers if dealing with a quiz
-        if activity.activity_type == 'quiz':
-            current_data = response.response_data or {}
-            current_answers = current_data.get('answers', {})
-            
-            if isinstance(current_answers, dict) and isinstance(answers, dict):
-                current_answers.update(answers)
-            else:
-                current_answers = answers
+            student_id=current_user.id
+        ).first()
+        
+        if not response:
+            response = LiveActivityResponse(
+                activity_id=activity_id,
+                student_id=current_user.id,
+                response_data={'answers': answers},
+                score=0,
+                submitted_at=None
+            )
+            db.session.add(response)
+        else:
+            # Merge answers if dealing with a quiz
+            if activity.activity_type == 'quiz':
+                current_data = response.response_data or {}
+                # Ensure current_data is a dict (handle potential None or corrupted data)
+                if not isinstance(current_data, dict):
+                     current_data = {}
+                     
+                current_answers = current_data.get('answers', {})
+                if not isinstance(current_answers, dict):
+                    current_answers = {}
                 
-            current_data['answers'] = current_answers
-            response.response_data = current_data
+                if isinstance(answers, dict):
+                    current_answers.update(answers)
+                    
+                current_data['answers'] = current_answers
+                response.response_data = current_data
+                
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(response, "response_data")
             
-            # Force update flag if needed (SQLAlchemy sometimes needs this for JSON)
-            from sqlalchemy.orm.attributes import flag_modified
-            flag_modified(response, "response_data")
+        # Calcular score parcial
+        if activity.activity_type == 'quiz':
+            response.calculate_quiz_score()
+            
+        db.session.commit()
         
-        # response.time_taken = time_taken # Model doesn't have time_taken, ignoring.
-        
-    # Calcular score parcial
-    if activity.activity_type == 'quiz':
-        response.calculate_quiz_score()
-        
-    db.session.commit()
-    
-    return jsonify({
-        'success': True,
-        'points': response.score * 100 # Simple gamification: 100 pts per correct answer
-    })
+        return jsonify({
+            'success': True,
+            'points': response.score * 100
+        })
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error in update_activity_progress: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @transcription_bp.route('/activities/<int:activity_id>/respond', methods=['POST'])
 @token_required
 def submit_response(current_user, activity_id):
-    """
-    Aluno envia resposta para uma atividade
-    
-    Body para Quiz:
-    {
-        "answers": {
-            "0": 2,  // pergunta 0, resposta índice 2
-            "1": 0,
-            ...
-        }
-    }
-    
-    Body para Pergunta Aberta:
-    {
-        "text": "Minha resposta..."
-    }
-    """
-    activity = LiveActivity.query.get(activity_id)
-    
-    if not activity:
-        return jsonify({'success': False, 'error': 'Atividade não encontrada'}), 404
-    
-    # Verificar se está ativa
-    if not activity.is_active:
-        return jsonify({'success': False, 'error': 'Atividade encerrada'}), 400
-    
-    # Verificar se já respondeu (FINALMENTE)
-    existing = LiveActivityResponse.query.filter_by(
-        activity_id=activity_id,
-        student_id=current_user.id
-    ).first()
-    
-    if existing and existing.submitted_at is not None:
-        # Idempotência: se já respondeu, retorna sucesso com a resposta existente
+    """Aluno envia resposta para uma atividade"""
+    try:
+        print(f"Submitting response for activity {activity_id} by user {current_user.id}")
+        activity = LiveActivity.query.get(activity_id)
+        
+        if not activity:
+            return jsonify({'success': False, 'error': 'Atividade não encontrada'}), 404
+        
+        # Verificar se está ativa (exceto para read/confirm)
+        if not activity.is_active and activity.activity_type == 'quiz':
+             return jsonify({'success': False, 'error': 'Atividade encerrada'}), 400
+        
+        existing = LiveActivityResponse.query.filter_by(
+            activity_id=activity_id,
+            student_id=current_user.id
+        ).first()
+        
+        if existing and existing.submitted_at is not None:
+            return jsonify({
+                'success': True,
+                'message': 'Resposta já enviada anteriormente',
+                'result': existing.to_dict()
+            })
+        
+        data = request.get_json() or {}
+        print(f"Data received: {data}")
+        
+        # Montar response_data baseado no tipo
+        if activity.activity_type == 'quiz':
+            response_data = {'answers': data.get('answers', {})}
+        elif activity.activity_type == 'summary':
+            response_data = {'read': True}
+        else:  # open_question
+            response_data = {'text': data.get('text', '')}
+        
+        if existing:
+            response = existing
+            response.response_data = response_data
+            response.submitted_at = datetime.utcnow()
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(response, "response_data")
+        else:
+            response = LiveActivityResponse(
+                activity_id=activity_id,
+                student_id=current_user.id,
+                response_data=response_data,
+                submitted_at=datetime.utcnow()
+            )
+            db.session.add(response)
+        
+        db.session.commit()
+        
+        if activity.activity_type == 'quiz':
+            response.calculate_quiz_score()
+        
         return jsonify({
             'success': True,
-            'message': 'Resposta já enviada anteriormente',
-            'result': existing.to_dict()
+            'message': 'Resposta enviada!',
+            'result': response.to_dict()
         })
-    
-    data = request.get_json() or {}
-    
-    # Montar response_data baseado no tipo
-    if activity.activity_type == 'quiz':
-        response_data = {'answers': data.get('answers', {})}
-    else:  # open_question
-        response_data = {'text': data.get('text', '')}
-    
-    if existing:
-        # Finalizar resposta parcial
-        response = existing
-        response.response_data = response_data
-        response.submitted_at = datetime.utcnow()
-        from sqlalchemy.orm.attributes import flag_modified
-        flag_modified(response, "response_data")
-    else:
-        # Criar resposta nova
-        response = LiveActivityResponse(
-            activity_id=activity_id,
-            student_id=current_user.id,
-            response_data=response_data,
-            submitted_at=datetime.utcnow()
-        )
-        db.session.add(response)
-    db.session.commit()
-    
-    # Se for quiz, calcular pontuação básica
-    if activity.activity_type == 'quiz':
-        response.calculate_quiz_score()
-    
-    return jsonify({
-        'success': True,
-        'message': 'Resposta enviada!',
-        'result': response.to_dict()
-    })
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error in submit_response: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @transcription_bp.route('/activities/<int:activity_id>/report', methods=['GET'])
