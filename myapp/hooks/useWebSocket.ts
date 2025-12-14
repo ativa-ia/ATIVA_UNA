@@ -45,34 +45,45 @@ export function useWebSocket({ quizId, enabled = true }: UseWebSocketOptions) {
         socketRef.current = socket;
 
         socket.on('connect', () => {
-            console.log('WebSocket conectado');
+            console.log('[WebSocket] ========================================');
+            console.log('[WebSocket] CONECTADO AO SERVIDOR!');
+            console.log('[WebSocket] Socket ID:', socket.id);
+            console.log('[WebSocket] ========================================');
             setIsConnected(true);
 
             // Entrar na room do quiz
+            console.log('[WebSocket] Tentando entrar na room do quiz:', quizId);
             socket.emit('join_quiz', { quiz_id: quizId });
         });
 
         socket.on('disconnect', () => {
-            console.log('WebSocket desconectado');
+            console.log('[WebSocket] ========================================');
+            console.log('[WebSocket] DESCONECTADO DO SERVIDOR');
+            console.log('[WebSocket] ========================================');
             setIsConnected(false);
         });
 
         socket.on('joined_quiz', (data) => {
-            console.log('Entrou na room do quiz:', data);
+            console.log('[WebSocket] Entrou na room do quiz:', data);
         });
 
         socket.on('ranking_update', (data: RankingUpdate) => {
-            console.log('Atualização de ranking recebida:', data);
+            console.log('[WebSocket] ========================================');
+            console.log('[WebSocket] RANKING UPDATE RECEBIDO!');
+            console.log('[WebSocket] Quiz ID:', data.quiz_id);
+            console.log('[WebSocket] Status:', data.quiz_status);
+            console.log('[WebSocket] Respostas:', data.response_count);
+            console.log('[WebSocket] Ranking:', data.ranking);
+            console.log('[WebSocket] ========================================');
             setRanking(data);
         });
 
         socket.on('new_response', (data) => {
-            console.log('Nova resposta:', data);
-            // Trigger para buscar ranking atualizado
+            console.log('[WebSocket] Nova resposta recebida:', data);
         });
 
         socket.on('quiz_ended', (data) => {
-            console.log('Quiz encerrado:', data);
+            console.log('[WebSocket] Quiz encerrado:', data);
         });
 
         return () => {

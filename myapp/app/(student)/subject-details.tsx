@@ -130,47 +130,49 @@ export default function SubjectDetailsScreen() {
     // Função de verificação (agora acessível para botão de refresh)
     const checkForActivities = useCallback(async () => {
         // Se já começou alguma atividade, não precisa verificar automaticamente
-        // (Mas se for chamado pelo botão manual, pode ser útil verificar mesmo assim?
-        //  Melhor manter a proteção para não sobrescrever estado de quiz ativo)
         if (quizStarted || activityStarted) return;
 
         // 1. Verificar Quiz (sistema de Quiz)
         try {
-
             const quizResult = await checkActiveQuiz(subjectId);
 
             if (quizResult.success && quizResult.active && quizResult.quiz) {
-
-                setActiveQuiz(quizResult.quiz);
-                setAlreadyAnswered(quizResult.already_answered || false);
-                if (!quizResult.already_answered) {
-                    setShowQuizPopup(true);
+                // Verificar se o quiz está realmente ativo (não encerrado)
+                if (quizResult.quiz.status === 'active') {
+                    setActiveQuiz(quizResult.quiz);
+                    setAlreadyAnswered(quizResult.already_answered || false);
+                    if (!quizResult.already_answered) {
+                        setShowQuizPopup(true);
+                    }
+                    return; // Quiz tem prioridade
                 }
-                return; // Quiz tem prioridade
-            } else {
-                setActiveQuiz(null);
-                setShowQuizPopup(false);
             }
-        } catch (error) {
 
+            // Se não há quiz ativo, limpar estado
+            setActiveQuiz(null);
+            setShowQuizPopup(false);
+        } catch (error) {
+            console.error('Erro ao verificar quiz:', error);
         }
 
         // 2. Verificar LiveActivity (sistema de Transcrição)
         try {
             const activityResult = await getActiveActivity(subjectId);
 
-
             if (activityResult.success && activityResult.active && activityResult.activity) {
-
-                setLiveActivity(activityResult.activity);
-                setShowActivityPopup(true);
-            } else {
-
-                setLiveActivity(null);
-                setShowActivityPopup(false);
+                // Verificar se a atividade está realmente ativa (não encerrada)
+                if (activityResult.activity.status === 'active') {
+                    setLiveActivity(activityResult.activity);
+                    setShowActivityPopup(true);
+                    return;
+                }
             }
-        } catch (error) {
 
+            // Se não há atividade ativa, limpar estado
+            setLiveActivity(null);
+            setShowActivityPopup(false);
+        } catch (error) {
+            console.error('Erro ao verificar atividade:', error);
         }
     }, [subjectId, quizStarted, activityStarted]);
 
@@ -276,7 +278,7 @@ export default function SubjectDetailsScreen() {
                     showsVerticalScrollIndicator={false}
                 >
                     {/* Live Activity Banner (New) */}
-                    {liveActivity && !isActivitySubmitted(liveActivity.id) && (
+                    {liveActivity && liveActivity.status === 'active' && !isActivitySubmitted(liveActivity.id) && (
                         <TouchableOpacity
                             style={styles.liveActivityBanner}
                             onPress={handleStartLiveActivity}
@@ -341,111 +343,6 @@ export default function SubjectDetailsScreen() {
                 </ScrollView>
             </View>
 
-            {/* Quiz ao Vivo Popup */}
-            <Modal
-                visible={showQuizPopup && !alreadyAnswered}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowQuizPopup(false)}
-            >
-                <View style={styles.quizModalOverlay}>
-                    <View style={styles.quizPopup}>
-                        <View style={styles.quizPopupIcon}>
-                            <Text style={styles.quizPopupEmoji}>🎯</Text>
-                        </View>
-
-                        <Text style={styles.quizPopupTitle}>Quiz ao Vivo!</Text>
-                        <Text style={styles.quizPopupSubtitle}>
-                            {activeQuiz?.title}
-                        </Text>
-
-                        <View style={styles.quizInfo}>
-                            <View style={styles.quizInfoItem}>
-                                <MaterialIcons name="quiz" size={20} color={colors.secondary} />
-                                <Text style={styles.quizInfoText}>
-                                    {activeQuiz?.question_count || 10} perguntas
-                                </Text>
-                            </View>
-                            <View style={styles.quizInfoItem}>
-                                <MaterialIcons name="timer" size={20} color={colors.warning} />
-                                <Text style={styles.quizInfoText}>
-                                    {formatTime(activeQuiz?.time_remaining || 300)} restantes
-                                </Text>
-                            </View>
-                        </View>
-
-                        <TouchableOpacity
-                            style={styles.startQuizButton}
-                            onPress={handleStartQuiz}
-                        >
-                            <Text style={styles.startQuizButtonText}>Começar Quiz</Text>
-                            <MaterialIcons name="arrow-forward" size={24} color={colors.white} />
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
-
-            {/* LiveActivity Popup (sistema de Transcrição) */}
-            <Modal
-                visible={showActivityPopup}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowActivityPopup(false)}
-            >
-                <View style={styles.quizModalOverlay}>
-                    <View style={styles.quizPopup}>
-                        <View style={styles.quizPopupIcon}>
-                            <Text style={styles.quizPopupEmoji}>
-                                {liveActivity?.activity_type === 'quiz' ? '🎯' :
-                                    liveActivity?.activity_type === 'summary' ? '📝' : '💬'}
-                            </Text>
-                        </View>
-
-                        <Text style={styles.quizPopupTitle}>
-                            {liveActivity?.activity_type === 'quiz' ? 'Quiz ao Vivo!' :
-                                liveActivity?.activity_type === 'summary' ? 'Resumo Disponível!' : 'Atividade ao Vivo!'}
-                        </Text>
-                        <Text style={styles.quizPopupSubtitle}>
-                            {liveActivity?.activity_type === 'summary' ? 'Resumo da Aula' : liveActivity?.title}
-                        </Text>
-
-                        <View style={styles.quizInfo}>
-                            <View style={styles.quizInfoItem}>
-                                <MaterialIcons
-                                    name={liveActivity?.activity_type === 'quiz' ? 'quiz' : 'assignment'}
-                                    size={20}
-                                    color={colors.secondary}
-                                />
-                                <Text style={styles.quizInfoText}>
-                                    {liveActivity?.activity_type === 'quiz'
-                                        ? `${liveActivity?.content?.questions?.length || 0} perguntas`
-                                        : 'Clique para ver'}
-                                </Text>
-                            </View>
-                        </View>
-
-                        <TouchableOpacity
-                            style={styles.startQuizButton}
-                            onPress={handleStartLiveActivity}
-                        >
-                            <Text style={styles.startQuizButtonText}>
-                                {liveActivity?.activity_type === 'quiz' ? 'Começar Quiz' : 'Ver Atividade'}
-                            </Text>
-                            <MaterialIcons name="arrow-forward" size={24} color={colors.white} />
-                        </TouchableOpacity>
-                    </View>
-                </View>
-            </Modal>
-
-            {/* Indicador de quiz já respondido */}
-            {activeQuiz && alreadyAnswered && (
-                <View style={styles.quizAnsweredBanner}>
-                    <MaterialIcons name="check-circle" size={20} color={colors.secondary} />
-                    <Text style={styles.quizAnsweredText}>
-                        Você já respondeu o quiz atual
-                    </Text>
-                </View>
-            )}
         </View>
     );
 }

@@ -212,13 +212,44 @@ def submit_response(current_user, quiz_id):
     
     # Emitir evento WebSocket para atualizar ranking em tempo real
     try:
-        from app.services.websocket_service import emit_new_response
+        from app.services.websocket_service import emit_new_response, emit_ranking_update
+        
+        # Emitir nova resposta
         emit_new_response(quiz_id, {
             'student_id': current_user.id,
             'student_name': current_user.name,
             'points': response.points,
             'percentage': response.percentage
         })
+        
+        # Buscar ranking atualizado e emitir
+        responses = QuizResponse.query.filter_by(quiz_id=quiz_id)\
+            .order_by(QuizResponse.points.desc(), QuizResponse.submitted_at.asc())\
+            .all()
+        
+        enrolled_count = Enrollment.query.filter_by(subject_id=quiz.subject_id).count()
+        
+        ranking = []
+        for i, r in enumerate(responses):
+            ranking.append({
+                'position': i + 1,
+                'student_id': r.student_id,
+                'student_name': r.student.name if r.student else 'Desconhecido',
+                'points': r.points,
+                'score': r.score,
+                'total': r.total,
+                'percentage': r.percentage,
+                'time_taken': r.time_taken,
+            })
+        
+        emit_ranking_update(quiz_id, {
+            'quiz_id': quiz_id,
+            'quiz_status': quiz.status,
+            'enrolled_count': enrolled_count,
+            'response_count': len(responses),
+            'ranking': ranking
+        })
+        
     except Exception as e:
         logger.error(f"Erro ao emitir evento WebSocket: {e}")
     
