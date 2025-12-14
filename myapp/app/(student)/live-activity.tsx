@@ -9,13 +9,14 @@ import {
     ActivityIndicator,
     Alert,
 } from 'react-native';
+import Markdown from 'react-native-markdown-display';
 import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
-import { LiveActivity, submitActivityResponse, isActivitySubmitted } from '@/services/api';
+import { LiveActivity, submitActivityResponse, isActivitySubmitted, submitQuizProgress } from '@/services/api';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /**
@@ -83,8 +84,23 @@ export default function LiveActivityScreen() {
         }));
     };
 
-    const handleNextQuestion = () => {
+    const handleNextQuestion = async () => {
         const questions = activity?.content?.questions || [];
+
+        // Sync progress
+        if (activity.activity_type === 'quiz') {
+            const totalTime = activity.time_limit || 300;
+            const timeTaken = totalTime - timeRemaining;
+
+            // Send silently (don't block UI)
+            submitQuizProgress(activity.id, {
+                answers: answers,
+                time_taken: timeTaken
+            }).then(res => {
+                console.log('Progress synced:', res);
+            });
+        }
+
         if (currentQuestion < questions.length - 1) {
             setCurrentQuestion(prev => prev + 1);
         }
@@ -131,15 +147,28 @@ export default function LiveActivityScreen() {
         try {
             const data = activity.activity_type === 'quiz'
                 ? { answers }
-                : { text: textAnswer };
+                : activity.activity_type === 'summary'
+                    ? { read: true }
+                    : { text: textAnswer };
 
             const response = await submitActivityResponse(activity.id, data);
 
             if (response.success && response.result) {
                 setResult(response.result);
                 setIsSubmitted(true);
+            } else if (response.error && (response.error.includes('já respondeu') || response.error.includes('Encerrada'))) {
+                // Se já respondeu ou encerrou, liberar o usuario
+                Alert.alert('Aviso', 'Atividade já concluída ou encerrada.', [
+                    {
+                        text: 'OK',
+                        onPress: () => {
+                            setIsSubmitted(true);
+                            router.back();
+                        }
+                    }
+                ]);
             } else {
-                Alert.alert('Erro', 'Falha ao enviar resposta');
+                Alert.alert('Erro', response.error || 'Falha ao enviar resposta');
             }
         } catch (error) {
             console.error('Erro ao enviar:', error);
@@ -350,6 +379,45 @@ export default function LiveActivityScreen() {
                             <MaterialIcons name="arrow-forward" size={24} color={colors.white} />
                         </TouchableOpacity>
                     )}
+                </View>
+            </View>
+        );
+    }
+
+    // Render Summary
+    if (activity.activity_type === 'summary') {
+        const summaryText = typeof activity.content === 'string'
+            ? activity.content
+            : activity.content?.summary_text || activity.ai_generated_content || '';
+
+        return (
+            <View style={[styles.container, { paddingTop: insets.top }]}>
+                <StatusBar style="dark" />
+                <View style={styles.header}>
+                    <View style={styles.headerLeft}>
+                        <Text style={styles.activityTitle}>{activity.title}</Text>
+                        <Text style={styles.questionCounter}>Resumo da Aula</Text>
+                    </View>
+                </View>
+
+                <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+                    <View style={styles.questionCard}>
+                        <ScrollView style={{ maxHeight: '100%' }}>
+                            <Markdown style={markdownStyles}>
+                                {summaryText}
+                            </Markdown>
+                        </ScrollView>
+                    </View>
+                </ScrollView>
+
+                <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
+                    <TouchableOpacity
+                        style={[styles.submitButton, { width: '100%', justifyContent: 'center' }]}
+                        onPress={() => handleSubmit(true)}
+                    >
+                        <Text style={styles.submitButtonText}>Entendi</Text>
+                        <MaterialIcons name="check" size={24} color={colors.white} />
+                    </TouchableOpacity>
                 </View>
             </View>
         );
@@ -763,5 +831,33 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
         color: colors.textPrimary,
+    },
+});
+
+const markdownStyles = StyleSheet.create({
+    body: {
+        fontSize: 16,
+        color: colors.textPrimary,
+        lineHeight: 24,
+    },
+    heading1: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: colors.primary,
+        marginBottom: 10,
+        marginTop: 20,
+    },
+    heading2: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: colors.textPrimary,
+        marginBottom: 8,
+        marginTop: 16,
+    },
+    list_item: {
+        marginVertical: 4,
+    },
+    bullet_list: {
+        marginVertical: 8,
     },
 });

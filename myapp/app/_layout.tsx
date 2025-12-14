@@ -3,7 +3,10 @@ import { Stack } from 'expo-router';
 export default function RootLayout() {
   return (
     <Stack
-      screenOptions={{ headerShown: false }}
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: '#F8FAFC' } // colors.slate50
+      }}
       initialRouteName="index"
     />
   );

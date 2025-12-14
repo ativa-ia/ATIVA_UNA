@@ -399,6 +399,45 @@ export const deleteContextFile = async (fileId: number) => {
     }
 };
 
+// Compartilhar conteúdo (Quiz/Resumo) com a turma
+export const shareContent = async (subjectId: number, content: string | object, type: 'quiz' | 'summary', title: string) => {
+    const token = await AsyncStorage.getItem('authToken');
+    console.log('[API] Sharing Content...', { subjectId, type, title });
+
+    try {
+        const response = await fetch(`${API_URL}/ai/share-content`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+                subject_id: subjectId,
+                content,
+                type,
+                title
+            }),
+        });
+
+        const text = await response.text();
+        console.log('[API] Share Content Raw Response:', text);
+
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            console.error('[API] Failed to parse JSON response:', e);
+            return { success: false, error: 'Resposta inválida do servidor: ' + text.substring(0, 100) };
+        }
+
+        return data;
+    } catch (error) {
+        console.error('Erro ao compartilhar conteúdo:', error);
+        return { success: false, error: 'Erro de conexão ao compartilhar' };
+    }
+};
+
+
 // ========== ENROLLMENTS API ==========
 
 export interface AutoEnrollResponse {
@@ -892,6 +931,29 @@ export const getActivityRanking = async (activityId: number): Promise<{ success:
     return response.json();
 };
 
+/**
+ * Envia progresso parcial do quiz (sem finalizar)
+ */
+export const submitQuizProgress = async (quizId: number, data: any): Promise<{ success: boolean; points?: number }> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/transcription/activities/${quizId}/progress`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(data)
+        });
+
+        return response.json();
+    } catch (error) {
+        console.error('Error submitting progress:', error);
+        return { success: false };
+    }
+};
+
+
 // Aluno: verificar atividade ativa
 export const getActiveActivity = async (subjectId: number): Promise<{ success: boolean; active: boolean; activity?: LiveActivity; has_summary?: boolean; summary?: LiveActivity }> => {
     const token = await AsyncStorage.getItem('authToken');
@@ -986,4 +1048,40 @@ export const exportActivityPDF = async (activityId: number): Promise<Blob> => {
     }
 
     return response.blob();
+};
+
+// Encerrar atividade (LiveActivity)
+export const endLiveActivity = async (activityId: number): Promise<{ success: boolean; activity?: LiveActivity; error?: string }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/activities/${activityId}/end`, {
+        method: 'PUT',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    return response.json();
+};
+
+// Converter conteúdo usando IA
+export const convertContent = async (content: string, type: 'quiz' | 'summary') => {
+    const token = await AsyncStorage.getItem('authToken');
+    try {
+        const response = await fetch(`${API_URL}/ai/convert-content`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+                content,
+                type
+            }),
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Erro ao converter conteúdo:', error);
+        return { success: false, error: 'Erro de conexão ao converter' };
+    }
 };
