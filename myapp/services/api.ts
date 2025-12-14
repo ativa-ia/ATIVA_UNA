@@ -981,7 +981,7 @@ export const isActivitySubmitted = (activityId: number) => {
 /**
  * Envia resposta para uma atividade
  */
-export const submitActivityResponse = async (activityId: number, data: any): Promise<{ success: boolean; result?: any; error?: string }> => {
+export const submitActivityResponse = async (activityId: number, data: any): Promise<{ success: boolean; result?: any; error?: string; already_answered?: boolean }> => {
     try {
         const token = await AsyncStorage.getItem('authToken');
         // Correct URL with /transcription prefix
@@ -1005,6 +1005,16 @@ export const submitActivityResponse = async (activityId: number, data: any): Pro
         console.error('Error submitting response:', error);
         return { success: false, error: 'Erro de conexão' };
     }
+};
+
+export const getStudentHistory = async (subjectId: number) => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/transcription/subjects/${subjectId}/history`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+    return response.json();
 };
 
 // Listar sessões de uma disciplina
