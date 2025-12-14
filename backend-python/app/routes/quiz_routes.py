@@ -229,6 +229,70 @@ def submit_response(current_user, quiz_id):
     })
 
 
+@quiz_bp.route('/<int:quiz_id>/progress', methods=['POST'])
+@token_required
+def update_progress(current_user, quiz_id):
+    """
+    Aluno envia progresso parcial (respostas até agora)
+    Permite atualização em tempo real do ranking
+    """
+    quiz = Quiz.query.get(quiz_id)
+    
+    if not quiz:
+        return jsonify({'success': False, 'error': 'Quiz não encontrado'}), 404
+    
+    # Verificar se ainda está ativo
+    if not quiz.is_active:
+        return jsonify({'success': False, 'error': 'Quiz encerrado'}), 400
+    
+    data = request.get_json()
+    answers = data.get('answers', {})
+    time_taken = data.get('time_taken', 0)
+    
+    # Buscar ou criar resposta
+    response = QuizResponse.query.filter_by(
+        quiz_id=quiz_id,
+        student_id=current_user.id
+    ).first()
+    
+    if not response:
+        response = QuizResponse(
+            quiz_id=quiz_id,
+            student_id=current_user.id,
+            answers=answers,
+            time_taken=time_taken
+        )
+        db.session.add(response)
+    else:
+        # Atualizar respostas existentes (merge)
+        current_answers = response.answers or {}
+        current_answers.update(answers)
+        response.answers = current_answers
+        response.time_taken = time_taken
+    
+    # Calcular pontuação parcial
+    response.calculate_score()
+    db.session.commit()
+    
+    # Emitir evento WebSocket (opcional, se já tiver implementado)
+    try:
+        from app.services.websocket_service import emit_new_response
+        emit_new_response(quiz_id, {
+            'student_id': current_user.id,
+            'student_name': current_user.name,
+            'points': response.points,
+            'percentage': response.percentage
+        })
+    except Exception as e:
+        # Silencioso se não tiver websocket
+        pass
+    
+    return jsonify({
+        'success': True,
+        'points': response.points
+    })
+
+
 @quiz_bp.route('/<int:quiz_id>/report', methods=['GET'])
 @token_required
 def get_report(current_user, quiz_id):

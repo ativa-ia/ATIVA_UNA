@@ -141,6 +141,53 @@ Retorne apenas o JSON com as questões sobre o conteúdo educacional:"""
         return f"Erro ao gerar quiz: {str(e)}"
 
 
+
+def format_to_quiz_json(text: str) -> str:
+    """
+    Formata um texto que JÁ É um quiz para JSON, sem alterar o conteúdo.
+    """
+    if not GEMINI_API_KEY:
+        return "Erro: GEMINI_API_KEY não configurada."
+    
+    try:
+        model = genai.GenerativeModel(
+            model_name='gemini-2.5-flash-lite',
+            system_instruction=f"""Você é um formatador de dados estrito.
+            
+Sua ÚNICA tarefa é converter o texto de entrada (que contem questões de quiz) para o formato JSON especificado.
+
+REGRAS CRÍTICAS DE FIDELIDADE:
+1. NÃO MUDE O CONTEXTO DAS PERGUNTAS.
+2. NÃO INVENTE NOVAS PERGUNTAS.
+3. USE EXATAMENTE AS MESMAS PERGUNTAS E OPÇÕES FORNECIDAS NO TEXTO.
+4. Se o texto não tiver opções claras, você pode inferir opções plausíveis baseadas no contexto, mas MANTENHA A PERGUNTA ORIGINAL.
+5. Se a resposta correta não estiver indicada, marque a opção 0 (A) como correta provisoriamente.
+
+Formato de Saída (JSON puro):
+{{
+    "questions": [
+        {{
+            "question": "Texto exato da pergunta original...",
+            "options": ["Opção A", "Opção B", "Opção C", "Opção D"],
+            "correct": 0
+        }}
+    ]
+}}"""
+        )
+        
+        prompt = f"""Converta o seguinte quiz (texto) para JSON, mantendo o conteúdo original:
+
+{text}
+
+JSON:"""
+        
+        response = model.generate_content(prompt)
+        return response.text
+    
+    except Exception as e:
+        return f"Erro ao formatar quiz: {str(e)}"
+
+
 def create_or_get_session(teacher_id: int, subject_id: int) -> AISession:
     """Retorna ou cria uma sessão ativa para o professor na disciplina"""
     session = AISession.query.filter_by(

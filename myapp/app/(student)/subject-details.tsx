@@ -201,14 +201,16 @@ export default function SubjectDetailsScreen() {
                         >
                             <View style={styles.liveActivityIcon}>
                                 <MaterialIcons
-                                    name={liveActivity.activity_type === 'quiz' ? 'quiz' : 'help-outline'}
+                                    name={liveActivity.activity_type === 'quiz' ? 'quiz' :
+                                        liveActivity.activity_type === 'summary' ? 'summarize' : 'help-outline'}
                                     size={24}
                                     color={colors.white}
                                 />
                             </View>
                             <View style={styles.liveActivityInfo}>
                                 <Text style={styles.liveActivityTitle}>
-                                    {liveActivity.activity_type === 'quiz' ? '🎯 Quiz em Andamento!' : '💬 Pergunta Disponível!'}
+                                    {liveActivity.activity_type === 'quiz' ? '🎯 Quiz em Andamento!' :
+                                        liveActivity.activity_type === 'summary' ? '📝 Resumo Disponível!' : '💬 Pergunta Disponível!'}
                                 </Text>
                                 <Text style={styles.liveActivityDesc}>
                                     Toque para participar agora

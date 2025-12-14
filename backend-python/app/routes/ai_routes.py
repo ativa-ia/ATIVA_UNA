@@ -463,4 +463,149 @@ def generate_suggestions_route(current_user):
         })
     except Exception as e:
         print(f"Erro ao gerar sugestões: {e}")
+
+@ai_bp.route('/share-content', methods=['POST'])
+@token_required
+def share_content(current_user):
+    """
+    Compartilha conteúdo IA (Quiz/Resumo) diretamente com a turma.
+    Se não houver sessão de transcrição ativa, cria uma automaticamente.
+    """
+    from app import db
+    from app.models.transcription_session import TranscriptionSession, LiveActivity
+    from datetime import datetime, timedelta
+    import json
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'Dados não fornecidos'}), 400
+        
+    subject_id = data.get('subject_id')
+    content = data.get('content') # Pode ser string (Resumo) ou Dict/JSON String (Quiz)
+    activity_type = data.get('type') # 'quiz' ou 'summary'
+    title = data.get('title', 'Atividade IA')
+    
+    if not subject_id or not content or not activity_type:
+        return jsonify({'success': False, 'error': 'Campos obrigatórios: subject_id, content, type'}), 400
+        
+    try:
+        # 1. Encontrar ou Criar Sessão
+        # Primeiro tenta achar uma sessão ativa para "anexar" a atividade nela
+        session = TranscriptionSession.query.filter_by(
+            subject_id=subject_id,
+            teacher_id=current_user.id,
+            status='active'
+        ).order_by(TranscriptionSession.created_at.desc()).first()
+        
+        if not session:
+            # Se não houver, cria uma sessão dedicada para atividades de IA
+            session = TranscriptionSession(
+                subject_id=subject_id,
+                teacher_id=current_user.id,
+                title=f"Atividade IA - {datetime.utcnow().strftime('%d/%m %H:%M')}",
+                status='active',
+                full_transcript="[Sessão gerada automaticamente para compartilhamento de conteúdo via IA]"
+            )
+            db.session.add(session)
+            db.session.flush() # Gerar ID
+            
+        # 2. Preparar Conteúdo
+        final_content = content
+        ai_text = ""
+        
+        if activity_type == 'quiz':
+            # Garantir que content seja um dicionário válido
+            if isinstance(content, str):
+                try:
+                    # Tentar limpar blocos de markdown se houver
+                    clean_content = content
+                    if "```" in content:
+                        import re
+                        clean_content = re.sub(r'```json\s*|\s*```', '', content).strip()
+                    
+                    final_content = json.loads(clean_content)
+                    ai_text = content # Guarda o original como texto gerado
+                except Exception as e:
+                    return jsonify({'success': False, 'error': f'Conteúdo de Quiz inválido: {str(e)}'}), 400
+            elif isinstance(content, dict):
+                final_content = content
+                ai_text = json.dumps(content)
+        
+        elif activity_type == 'summary':
+            # Para resumo, o content geralmente é o texto.
+            # Mas LiveActivity espera um JSON no campo 'content'.
+            # Vamos estruturar.
+            if isinstance(content, str):
+                ai_text = content
+                final_content = {'summary_text': content}
+            else:
+                # Se já vier estruturado
+                final_content = content
+                ai_text = str(content)
+
+        # 3. Criar a Atividade
+        activity = LiveActivity(
+            session_id=session.id,
+            checkpoint_id=None, # Não vinculado a um momento específico da transcrição
+            activity_type=activity_type,
+            title=title,
+            content=final_content,
+            ai_generated_content=ai_text,
+            shared_with_students=True, # Já nasce compartilhada
+            status='active',
+            starts_at=datetime.utcnow(),
+            # Definir tempo limite padrão se necessário (5 min para quiz)
+            time_limit=300 if activity_type == 'quiz' else None
+        )
+        
+        if activity.time_limit:
+            activity.ends_at = activity.starts_at + timedelta(seconds=activity.time_limit)
+            
+        db.session.add(activity)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Conteúdo compartilhado com sucesso!',
+            'activity': activity.to_dict()
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        print(f"ERRO CRÍTICO AO COMPARTILHAR CONTEÚDO: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': f'Erro interno: {str(e)}'}), 500
+
+
+@ai_bp.route('/convert-content', methods=['POST'])
+@token_required
+def convert_content(current_user):
+    """Converte conteúdo para o formato especificado usando IA"""
+    try:
+        data = request.get_json()
+        content = data.get('content')
+        target_type = data.get('type')
+        
+        if not content or not target_type:
+            return jsonify({'success': False, 'error': 'Conteúdo e tipo são obrigatórios'}), 400
+            
+        from app.services.ai_service import generate_quiz, generate_summary, format_to_quiz_json
+        
+        result = ""
+        if target_type == 'quiz':
+            # Gera quiz (que já vem em JSON string)
+            # Se a intenção é CONVERTER um texto que já tem perguntas, usar format_to_quiz_json
+            # Se a intenção fosse GERAR do zero, seria generate_quiz.
+            # Como a chamamos de 'convert-content', o usuário espera fidelidade.
+            result = format_to_quiz_json(content)
+        elif target_type == 'summary':
+            result = generate_summary(content)
+        else:
+            return jsonify({'success': False, 'error': 'Tipo inválido'}), 400
+            
+        return jsonify({'success': True, 'result': result})
+        
+    except Exception as e:
+        print(f"Erro ao converter conteúdo: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500

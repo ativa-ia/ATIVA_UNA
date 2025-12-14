@@ -26,6 +26,8 @@ import { uploadContextFile, getContextFiles, deleteContextFile, generateSuggesti
 import { getChatHistory, saveChatMessage, clearChatHistory } from '@/services/chat';
 import * as DocumentPicker from 'expo-document-picker';
 import Markdown from 'react-native-markdown-display';
+import ContentEditorModal from '@/components/modals/ContentEditorModal';
+import { shareContent } from '@/services/api';
 
 interface Message {
     id: string;
@@ -109,6 +111,71 @@ export default function AIAssistantScreen() {
     const [contextFiles, setContextFiles] = useState<any[]>([]);
     const [isUploading, setIsUploading] = useState(false);
     const [showContextSidebar, setShowContextSidebar] = useState(false);
+
+    // Share Content State
+    const [modalVisible, setModalVisible] = useState(false);
+    const [modalContent, setModalContent] = useState<string | object>('');
+    const [modalType, setModalType] = useState<'quiz' | 'summary'>('summary');
+
+    const handleOpenShare = (text: string) => {
+        // Simple heuristic to detect JSON/Quiz
+        if (text.trim().startsWith('{') || text.includes('```json')) {
+            setModalType('quiz');
+            // Try to extract JSON string if mixed with text
+            let contentToSet = text;
+            if (text.includes('```json')) {
+                // Extraction will be handled by Modal or backend, here use raw text
+            }
+            setModalContent(text);
+        } else {
+            setModalType('summary');
+            setModalContent(text);
+        }
+        setModalVisible(true);
+    };
+
+    const handleShareContent = async (title: string, content: string | object, type: 'quiz' | 'summary') => {
+        console.log('[UI] Sending content:', { title, type });
+        const result = await shareContent(subjectId, content, type, title);
+        console.log('[UI] Share Result:', result);
+
+        if (!result.success) {
+            const errorMsg = result.error || 'Falha ao enviar conteúdo.';
+            console.error('[UI] Share Error:', errorMsg);
+            Alert.alert('Erro', errorMsg);
+            return;
+        }
+
+        // Success case - Handle Redirect
+        if (type === 'quiz' && result.activity && result.activity.id) {
+            Alert.alert('Sucesso', 'Quiz enviado! Redirecionando para o ranking...', [
+                {
+                    text: 'OK',
+                    onPress: () => {
+                        router.push({
+                            pathname: '/(teacher)/quiz-results',
+                            params: {
+                                subjectId: subjectId,
+                                activityId: result.activity.id
+                            }
+                        });
+                    }
+                }
+            ]);
+            // Fallback auto redirect
+            setTimeout(() => {
+                router.push({
+                    pathname: '/(teacher)/quiz-results',
+                    params: {
+                        subjectId: subjectId,
+                        activityId: result.activity.id
+                    }
+                });
+            }, 1500);
+        } else {
+            Alert.alert('Sucesso', 'Conteúdo compartilhado com a turma!');
+        }
+    };
 
     // Load Context Files
     useEffect(() => {
@@ -367,6 +434,17 @@ export default function AIAssistantScreen() {
                                             </Markdown>
                                         )}
                                     </View>
+                                    {!message.isUser && (
+                                        <View style={styles.notifyButton}>
+                                            <TouchableOpacity
+                                                style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                                                onPress={() => handleOpenShare(message.text)}
+                                            >
+                                                <MaterialIcons name="send" size={14} color={colors.primary} />
+                                                <Text style={styles.notifyButtonText}>Enviar para Turma</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    )}
                                 </View>
                             ))}
                             {isChatLoading && (
@@ -535,6 +613,14 @@ export default function AIAssistantScreen() {
                     </View>
                 </View>
             </Modal>
+
+            <ContentEditorModal
+                visible={modalVisible}
+                onClose={() => setModalVisible(false)}
+                onSend={handleShareContent}
+                initialContent={modalContent}
+                type={modalType}
+            />
 
         </View >
     );
