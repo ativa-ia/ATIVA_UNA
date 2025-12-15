@@ -47,13 +47,26 @@ export const SubjectCard: React.FC<SubjectCardProps> = ({
             onPress={onPress}
             activeOpacity={0.7}
         >
-            <View style={styles.iconContainer}>
-                <MaterialIcons name={icon} size={28} color={colors.primary} />
+            <View>
+                <View style={styles.iconContainer}>
+                    <MaterialIcons name={icon} size={28} color={colors.primary} />
+                </View>
+
+                <Text style={styles.title} numberOfLines={2}>
+                    {subject.name}
+                </Text>
+
+                {subject.professor && (
+                    <Text style={styles.professor} numberOfLines={1}>
+                        Professor: {subject.professor}
+                    </Text>
+                )}
             </View>
 
-            <Text style={styles.title} numberOfLines={2}>
-                {subject.name}
-            </Text>
+            <View style={styles.footer}>
+                <Text style={styles.accessText}>Acessar</Text>
+                <MaterialIcons name="chevron-right" size={16} color={colors.primary} />
+            </View>
         </TouchableOpacity>
     );
 };
@@ -63,7 +76,7 @@ const styles = StyleSheet.create({
         backgroundColor: colors.white,
         borderRadius: borderRadius.lg,
         padding: spacing.md,
-        minHeight: 100,
+        minHeight: 140, // Increased height
         justifyContent: 'space-between',
         borderWidth: 1,
         borderColor: colors.slate200,
@@ -88,5 +101,23 @@ const styles = StyleSheet.create({
         fontWeight: typography.fontWeight.semibold,
         fontFamily: typography.fontFamily.display,
         lineHeight: typography.fontSize.base * typography.lineHeight.tight,
+        marginBottom: 4,
+    },
+    professor: {
+        color: colors.textSecondary,
+        fontSize: typography.fontSize.xs,
+        fontFamily: typography.fontFamily.body,
+    },
+    footer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        marginTop: spacing.sm,
+    },
+    accessText: {
+        fontSize: typography.fontSize.xs,
+        color: colors.primary,
+        fontWeight: '600',
+        marginRight: 2,
     },
 });

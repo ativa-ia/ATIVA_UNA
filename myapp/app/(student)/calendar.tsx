@@ -9,17 +9,38 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { BottomNav, NavItem } from '@/components/navigation/BottomNav';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
-import { spacing } from '@/constants/spacing';
+import { spacing, borderRadius } from '@/constants/spacing';
 
-/**
- * CalendarScreen - Calendário (Aluno)
- * Tela placeholder para calendário acadêmico
- */
+// Configurar idioma Português
+LocaleConfig.locales['pt-br'] = {
+    monthNames: [
+        'Janeiro',
+        'Fevereiro',
+        'Março',
+        'Abril',
+        'Maio',
+        'Junho',
+        'Julho',
+        'Agosto',
+        'Setembro',
+        'Outubro',
+        'Novembro',
+        'Dezembro'
+    ],
+    monthNamesShort: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'],
+    dayNames: ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'],
+    dayNamesShort: ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'],
+    today: "Hoje"
+};
+LocaleConfig.defaultLocale = 'pt-br';
+
 export default function CalendarScreen() {
     const [activeNavId, setActiveNavId] = useState('calendar');
+    const [selectedDate, setSelectedDate] = useState('');
 
     const navItems: NavItem[] = [
         { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
@@ -34,7 +55,6 @@ export default function CalendarScreen() {
                 router.push('./dashboard');
                 break;
             case 'calendar':
-                // Already on calendar, do nothing
                 break;
             case 'grades':
                 router.push('./grades');
@@ -59,18 +79,63 @@ export default function CalendarScreen() {
                         >
                             <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
                         </TouchableOpacity>
-                        <Text style={styles.headerTitle}>Calendário</Text>
+                        <Text style={styles.headerTitle}>Calendário Acadêmico</Text>
                         <View style={styles.placeholder} />
                     </View>
                 </LinearGradient>
 
                 {/* Content */}
                 <View style={styles.content}>
-                    <MaterialIcons name="calendar-today" size={80} color={colors.primary} />
-                    <Text style={styles.title}>Em Desenvolvimento</Text>
-                    <Text style={styles.description}>
-                        O calendário acadêmico estará disponível em breve.
-                    </Text>
+                    <View style={styles.calendarContainer}>
+                        <Calendar
+                            onDayPress={day => {
+                                setSelectedDate(day.dateString);
+                            }}
+                            markedDates={{
+                                [selectedDate]: { selected: true, disableTouchEvent: true }
+                            }}
+                            theme={{
+                                backgroundColor: colors.white,
+                                calendarBackground: colors.white,
+                                textSectionTitleColor: colors.slate400,
+                                selectedDayBackgroundColor: colors.primary,
+                                selectedDayTextColor: colors.white,
+                                todayTextColor: colors.primary,
+                                dayTextColor: colors.textPrimary,
+                                textDisabledColor: colors.slate300,
+                                dotColor: colors.primary,
+                                selectedDotColor: colors.white,
+                                arrowColor: colors.primary,
+                                disabledArrowColor: colors.slate200,
+                                monthTextColor: colors.textPrimary,
+                                indicatorColor: colors.primary,
+                                textDayFontFamily: typography.fontFamily.body,
+                                textMonthFontFamily: typography.fontFamily.display,
+                                textDayHeaderFontFamily: typography.fontFamily.body,
+                                textDayFontWeight: '400',
+                                textMonthFontWeight: 'bold',
+                                textDayHeaderFontWeight: '500',
+                                textDayFontSize: 16,
+                                textMonthFontSize: 18,
+                                textDayHeaderFontSize: 14
+                            }}
+                        />
+                    </View>
+
+                    {selectedDate ? (
+                        <View style={styles.eventsContainer}>
+                            <Text style={styles.eventsTitle}>
+                                Eventos em {selectedDate.split('-').reverse().join('/')}
+                            </Text>
+                            <View style={styles.emptyEvent}>
+                                <Text style={styles.emptyEventText}>Nenhum evento agendado.</Text>
+                            </View>
+                        </View>
+                    ) : (
+                        <View style={styles.eventsContainer}>
+                            <Text style={styles.hintText}>Selecione uma data para ver os eventos.</Text>
+                        </View>
+                    )}
                 </View>
 
                 {/* Bottom Navigation */}
@@ -96,6 +161,8 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.base,
         paddingTop: spacing.md,
         paddingBottom: spacing.base,
+        borderBottomLeftRadius: 24,
+        borderBottomRightRadius: 24,
     },
     headerContent: {
         flexDirection: 'row',
@@ -124,22 +191,50 @@ const styles = StyleSheet.create({
     },
     content: {
         flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: spacing.xl,
     },
-    title: {
-        fontSize: typography.fontSize.xl,
-        fontWeight: typography.fontWeight.bold,
-        fontFamily: typography.fontFamily.display,
-        color: colors.textPrimary,
-        marginTop: spacing.lg,
-        marginBottom: spacing.sm,
+    scrollContent: {
+        padding: spacing.base,
+        paddingBottom: spacing.xl,
     },
-    description: {
+    calendarContainer: {
+        backgroundColor: colors.white,
+        borderRadius: borderRadius.lg,
+        padding: spacing.sm,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 4,
+        marginBottom: spacing.lg,
+    },
+    eventsContainer: {
+        backgroundColor: colors.white,
+        borderRadius: borderRadius.lg,
+        padding: spacing.lg,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 2,
+    },
+    eventsTitle: {
         fontSize: typography.fontSize.base,
-        fontFamily: typography.fontFamily.display,
+        fontWeight: 'bold',
+        color: colors.textPrimary,
+        marginBottom: spacing.md,
+    },
+    emptyEvent: {
+        padding: spacing.lg,
+        alignItems: 'center',
+    },
+    emptyEventText: {
+        color: colors.textSecondary,
+    },
+    hintText: {
         color: colors.textSecondary,
         textAlign: 'center',
-    },
+        marginTop: spacing.xl,
+    }
 });

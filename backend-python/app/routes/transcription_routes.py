@@ -774,22 +774,37 @@ def get_student_history(current_user, subject_id):
     Retorna histórico de atividades do aluno na disciplina
     """
     try:
-        # 1. Buscar todas as atividades compartilhadas da disciplina
-        activities = LiveActivity.query.join(TranscriptionSession)\
+        # Paginação
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 10, type=int)
+        
+
+        query = LiveActivity.query.join(TranscriptionSession)\
             .filter(
                 TranscriptionSession.subject_id == subject_id,
                 LiveActivity.shared_with_students == True
-            ).order_by(LiveActivity.created_at.desc()).all()
+            ).order_by(LiveActivity.created_at.desc(), LiveActivity.id.desc())
+            
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+        activities = pagination.items
+        
+        # Otimização: Buscar respostas em lote para a página atual
+        activity_ids = [a.id for a in activities]
+        responses = []
+        if activity_ids:
+            responses = LiveActivityResponse.query.filter(
+                LiveActivityResponse.activity_id.in_(activity_ids),
+                LiveActivityResponse.student_id == current_user.id
+            ).all()
+        
+        response_map = {r.activity_id: r for r in responses}
             
         history = []
         
         for activity in activities:
             try:
-                # Verificar se aluno respondeu
-                response = LiveActivityResponse.query.filter_by(
-                    activity_id=activity.id,
-                    student_id=current_user.id
-                ).first()
+                # Buscar resposta do mapa
+                response = response_map.get(activity.id)
                 
                 status = 'pending'
                 if response:
@@ -809,7 +824,11 @@ def get_student_history(current_user, subject_id):
             
         return jsonify({
             'success': True,
-            'history': history
+            'history': history,
+            'pages': pagination.pages,
+            'current_page': page,
+            'total': pagination.total,
+            'has_next': pagination.has_next
         })
     except Exception as e:
         print(f"Error in get_student_history: {e}")

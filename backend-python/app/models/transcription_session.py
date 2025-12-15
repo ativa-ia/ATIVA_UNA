@@ -165,15 +165,13 @@ class LiveActivity(db.Model):
         remaining = (self.ends_at - datetime.utcnow()).total_seconds()
         return max(0, int(remaining))
     
-    def to_dict(self, include_responses=False):
+    def to_dict(self, include_responses=False, include_content=True):
         data = {
             'id': self.id,
             'session_id': self.session_id,
             'checkpoint_id': self.checkpoint_id,
             'activity_type': self.activity_type,
             'title': self.title,
-            'content': self.content,
-            'ai_generated_content': self.ai_generated_content,
             'shared_with_students': self.shared_with_students,
             'status': self.status,
             'time_limit': self.time_limit,
@@ -183,6 +181,11 @@ class LiveActivity(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'response_count': len(self.responses) if self.responses else 0,
         }
+        
+        if include_content:
+            data['content'] = self.content
+            data['ai_generated_content'] = self.ai_generated_content
+            
         if include_responses:
             data['responses'] = [r.to_dict() for r in self.responses]
         return data
