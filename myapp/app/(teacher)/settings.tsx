@@ -43,7 +43,7 @@ export default function SettingsScreen() {
                     <View style={styles.headerContent}>
                         <TouchableOpacity
                             style={styles.backButton}
-                            onPress={() => router.back()}
+                            onPress={() => router.canGoBack() ? router.back() : router.push('/(teacher)/dashboard')}
                         >
                             <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
                         </TouchableOpacity>

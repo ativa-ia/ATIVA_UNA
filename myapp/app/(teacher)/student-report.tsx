@@ -57,7 +57,7 @@ export default function StudentReportScreen() {
             case 'good': return '#3B82F6';
             case 'warning': return '#f59e0b';
             case 'critical': return '#ef4444';
-            default: return colors.zinc500;
+            default: return colors.slate500;
         }
     };
 
@@ -86,7 +86,7 @@ export default function StudentReportScreen() {
             case 'improving': return '#10b981';
             case 'declining': return '#ef4444';
             case 'stable': return '#f59e0b';
-            default: return colors.zinc500;
+            default: return colors.slate500;
         }
     };
 
@@ -104,7 +104,7 @@ export default function StudentReportScreen() {
             <View style={styles.safeArea}>
                 <View style={styles.container}>
                     <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-                        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+                        <TouchableOpacity style={styles.backButton} onPress={() => router.canGoBack() ? router.back() : router.push('/(teacher)/dashboard')}>
                             <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
                         </TouchableOpacity>
                         <View style={styles.headerTextContainer}>
@@ -127,7 +127,7 @@ export default function StudentReportScreen() {
             <View style={styles.safeArea}>
                 <View style={styles.container}>
                     <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-                        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+                        <TouchableOpacity style={styles.backButton} onPress={() => router.canGoBack() ? router.back() : router.push('/(teacher)/dashboard')}>
                             <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
                         </TouchableOpacity>
                         <View style={styles.headerTextContainer}>
@@ -165,7 +165,7 @@ export default function StudentReportScreen() {
             <View style={styles.container}>
                 {/* Header */}
                 <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-                    <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+                    <TouchableOpacity style={styles.backButton} onPress={() => router.canGoBack() ? router.back() : router.push('/(teacher)/dashboard')}>
                         <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
                     </TouchableOpacity>
                     <View style={styles.headerTextContainer}>
@@ -242,19 +242,19 @@ export default function StudentReportScreen() {
                                     yAxisLabel=""
                                     yAxisSuffix=""
                                     chartConfig={{
-                                        backgroundColor: colors.zinc900,
-                                        backgroundGradientFrom: colors.zinc900,
-                                        backgroundGradientTo: colors.zinc900,
-                                        decimalPlaces: 1,
-                                        color: (opacity = 1) => `rgba(59, 130, 246, ${opacity})`,
-                                        labelColor: (opacity = 1) => `rgba(161, 161, 170, ${opacity})`,
+                                        backgroundColor: colors.slate900,
+                                        backgroundGradientFrom: colors.slate900,
+                                        backgroundGradientTo: colors.slate900,
+                                        decimalPlaces: 0,
+                                        color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+                                        labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
                                         style: {
-                                            borderRadius: 16,
+                                            borderRadius: borderRadius.lg,
                                         },
-                                        propsForBackgroundLines: {
-                                            strokeDasharray: '',
-                                            stroke: colors.zinc800,
-                                            strokeWidth: 1,
+                                        propsForDots: {
+                                            r: '6',
+                                            strokeWidth: '2',
+                                            stroke: colors.slate800,
                                         },
                                     }}
                                     style={{
@@ -424,7 +424,7 @@ export default function StudentReportScreen() {
                             ))
                         ) : (
                             <View style={styles.emptyState}>
-                                <MaterialIcons name="quiz" size={48} color={colors.zinc700} />
+                                <MaterialIcons name="quiz" size={48} color={colors.slate700} />
                                 <Text style={styles.emptyText}>Nenhum quiz realizado</Text>
                             </View>
                         )}
@@ -449,7 +449,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.base,
         paddingBottom: spacing.md,
         borderBottomWidth: 1,
-        borderBottomColor: colors.zinc800,
+        borderBottomColor: colors.slate800,
         backgroundColor: colors.backgroundDark,
     },
     backButton: {
@@ -471,7 +471,7 @@ const styles = StyleSheet.create({
     headerSubtitle: {
         fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.slate400,
         marginTop: 2,
     },
     placeholder: {
@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
     loadingText: {
         fontSize: typography.fontSize.base,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.slate400,
     },
     errorContainer: {
         flex: 1,
@@ -523,11 +523,11 @@ const styles = StyleSheet.create({
     },
     infoCard: {
         flexDirection: 'row',
-        backgroundColor: colors.zinc900,
+        backgroundColor: colors.slate900,
         borderRadius: borderRadius.lg,
         padding: spacing.base,
         borderWidth: 1,
-        borderColor: colors.zinc800,
+        borderColor: colors.slate800,
         marginBottom: spacing.base,
         alignItems: 'center',
     },
@@ -560,13 +560,13 @@ const styles = StyleSheet.create({
     studentEmail: {
         fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.slate400,
         marginBottom: 4,
     },
     subjectInfo: {
         fontSize: typography.fontSize.xs,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc500,
+        color: colors.slate500,
     },
     quickStatsContainer: {
         flexDirection: 'row',
@@ -575,11 +575,11 @@ const styles = StyleSheet.create({
     },
     quickStatCard: {
         flex: 1,
-        backgroundColor: colors.zinc900,
-        borderRadius: borderRadius.md,
+        backgroundColor: colors.slate900,
+        borderRadius: borderRadius.default,
         padding: spacing.sm,
         borderWidth: 1,
-        borderColor: colors.zinc800,
+        borderColor: colors.slate800,
         alignItems: 'center',
         gap: 4,
     },
@@ -592,7 +592,7 @@ const styles = StyleSheet.create({
     quickStatLabel: {
         fontSize: typography.fontSize.xs,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.slate400,
     },
     section: {
         marginBottom: spacing.lg,
@@ -605,11 +605,11 @@ const styles = StyleSheet.create({
         marginBottom: spacing.sm,
     },
     chartCard: {
-        backgroundColor: colors.zinc900,
+        backgroundColor: colors.slate900,
         borderRadius: borderRadius.lg,
         padding: spacing.sm,
         borderWidth: 1,
-        borderColor: colors.zinc800,
+        borderColor: colors.slate800,
         alignItems: 'center',
     },
     gradesContainer: {
@@ -619,18 +619,18 @@ const styles = StyleSheet.create({
     },
     gradeCard: {
         flex: 1,
-        backgroundColor: colors.zinc900,
-        borderRadius: borderRadius.md,
+        backgroundColor: colors.slate900,
+        borderRadius: borderRadius.default,
         padding: spacing.base,
         borderWidth: 1,
-        borderColor: colors.zinc800,
+        borderColor: colors.slate800,
         alignItems: 'center',
         gap: 4,
     },
     gradeLabel: {
         fontSize: typography.fontSize.xs,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.slate400,
     },
     gradeValue: {
         fontSize: 24,
@@ -679,18 +679,18 @@ const styles = StyleSheet.create({
     insightText: {
         fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc300,
+        color: colors.slate300,
     },
     insightHighlight: {
         fontWeight: typography.fontWeight.bold,
         color: '#f59e0b',
     },
     comparisonCard: {
-        backgroundColor: colors.zinc900,
+        backgroundColor: colors.slate900,
         borderRadius: borderRadius.lg,
         padding: spacing.base,
         borderWidth: 1,
-        borderColor: colors.zinc800,
+        borderColor: colors.slate800,
         gap: spacing.sm,
     },
     comparisonRow: {
@@ -701,7 +701,7 @@ const styles = StyleSheet.create({
     comparisonLabel: {
         fontSize: typography.fontSize.base,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.slate400,
     },
     comparisonValue: {
         fontSize: typography.fontSize.lg,
@@ -710,11 +710,11 @@ const styles = StyleSheet.create({
         color: colors.white,
     },
     activityCard: {
-        backgroundColor: colors.zinc900,
-        borderRadius: borderRadius.md,
+        backgroundColor: colors.slate900,
+        borderRadius: borderRadius.default,
         padding: spacing.base,
         borderWidth: 1,
-        borderColor: colors.zinc800,
+        borderColor: colors.slate800,
         marginBottom: spacing.sm,
     },
     activityHeader: {
@@ -749,7 +749,7 @@ const styles = StyleSheet.create({
     activityGradeLabel: {
         fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.slate400,
     },
     activityGradeValue: {
         fontSize: typography.fontSize.lg,
@@ -758,11 +758,11 @@ const styles = StyleSheet.create({
         color: '#10b981',
     },
     quizCard: {
-        backgroundColor: colors.zinc900,
-        borderRadius: borderRadius.md,
+        backgroundColor: colors.slate900,
+        borderRadius: borderRadius.default,
         padding: spacing.base,
         borderWidth: 1,
-        borderColor: colors.zinc800,
+        borderColor: colors.slate800,
         marginBottom: spacing.sm,
     },
     quizHeader: {
@@ -789,7 +789,7 @@ const styles = StyleSheet.create({
     quizStatLabel: {
         fontSize: typography.fontSize.xs,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.slate400,
         marginBottom: 2,
     },
     quizStatValue: {
@@ -805,7 +805,7 @@ const styles = StyleSheet.create({
     emptyText: {
         fontSize: typography.fontSize.base,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc500,
+        color: colors.slate500,
         marginTop: spacing.sm,
     },
 });

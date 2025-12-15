@@ -7,7 +7,7 @@ import { supabase } from './supabase';
 export const API_URL = 'http://localhost:3000/api';
 
 // Para produção/Vercel, use:
-//export const API_URL = 'https://ativa-ia-9rkb.vercel.app/api';
+export const API_URL = 'https://ativa-ia-9rkb.vercel.app/api';
 
 export interface LoginData {
     email: string;

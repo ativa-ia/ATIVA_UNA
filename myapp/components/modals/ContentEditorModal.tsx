@@ -40,6 +40,7 @@ export default function ContentEditorModal({
     const [isConverting, setIsConverting] = useState(false);
     // Track which questions have visible answers (indices)
     const [visibleQuestions, setVisibleQuestions] = useState<number[]>([]);
+    const [regeneratingQuestion, setRegeneratingQuestion] = useState<number | null>(null);
 
     useEffect(() => {
         if (visible) {
@@ -135,6 +136,48 @@ export default function ContentEditorModal({
             return null;
         }
         return null;
+    };
+
+    // Regenerar uma questão específica
+    const handleRegenerateQuestion = async (questionIndex: number) => {
+        if (!quizData) return;
+
+        try {
+            setRegeneratingQuestion(questionIndex);
+
+            // Gerar nova questão com IA
+            const result = await convertContent(content, 'quiz');
+
+            if (result.success && result.result) {
+                let newQuizData;
+
+                // Se result.result já é um objeto, usar diretamente
+                if (typeof result.result === 'object') {
+                    newQuizData = result.result;
+                } else {
+                    // Se é string, limpar markdown e fazer parse
+                    const cleanContent = result.result.replace(/```json\s*|\s*```/g, '').trim();
+                    newQuizData = JSON.parse(cleanContent);
+                }
+
+                if (newQuizData.questions && newQuizData.questions.length > 0) {
+                    // Substituir questão antiga pela primeira questão gerada
+                    const updatedQuestions = [...quizData.questions];
+                    updatedQuestions[questionIndex] = newQuizData.questions[0];
+
+                    setContent(JSON.stringify({ ...quizData, questions: updatedQuestions }, null, 2));
+                } else {
+                    Alert.alert('Erro', 'Não foi possível gerar nova questão.');
+                }
+            } else {
+                Alert.alert('Erro', result.error || 'Erro ao regenerar questão.');
+            }
+        } catch (error) {
+            console.error('Erro ao regenerar questão:', error);
+            Alert.alert('Erro', 'Erro ao regenerar questão. Tente novamente.');
+        } finally {
+            setRegeneratingQuestion(null);
+        }
     };
 
     const quizData = getQuizData();
@@ -254,6 +297,16 @@ export default function ContentEditorModal({
                                                         }
                                                     }}>
                                                         <MaterialIcons name={isVisible ? "visibility" : "visibility-off"} size={20} color={colors.slate400} />
+                                                    </TouchableOpacity>
+                                                    <TouchableOpacity
+                                                        onPress={() => handleRegenerateQuestion(index)}
+                                                        disabled={regeneratingQuestion === index}
+                                                    >
+                                                        {regeneratingQuestion === index ? (
+                                                            <ActivityIndicator size="small" color={colors.secondary} />
+                                                        ) : (
+                                                            <MaterialIcons name="refresh" size={20} color={colors.secondary} />
+                                                        )}
                                                     </TouchableOpacity>
                                                     <TouchableOpacity onPress={() => {
                                                         const newQuestions = quizData.questions.filter((_: any, i: number) => i !== index);
