@@ -990,36 +990,159 @@ def get_activity_report(current_user, activity_id):
     # Top 3
     top_students = [r.to_dict() for r in responses[:3]]
     
-    # Estatísticas por pergunta (apenas para quiz)
+    # ========== PERFORMANCE DISTRIBUTION ==========
+    performance_distribution = {
+        'excellent': 0,    # 90-100%
+        'good': 0,         # 70-89%
+        'average': 0,      # 50-69%
+        'below_average': 0 # <50%
+    }
+    
+    for response in responses:
+        if response.percentage >= 90:
+            performance_distribution['excellent'] += 1
+        elif response.percentage >= 70:
+            performance_distribution['good'] += 1
+        elif response.percentage >= 50:
+            performance_distribution['average'] += 1
+        else:
+            performance_distribution['below_average'] += 1
+    
+    # ========== QUESTION ANALYTICS ==========
+    question_analytics = []
+    best_question = None
     worst_question = None
+    
     if activity.activity_type == 'quiz' and activity.content and 'questions' in activity.content:
         questions = activity.content['questions']
-        question_stats = {}
         
         for i, question in enumerate(questions):
             correct_count = 0
+            incorrect_count = 0
+            wrong_answers = {}
+            
             for response in responses:
                 answers = response.response_data.get('answers', {})
-                # Respostas salvas como strings "0", "1"...
                 student_answer = answers.get(str(i))
-                if student_answer is not None and student_answer == question.get('correct'):
-                    correct_count += 1
+                if student_answer is not None:
+                    if student_answer == question.get('correct'):
+                        correct_count += 1
+                    else:
+                        incorrect_count += 1
+                        wrong_answers[student_answer] = wrong_answers.get(student_answer, 0) + 1
             
-            question_stats[str(i)] = {
-                'question': question.get('question', f'Questão {i+1}'),
-                'correct_rate': (correct_count / total_responses * 100) if total_responses > 0 else 0
-            }
+            total_answers = correct_count + incorrect_count
+            correct_rate = (correct_count / total_answers * 100) if total_answers > 0 else 0
+            
+            # Determinar dificuldade
+            if correct_rate >= 70:
+                difficulty = 'easy'
+            elif correct_rate >= 40:
+                difficulty = 'medium'
+            else:
+                difficulty = 'hard'
+            
+            # Resposta errada mais comum
+            most_common_wrong = max(wrong_answers.items(), key=lambda x: x[1])[0] if wrong_answers else None
+            
+            question_analytics.append({
+                'question_id': i,
+                'question_text': question.get('question', f'Questão {i+1}'),
+                'correct_count': correct_count,
+                'incorrect_count': incorrect_count,
+                'correct_rate': round(correct_rate, 1),
+                'difficulty_level': difficulty,
+                'most_common_wrong_answer': most_common_wrong
+            })
         
-        # Encontrar a pior
-        lowest_rate = 100
-        for q_id, stats in question_stats.items():
-            if stats['correct_rate'] < lowest_rate:
-                lowest_rate = stats['correct_rate']
-                worst_question = stats
+        # Encontrar melhor e pior questão
+        if question_analytics:
+            best_question = max(question_analytics, key=lambda x: x['correct_rate'])
+            worst_question = min(question_analytics, key=lambda x: x['correct_rate'])
+    
+    # ========== TIME ANALYTICS ==========
+    time_analytics = {
+        'average_completion_time': 0,
+        'fastest_completion': 0,
+        'slowest_completion': 0,
+        'median_time': 0
+    }
+    
+    if responses:
+        times = [r.time_taken for r in responses if hasattr(r, 'time_taken') and r.time_taken > 0]
+        if times:
+            time_analytics['average_completion_time'] = round(sum(times) / len(times), 1)
+            time_analytics['fastest_completion'] = min(times)
+            time_analytics['slowest_completion'] = max(times)
+            
+            # Calcular mediana
+            sorted_times = sorted(times)
+            mid = len(sorted_times) // 2
+            if len(sorted_times) % 2 == 0:
+                time_analytics['median_time'] = (sorted_times[mid-1] + sorted_times[mid]) / 2
+            else:
+                time_analytics['median_time'] = sorted_times[mid]
+    
+    # ========== SCORE DISTRIBUTION ==========
+    score_ranges = [
+        {'min': 0, 'max': 20, 'count': 0},
+        {'min': 20, 'max': 40, 'count': 0},
+        {'min': 40, 'max': 60, 'count': 0},
+        {'min': 60, 'max': 80, 'count': 0},
+        {'min': 80, 'max': 100, 'count': 0}
+    ]
+    
+    for response in responses:
+        for range_item in score_ranges:
+            if range_item['min'] <= response.percentage < range_item['max'] or \
+               (range_item['max'] == 100 and response.percentage == 100):
+                range_item['count'] += 1
+                break
+    
+    # Adicionar porcentagens
+    for range_item in score_ranges:
+        range_item['percentage'] = round((range_item['count'] / total_responses * 100), 1) if total_responses > 0 else 0
+    
+    # ========== COMPARATIVE STATS ==========
+    percentages = [r.percentage for r in responses]
+    
+    # Calcular mediana
+    class_median = 0
+    if percentages:
+        sorted_percentages = sorted(percentages)
+        mid = len(sorted_percentages) // 2
+        if len(sorted_percentages) % 2 == 0:
+            class_median = (sorted_percentages[mid-1] + sorted_percentages[mid]) / 2
+        else:
+            class_median = sorted_percentages[mid]
+    
+    # Calcular moda
+    from collections import Counter
+    class_mode = 0
+    if percentages:
+        rounded_percentages = [round(p) for p in percentages]
+        counter = Counter(rounded_percentages)
+        class_mode = counter.most_common(1)[0][0] if counter else 0
+    
+    # Calcular desvio padrão
+    import math
+    standard_deviation = 0
+    if len(percentages) > 1:
+        mean = sum(percentages) / len(percentages)
+        variance = sum((x - mean) ** 2 for x in percentages) / len(percentages)
+        standard_deviation = math.sqrt(variance)
+    
+    comparative_stats = {
+        'class_median': round(class_median, 1),
+        'class_mode': class_mode,
+        'standard_deviation': round(standard_deviation, 1),
+        'participation_rate': round((total_responses / enrolled_count * 100), 1) if enrolled_count > 0 else 0
+    }
 
     return jsonify({
         'success': True,
         'report': {
+            # Dados básicos
             'quiz': {
                 'id': activity.id,
                 'title': activity.title,
@@ -1031,8 +1154,24 @@ def get_activity_report(current_user, activity_id):
             'response_rate': (total_responses / enrolled_count * 100) if enrolled_count > 0 else 0,
             'average_score': round(avg_score, 1),
             'top_students': top_students,
-            'worst_question': worst_question,
-            'all_responses': [r.to_dict() for r in responses]
+            'all_responses': [r.to_dict() for r in responses],
+            
+            # Análises avançadas
+            'performance_distribution': performance_distribution,
+            'question_analytics': question_analytics,
+            'time_analytics': time_analytics,
+            'score_distribution': {'ranges': score_ranges},
+            'comparative_stats': comparative_stats,
+            
+            # Destaques
+            'best_question': {
+                'question': best_question['question_text'],
+                'correct_rate': best_question['correct_rate']
+            } if best_question else None,
+            'worst_question': {
+                'question': worst_question['question_text'],
+                'correct_rate': worst_question['correct_rate']
+            } if worst_question else None
         }
     })
 
@@ -1061,6 +1200,7 @@ def export_activity_pdf(current_user, activity_id):
         .all()
     
     enrolled_count = Enrollment.query.filter_by(subject_id=activity.session.subject_id).count()
+    total_responses = len(responses)
     
     # Preparar dados do ranking
     ranking = []
@@ -1076,10 +1216,90 @@ def export_activity_pdf(current_user, activity_id):
             'time_taken': response.time_taken if hasattr(response, 'time_taken') else 0,
         })
     
+    # ========== PERFORMANCE DISTRIBUTION ==========
+    performance_distribution = {
+        'excellent': 0,
+        'good': 0,
+        'average': 0,
+        'below_average': 0
+    }
+    
+    for response in responses:
+        if response.percentage >= 90:
+            performance_distribution['excellent'] += 1
+        elif response.percentage >= 70:
+            performance_distribution['good'] += 1
+        elif response.percentage >= 50:
+            performance_distribution['average'] += 1
+        else:
+            performance_distribution['below_average'] += 1
+    
+    # ========== QUESTION ANALYTICS ==========
+    question_analytics = []
+    if activity.activity_type == 'quiz' and activity.content and 'questions' in activity.content:
+        questions = activity.content['questions']
+        
+        for i, question in enumerate(questions):
+            correct_count = 0
+            incorrect_count = 0
+            
+            for response in responses:
+                answers = response.response_data.get('answers', {})
+                student_answer = answers.get(str(i))
+                if student_answer is not None:
+                    if student_answer == question.get('correct'):
+                        correct_count += 1
+                    else:
+                        incorrect_count += 1
+            
+            total_answers = correct_count + incorrect_count
+            correct_rate = (correct_count / total_answers * 100) if total_answers > 0 else 0
+            
+            question_analytics.append({
+                'question_text': question.get('question', f'Questão {i+1}'),
+                'correct_count': correct_count,
+                'incorrect_count': incorrect_count,
+                'correct_rate': round(correct_rate, 1),
+            })
+    
+    # ========== TIME ANALYTICS ==========
+    time_analytics = {
+        'average_completion_time': 0,
+        'fastest_completion': 0,
+        'slowest_completion': 0,
+    }
+    
+    if responses:
+        times = [r.time_taken for r in responses if hasattr(r, 'time_taken') and r.time_taken > 0]
+        if times:
+            time_analytics['average_completion_time'] = round(sum(times) / len(times), 1)
+            time_analytics['fastest_completion'] = min(times)
+            time_analytics['slowest_completion'] = max(times)
+    
+    # ========== SCORE DISTRIBUTION ==========
+    score_ranges = [
+        {'min': 0, 'max': 20, 'count': 0, 'label': '0-20%'},
+        {'min': 20, 'max': 40, 'count': 0, 'label': '20-40%'},
+        {'min': 40, 'max': 60, 'count': 0, 'label': '40-60%'},
+        {'min': 60, 'max': 80, 'count': 0, 'label': '60-80%'},
+        {'min': 80, 'max': 100, 'count': 0, 'label': '80-100%'}
+    ]
+    
+    for response in responses:
+        for range_item in score_ranges:
+            if range_item['min'] <= response.percentage < range_item['max'] or \
+               (range_item['max'] == 100 and response.percentage == 100):
+                range_item['count'] += 1
+                break
+    
     ranking_data = {
         'enrolled_count': enrolled_count,
-        'response_count': len(responses),
-        'ranking': ranking
+        'response_count': total_responses,
+        'ranking': ranking,
+        'performance_distribution': performance_distribution,
+        'question_analytics': question_analytics,
+        'time_analytics': time_analytics,
+        'score_distribution': score_ranges,
     }
     
     # Preparar dados da atividade
