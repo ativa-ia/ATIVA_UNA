@@ -78,10 +78,15 @@ export default function LiveActivityScreen() {
 
     const handleSelectAnswer = (questionIndex: number, optionIndex: number) => {
         if (isSubmitted) return;
-        setAnswers(prev => ({
-            ...prev,
-            [questionIndex.toString()]: optionIndex
-        }));
+        console.log(`✅ Answer selected: Q${questionIndex} = ${optionIndex}`);
+        setAnswers(prev => {
+            const updated = {
+                ...prev,
+                [questionIndex.toString()]: optionIndex
+            };
+            console.log('📝 Current answers state:', updated);
+            return updated;
+        });
     };
 
     const handleNextQuestion = async () => {
@@ -118,12 +123,15 @@ export default function LiveActivityScreen() {
         if (activity.activity_type === 'quiz') {
             const questions = activity.content?.questions || [];
             const answeredCount = Object.keys(answers).length;
-            const minRequired = Math.ceil(questions.length * 0.8);
+            const totalQuestions = questions.length;
 
-            if (!autoSubmit && answeredCount < minRequired) {
+            console.log(`🔍 Validation: ${answeredCount}/${totalQuestions} questions answered`);
+
+            // Require ALL questions to be answered (100%)
+            if (!autoSubmit && answeredCount < totalQuestions) {
                 Alert.alert(
-                    'Responda Mais Perguntas',
-                    `Você precisa responder pelo menos ${minRequired} de ${questions.length} perguntas.`,
+                    'Responda Todas as Perguntas',
+                    `Você precisa responder todas as ${totalQuestions} perguntas antes de enviar.\n\nRespondidas: ${answeredCount}/${totalQuestions}`,
                     [{ text: 'OK' }]
                 );
                 return;
@@ -138,6 +146,7 @@ export default function LiveActivityScreen() {
         await submitAnswers();
     };
 
+
     const submitAnswers = async () => {
         if (!activity) return;
 
@@ -145,11 +154,25 @@ export default function LiveActivityScreen() {
         if (timerRef.current) clearInterval(timerRef.current);
 
         try {
+            // Use functional update to get the absolute latest state
+            let finalAnswers = answers;
+
+            // Ensure we have the current question's answer if it exists
+            setAnswers(currentAnswers => {
+                finalAnswers = currentAnswers;
+                return currentAnswers;
+            });
+
             const data = activity.activity_type === 'quiz'
-                ? { answers }
+                ? { answers: finalAnswers }
                 : activity.activity_type === 'summary'
                     ? { read: true }
                     : { text: textAnswer };
+
+            console.log('📤 Submitting quiz answers:', JSON.stringify(finalAnswers, null, 2));
+            console.log('📊 Total questions:', activity.content?.questions?.length);
+            console.log('📝 Answered questions:', Object.keys(finalAnswers).length);
+            console.log('🔢 Current question index:', currentQuestion);
 
             const response = await submitActivityResponse(activity.id, data);
 

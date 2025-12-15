@@ -124,7 +124,6 @@ export interface Subject {
     credits?: number;
     image_url?: string;
     imageUrl?: string; // Alias para compatibilidade
-    professor?: string;
 }
 
 export interface SubjectDetails extends Subject {
@@ -682,19 +681,6 @@ export interface LiveActivity {
     response_count: number;
 }
 
-// Obter detalhes de uma atividade (incluindo conteúdo)
-export const getActivityDetails = async (activityId: number): Promise<{ success: boolean; activity?: LiveActivity; error?: string }> => {
-    const token = await AsyncStorage.getItem('authToken');
-
-    const response = await fetch(`${API_URL}/transcription/activities/${activityId}/details`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-        },
-    });
-
-    return response.json();
-};
-
 export interface LiveActivityResponse {
     id: number;
     activity_id: number;
@@ -1021,9 +1007,9 @@ export const submitActivityResponse = async (activityId: number, data: any): Pro
     }
 };
 
-export const getStudentHistory = async (subjectId: number, page: number = 1, limit: number = 10) => {
+export const getStudentHistory = async (subjectId: number) => {
     const token = await AsyncStorage.getItem('authToken');
-    const response = await fetch(`${API_URL}/transcription/subjects/${subjectId}/history?page=${page}&per_page=${limit}`, {
+    const response = await fetch(`${API_URL}/transcription/subjects/${subjectId}/history`, {
         headers: {
             'Authorization': `Bearer ${token}`,
         },
@@ -1108,4 +1094,91 @@ export const convertContent = async (content: string, type: 'quiz' | 'summary') 
         console.error('Erro ao converter conteúdo:', error);
         return { success: false, error: 'Erro de conexão ao converter' };
     }
+};
+
+// ==========================================
+// SUPORTE PERSONALIZADO
+// ==========================================
+
+export interface StudentSegment {
+    id: number;
+    name: string;
+    percentage: number;
+    score: number;
+    total: number;
+    performance_level: 'critical' | 'attention' | 'good' | 'excellent';
+    weak_topics: Array<{
+        question_id: number;
+        question: string;
+    }>;
+}
+
+export interface SegmentationResponse {
+    success: boolean;
+    segments: {
+        critical: number[];
+        attention: number[];
+        good: number[];
+        excellent: number[];
+    };
+    students: StudentSegment[];
+    summary: {
+        critical_count: number;
+        attention_count: number;
+        good_count: number;
+        excellent_count: number;
+        total: number;
+    };
+}
+
+export interface SupportContent {
+    title: string;
+    questions: Array<{
+        question: string;
+        options: string[];
+        correct: number;
+        explanation?: string;
+    }>;
+}
+
+export const segmentStudents = async (quizId: number): Promise<SegmentationResponse> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/quiz/${quizId}/segment-students`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+    return response.json();
+};
+
+export const generateSupportContent = async (
+    quizId: number,
+    studentIds: number[]
+): Promise<{ success: boolean; content?: SupportContent; error?: string }> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/quiz/${quizId}/generate-support-content`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ student_ids: studentIds, content_type: 'quiz' }),
+    });
+    return response.json();
+};
+
+export const sendSupport = async (
+    quizId: number,
+    studentIds: number[],
+    content: SupportContent,
+    message: string = 'Material de reforço para ajudar no seu aprendizado!'
+): Promise<{ success: boolean; activity?: any; error?: string }> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/quiz/${quizId}/send-support`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ student_ids: studentIds, content, message }),
+    });
+    return response.json();
 };

@@ -22,6 +22,7 @@ import ScoreDistributionGraph from '@/components/quiz/ScoreDistributionGraph';
 import TimeAnalysisDashboard from '@/components/quiz/TimeAnalysisDashboard';
 import QuestionDifficultyChart from '@/components/quiz/QuestionDifficultyChart';
 import ComparativeStatsPanel from '@/components/quiz/ComparativeStatsPanel';
+import SupportActionPanel from '@/components/quiz/SupportActionPanel';
 import { useWebSocket } from '@/hooks/useWebSocket';
 
 /**
@@ -405,6 +406,21 @@ export default function QuizResultsScreen() {
                                 stats={report.comparative_stats}
                             />
                         )}
+
+                        {/* Support Action Panel */}
+                        {(report.performance_distribution.below_average > 0 ||
+                            report.performance_distribution.average > 0) && (
+                                <SupportActionPanel
+                                    quizId={quizId}
+                                    activityId={activityId || quizId}
+                                    performanceDistribution={{
+                                        critical: report.performance_distribution.below_average,
+                                        attention: report.performance_distribution.average,
+                                        good: report.performance_distribution.good,
+                                        excellent: report.performance_distribution.excellent
+                                    }}
+                                />
+                            )}
                     </>
                 )}
 
