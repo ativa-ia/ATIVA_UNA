@@ -55,7 +55,7 @@ export default function ClassReportScreen() {
             case 'good': return '#3B82F6';
             case 'warning': return '#f59e0b';
             case 'critical': return '#ef4444';
-            default: return colors.zinc400;
+            default: return colors.slate400;
         }
     };
 
@@ -84,7 +84,7 @@ export default function ClassReportScreen() {
                     <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
                         <TouchableOpacity
                             style={styles.backButton}
-                            onPress={() => router.back()}
+                            onPress={() => router.canGoBack() ? router.back() : router.push('/(teacher)/dashboard')}
                         >
                             <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
                         </TouchableOpacity>
@@ -110,7 +110,7 @@ export default function ClassReportScreen() {
                     <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
                         <TouchableOpacity
                             style={styles.backButton}
-                            onPress={() => router.back()}
+                            onPress={() => router.canGoBack() ? router.back() : router.push('/(teacher)/dashboard')}
                         >
                             <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
                         </TouchableOpacity>
@@ -139,7 +139,7 @@ export default function ClassReportScreen() {
                 <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
                     <TouchableOpacity
                         style={styles.backButton}
-                        onPress={() => router.back()}
+                        onPress={() => router.canGoBack() ? router.back() : router.push('/(teacher)/dashboard')}
                     >
                         <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
                     </TouchableOpacity>
@@ -245,7 +245,7 @@ export default function ClassReportScreen() {
                                             </Text>
                                         </View>
                                     </View>
-                                    <MaterialIcons name="chevron-right" size={24} color={colors.zinc500} />
+                                    <MaterialIcons name="chevron-right" size={24} color={colors.slate500} />
                                 </View>
 
                                 <View style={styles.metricsRow}>
@@ -313,7 +313,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.base,
         paddingVertical: spacing.md,
         borderBottomWidth: 1,
-        borderBottomColor: colors.zinc800,
+        borderBottomColor: colors.slate800,
     },
     backButton: {
         width: 48,
@@ -334,7 +334,7 @@ const styles = StyleSheet.create({
     headerSubtitle: {
         fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.slate400,
     },
     placeholder: {
         width: 48,
@@ -369,7 +369,7 @@ const styles = StyleSheet.create({
     statLabel: {
         fontSize: typography.fontSize.xs,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.slate400,
         marginTop: 4,
     },
     filterContainer: {
@@ -384,7 +384,7 @@ const styles = StyleSheet.create({
         borderRadius: borderRadius.full,
         backgroundColor: 'rgba(39, 39, 42, 0.5)',
         borderWidth: 1,
-        borderColor: colors.zinc700,
+        borderColor: colors.slate700,
     },
     filterChipActive: {
         backgroundColor: colors.primaryOpacity20,
@@ -394,7 +394,7 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.xs,
         fontWeight: typography.fontWeight.medium,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.slate400,
     },
     filterChipTextActive: {
         color: colors.primary,
@@ -415,7 +415,7 @@ const styles = StyleSheet.create({
         padding: spacing.base,
         marginBottom: spacing.md,
         borderWidth: 1,
-        borderColor: colors.zinc800,
+        borderColor: colors.slate800,
     },
     studentHeader: {
         flexDirection: 'row',
@@ -427,7 +427,7 @@ const styles = StyleSheet.create({
         width: 48,
         height: 48,
         borderRadius: 24,
-        backgroundColor: colors.zinc700,
+        backgroundColor: colors.slate700,
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 2,
@@ -473,7 +473,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-around',
         paddingVertical: spacing.sm,
         borderTopWidth: 1,
-        borderTopColor: colors.zinc800,
+        borderTopColor: colors.slate800,
     },
     metricItem: {
         alignItems: 'center',
@@ -482,7 +482,7 @@ const styles = StyleSheet.create({
     metricLabel: {
         fontSize: typography.fontSize.xs,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc500,
+        color: colors.slate500,
     },
     metricValue: {
         fontSize: typography.fontSize.sm,
@@ -492,14 +492,14 @@ const styles = StyleSheet.create({
     metricDivider: {
         width: 1,
         height: 32,
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.slate800,
     },
     progressContainer: {
         marginTop: spacing.sm,
     },
     progressBar: {
         height: 4,
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.slate800,
         borderRadius: 2,
         overflow: 'hidden',
     },
@@ -516,7 +516,7 @@ const styles = StyleSheet.create({
     loadingText: {
         fontSize: typography.fontSize.base,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.slate400,
     },
     errorContainer: {
         flex: 1,

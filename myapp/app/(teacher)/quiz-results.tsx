@@ -159,7 +159,11 @@ export default function QuizResultsScreen() {
     const handleEndQuiz = async () => {
         // Se já está mostrando o pódio, voltar para a tela anterior
         if (showPodium) {
-            router.back();
+            if (router.canGoBack()) {
+                router.back();
+            } else {
+                router.push('/(teacher)/dashboard');
+            }
             return;
         }
 
@@ -260,7 +264,7 @@ export default function QuizResultsScreen() {
         <View style={styles.container}>
             {/* Header */}
             <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-                <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+                <TouchableOpacity style={styles.backButton} onPress={() => router.canGoBack() ? router.back() : router.push('/(teacher)/dashboard')}>
                     <MaterialIcons name="arrow-back-ios" size={20} color={colors.textPrimary} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Resultados ao Vivo</Text>
