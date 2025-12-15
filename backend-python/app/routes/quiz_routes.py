@@ -748,3 +748,231 @@ def list_quizzes(current_user, subject_id):
         'success': True,
         'quizzes': [q.to_dict() for q in quizzes]
     })
+
+
+# ==========================================
+# SUPORTE PERSONALIZADO
+# ==========================================
+
+@quiz_bp.route('/<int:quiz_id>/segment-students', methods=['GET'])
+@token_required
+def segment_students(current_user, quiz_id):
+    """Segmenta alunos por faixa de desempenho"""
+    quiz = Quiz.query.get(quiz_id)
+    
+    if not quiz:
+        return jsonify({'success': False, 'error': 'Quiz não encontrado'}), 404
+    
+    if quiz.created_by != current_user.id:
+        return jsonify({'success': False, 'error': 'Não autorizado'}), 403
+    
+    responses = QuizResponse.query.filter_by(quiz_id=quiz_id).all()
+    
+    segments = {
+        'critical': [],
+        'attention': [],
+        'good': [],
+        'excellent': []
+    }
+    
+    students_data = []
+    
+    for response in responses:
+        student_data = {
+            'id': response.student_id,
+            'name': response.student.name if response.student else 'Desconhecido',
+            'percentage': response.percentage,
+            'score': response.score,
+            'total': response.total,
+            'performance_level': '',
+            'weak_topics': []
+        }
+        
+        if response.percentage < 50:
+            student_data['performance_level'] = 'critical'
+            segments['critical'].append(response.student_id)
+        elif response.percentage < 70:
+            student_data['performance_level'] = 'attention'
+            segments['attention'].append(response.student_id)
+        elif response.percentage < 90:
+            student_data['performance_level'] = 'good'
+            segments['good'].append(response.student_id)
+        else:
+            student_data['performance_level'] = 'excellent'
+            segments['excellent'].append(response.student_id)
+        
+        answers = response.answers
+        for question in quiz.questions:
+            student_answer = answers.get(str(question.id))
+            if student_answer is not None and student_answer != question.correct:
+                student_data['weak_topics'].append({
+                    'question_id': question.id,
+                    'question': question.question[:100]
+                })
+        
+        students_data.append(student_data)
+    
+    return jsonify({
+        'success': True,
+        'segments': segments,
+        'students': students_data,
+        'summary': {
+            'critical_count': len(segments['critical']),
+            'attention_count': len(segments['attention']),
+            'good_count': len(segments['good']),
+            'excellent_count': len(segments['excellent']),
+            'total': len(responses)
+        }
+    })
+
+
+@quiz_bp.route('/<int:quiz_id>/generate-support-content', methods=['POST'])
+@token_required
+def generate_support_content(current_user, quiz_id):
+    """Gera conteúdo de suporte personalizado via IA"""
+    from app.services.ai_service import generate_quiz_from_content
+    
+    quiz = Quiz.query.get(quiz_id)
+    
+    if not quiz:
+        return jsonify({'success': False, 'error': 'Quiz não encontrado'}), 404
+    
+    if quiz.created_by != current_user.id:
+        return jsonify({'success': False, 'error': 'Não autorizado'}), 403
+    
+    data = request.get_json()
+    student_ids = data.get('student_ids', [])
+    
+    if not student_ids:
+        return jsonify({'success': False, 'error': 'Nenhum aluno selecionado'}), 400
+    
+    responses = QuizResponse.query.filter(
+        QuizResponse.quiz_id == quiz_id,
+        QuizResponse.student_id.in_(student_ids)
+    ).all()
+    
+    question_errors = {}
+    for response in responses:
+        answers = response.answers
+        for question in quiz.questions:
+            student_answer = answers.get(str(question.id))
+            if student_answer is not None and student_answer != question.correct:
+                if question.id not in question_errors:
+                    question_errors[question.id] = {
+                        'question': question,
+                        'error_count': 0
+                    }
+                question_errors[question.id]['error_count'] += 1
+    
+    sorted_errors = sorted(question_errors.items(), key=lambda x: x[1]['error_count'], reverse=True)
+    focus_questions = [item[1]['question'] for item in sorted_errors[:3]]
+    
+    context = f"Quiz Original: {quiz.title}\\n\\n"
+    context += "Questões onde os alunos tiveram mais dificuldade:\\n\\n"
+    for q in focus_questions:
+        context += f"- {q.question}\\n"
+        for i, opt in enumerate(q.options):
+            context += f"  {chr(65+i)}) {opt}\\n"
+        context += f"  Resposta correta: {chr(65+q.correct)}\\n\\n"
+    
+    prompt = f"""Baseado no quiz abaixo onde os alunos tiveram dificuldades, crie um QUIZ DE REFORÇO com 5 questões MAIS SIMPLES sobre os mesmos tópicos.
+
+{context}
+
+IMPORTANTE:
+- As questões devem ser MAIS FÁCEIS que as originais
+- Foque nos mesmos conceitos mas com abordagem diferente
+- Inclua dicas e explicações
+- Seja encorajador e motivacional
+
+Retorne APENAS um JSON válido no formato:
+{{
+    "title": "Quiz de Reforço - [Tópico]",
+    "questions": [
+        {{
+            "question": "...",
+            "options": ["A", "B", "C", "D"],
+            "correct": 0,
+            "explanation": "Explicação da resposta correta"
+        }}
+    ]
+}}"""
+    
+    try:
+        result = generate_quiz_from_content(prompt, num_questions=5)
+        
+        if result.get('success'):
+            return jsonify({
+                'success': True,
+                'content': result.get('quiz'),
+                'content_type': 'quiz',
+                'focus_topics': [q.question[:50] for q in focus_questions]
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Erro ao gerar conteúdo'}), 500
+            
+    except Exception as e:
+        logger.error(f"Erro ao gerar suporte: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@quiz_bp.route('/<int:quiz_id>/send-support', methods=['POST'])
+@token_required
+def send_support(current_user, quiz_id):
+    """Envia conteúdo de suporte para alunos selecionados"""
+    from app.models.transcription_session import LiveActivity, TranscriptionSession
+    
+    quiz = Quiz.query.get(quiz_id)
+    
+    if not quiz:
+        return jsonify({'success': False, 'error': 'Quiz não encontrado'}), 404
+    
+    if quiz.created_by != current_user.id:
+        return jsonify({'success': False, 'error': 'Não autorizado'}), 403
+    
+    data = request.get_json()
+    student_ids = data.get('student_ids', [])
+    content = data.get('content')
+    message = data.get('message', 'Material de reforço para ajudar no seu aprendizado!')
+    
+    if not student_ids or not content:
+        return jsonify({'success': False, 'error': 'Dados incompletos'}), 400
+    
+    session = TranscriptionSession.query.filter_by(
+        subject_id=quiz.subject_id,
+        teacher_id=current_user.id,
+        status='active'
+    ).first()
+    
+    if not session:
+        session = TranscriptionSession(
+            subject_id=quiz.subject_id,
+            teacher_id=current_user.id,
+            title=f'Suporte - {quiz.title}',
+            status='active'
+        )
+        db.session.add(session)
+        db.session.flush()
+    
+    support_activity = LiveActivity(
+        session_id=session.id,
+        activity_type='quiz',
+        title=content.get('title', 'Quiz de Reforço'),
+        content=content,
+        shared_with_students=True,
+        status='waiting',
+        time_limit=600,
+        target_students=student_ids,
+        is_support_content=True,
+        parent_activity_id=quiz.id if hasattr(quiz, 'id') else None
+    )
+    
+    db.session.add(support_activity)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': f'Conteúdo de suporte enviado para {len(student_ids)} aluno(s)',
+        'activity': support_activity.to_dict(),
+        'students_notified': len(student_ids)
+    })
