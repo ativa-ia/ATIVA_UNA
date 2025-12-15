@@ -127,7 +127,8 @@ export default function StudentDashboardScreen() {
             const formattedSubjects: Subject[] = data.map((subject: APISubject) => ({
                 id: subject.id.toString(),
                 name: subject.name,
-                imageUrl: subject.imageUrl || subject.image_url || 'https://via.placeholder.com/400'
+                imageUrl: subject.imageUrl || subject.image_url || 'https://via.placeholder.com/400',
+                professor: subject.professor
             }));
 
             setSubjects(formattedSubjects);
@@ -170,8 +171,8 @@ export default function StudentDashboardScreen() {
 
     const handleSubjectPress = (subject: Subject) => {
         router.push({
-            pathname: './subject-details',
-            params: { subject: subject.name, subjectId: subject.id }
+            pathname: '/(student)/activities',
+            params: { subjectName: subject.name, subjectId: subject.id }
         });
     };
 

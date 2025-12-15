@@ -3,12 +3,15 @@ import {
     View,
     Text,
     StyleSheet,
-    ScrollView,
+    FlatList,
     TouchableOpacity,
     ActivityIndicator,
     Alert,
     Platform
 } from 'react-native';
+
+// ... (rest of imports)
+
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -29,7 +32,7 @@ if (Platform.OS !== 'web') {
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
-import { getStudentHistory } from '@/services/api';
+import { getStudentHistory, getActivityDetails } from '@/services/api';
 
 interface ActivityHistoryItem {
     activity: {
@@ -52,24 +55,83 @@ export default function ActivitiesScreen() {
     const subjectName = params.subjectName as string || 'Atividades';
 
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [exportingId, setExportingId] = useState<number | null>(null);
     const [history, setHistory] = useState<ActivityHistoryItem[]>([]);
+    const [page, setPage] = useState(1);
+    const [hasMore, setHasMore] = useState(true);
 
     useEffect(() => {
-        loadHistory();
+        loadHistory(1);
     }, [subjectId]);
 
-    const loadHistory = async () => {
+    const loadHistory = async (pageNumber: number) => {
         try {
-            setLoading(true);
-            const res = await getStudentHistory(subjectId);
+            if (pageNumber === 1) setLoading(true);
+            else setLoadingMore(true);
+
+            const res = await getStudentHistory(subjectId, pageNumber, 8);
             if (res.success) {
-                setHistory(res.history);
+                if (pageNumber === 1) {
+                    setHistory(res.history);
+                } else {
+                    setHistory(prev => {
+                        const existingIds = new Set(prev.map(item => item.activity.id));
+                        const newItems = res.history.filter((item: ActivityHistoryItem) => !existingIds.has(item.activity.id));
+                        return [...prev, ...newItems];
+                    });
+                }
+                setHasMore(res.has_next);
+                setPage(pageNumber);
             }
         } catch (e) {
             console.error(e);
             Alert.alert('Erro', 'Não foi possível carregar o histórico.');
         } finally {
             setLoading(false);
+            setLoadingMore(false);
+        }
+    };
+
+
+
+    const renderExportButtons = (item: ActivityHistoryItem) => {
+        const isExporting = exportingId === item.activity.id;
+
+        return (
+            <View style={styles.actionButtons}>
+                <TouchableOpacity
+                    style={[styles.actionButton, styles.pdfButton, isExporting && { opacity: 0.7 }]}
+                    onPress={() => !isExporting && handleExportPDF(item)}
+                    disabled={isExporting}
+                >
+                    {isExporting ? (
+                        <ActivityIndicator size="small" color={colors.white} />
+                    ) : (
+                        <MaterialIcons name="picture-as-pdf" size={20} color={colors.white} />
+                    )}
+                    <Text style={styles.actionButtonText}>PDF</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={[styles.actionButton, styles.txtButton, isExporting && { opacity: 0.7 }]}
+                    onPress={() => !isExporting && handleExportTXT(item)}
+                    disabled={isExporting}
+                >
+                    {isExporting ? (
+                        <ActivityIndicator size="small" color={colors.textPrimary} />
+                    ) : (
+                        <MaterialIcons name="description" size={20} color={colors.textPrimary} />
+                    )}
+                    <Text style={[styles.actionButtonText, { color: colors.textPrimary }]}>TXT</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    };
+
+    const handleLoadMore = () => {
+        if (!loading && !loadingMore && hasMore) {
+            loadHistory(page + 1);
         }
     };
 
@@ -156,10 +218,23 @@ export default function ActivitiesScreen() {
     const handleExportPDF = async (item: ActivityHistoryItem) => {
         try {
             const html = generateHTML(item);
-            const { uri } = await Print.printToFileAsync({ html });
 
-            // On Android/iOS, proceed to share
-            await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+            if (Platform.OS === 'web') {
+                const printWindow = window.open('', '', 'width=800,height=600');
+                if (printWindow) {
+                    printWindow.document.write(html);
+                    printWindow.document.close();
+                    printWindow.focus();
+                    setTimeout(() => {
+                        printWindow.print();
+                    }, 500);
+                } else {
+                    Alert.alert('Atenção', 'Pop-up bloqueado. Permita pop-ups para gerar o PDF.');
+                }
+            } else {
+                const { uri } = await Print.printToFileAsync({ html });
+                await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+            }
         } catch (error) {
             console.error('Erro PDF:', error);
             Alert.alert('Erro', 'Falha ao gerar PDF.');
@@ -250,65 +325,50 @@ export default function ActivitiesScreen() {
                 <View style={styles.placeholder} />
             </LinearGradient>
 
-            <ScrollView
+            <FlatList
+                data={history}
+                keyExtractor={(item) => item.activity.id.toString()}
                 contentContainerStyle={styles.content}
                 showsVerticalScrollIndicator={false}
-            >
-                {loading ? (
-                    <ActivityIndicator size="large" color={colors.primary} style={{ marginTop: spacing.xl }} />
-                ) : history.length === 0 ? (
+                onEndReached={handleLoadMore}
+                onEndReachedThreshold={0.5}
+                ListFooterComponent={loadingMore ? <ActivityIndicator size="small" color={colors.primary} /> : null}
+                ListEmptyComponent={!loading ? (
                     <View style={styles.emptyState}>
                         <MaterialIcons name="assignment-late" size={64} color={colors.slate300} />
                         <Text style={styles.emptyStateText}>Nenhuma atividade encontrada.</Text>
                     </View>
-                ) : (
-                    history.map((item, index) => (
-                        <View key={index} style={styles.card}>
-                            <View style={styles.cardHeader}>
-                                <View style={[
-                                    styles.iconBox,
-                                    { backgroundColor: item.activity.activity_type === 'quiz' ? '#EEF2FF' : '#FFF7ED' }
-                                ]}>
-                                    <MaterialIcons
-                                        name={item.activity.activity_type === 'quiz' ? 'quiz' : 'article'}
-                                        size={24}
-                                        color={item.activity.activity_type === 'quiz' ? colors.primary : '#F59E0B'}
-                                    />
-                                </View>
-                                <View style={styles.headerInfo}>
-                                    <Text style={styles.cardTitle}>{item.activity.title}</Text>
-                                    <Text style={styles.cardDate}>{formatDate(item.activity.created_at)}</Text>
-                                </View>
-                                {item.activity.activity_type === 'quiz' && typeof item.my_percentage === 'number' && (
-                                    <View style={[styles.scoreBadge, { backgroundColor: item.my_percentage >= 70 ? '#DCFCE7' : '#FEE2E2' }]}>
-                                        <Text style={[styles.scoreText, { color: item.my_percentage >= 70 ? '#166534' : '#991B1B' }]}>
-                                            {Math.round(item.my_percentage)}%
-                                        </Text>
-                                    </View>
-                                )}
+                ) : null}
+                renderItem={({ item }) => (
+                    <View style={styles.card}>
+                        <View style={styles.cardHeader}>
+                            <View style={[
+                                styles.iconBox,
+                                { backgroundColor: item.activity.activity_type === 'quiz' ? '#EEF2FF' : '#FFF7ED' }
+                            ]}>
+                                <MaterialIcons
+                                    name={item.activity.activity_type === 'quiz' ? 'quiz' : 'article'}
+                                    size={24}
+                                    color={item.activity.activity_type === 'quiz' ? colors.primary : '#F59E0B'}
+                                />
                             </View>
-
-                            <View style={styles.actionButtons}>
-                                <TouchableOpacity
-                                    style={[styles.actionButton, styles.pdfButton]}
-                                    onPress={() => handleExportPDF(item)}
-                                >
-                                    <MaterialIcons name="picture-as-pdf" size={20} color={colors.white} />
-                                    <Text style={styles.actionButtonText}>PDF</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={[styles.actionButton, styles.txtButton]}
-                                    onPress={() => handleExportTXT(item)}
-                                >
-                                    <MaterialIcons name="description" size={20} color={colors.textPrimary} />
-                                    <Text style={[styles.actionButtonText, { color: colors.textPrimary }]}>TXT</Text>
-                                </TouchableOpacity>
+                            <View style={styles.headerInfo}>
+                                <Text style={styles.cardTitle}>{item.activity.title}</Text>
+                                <Text style={styles.cardDate}>{formatDate(item.activity.created_at)}</Text>
                             </View>
+                            {item.activity.activity_type === 'quiz' && typeof item.my_percentage === 'number' && (
+                                <View style={[styles.scoreBadge, { backgroundColor: item.my_percentage >= 70 ? '#DCFCE7' : '#FEE2E2' }]}>
+                                    <Text style={[styles.scoreText, { color: item.my_percentage >= 70 ? '#166534' : '#991B1B' }]}>
+                                        {Math.round(item.my_percentage)}%
+                                    </Text>
+                                </View>
+                            )}
                         </View>
-                    ))
+
+                        {renderExportButtons(item)}
+                    </View>
                 )}
-            </ScrollView>
+            />
         </View>
     );
 }

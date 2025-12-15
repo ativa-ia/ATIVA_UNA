@@ -7,6 +7,7 @@ export interface Subject {
     id: string;
     name: string;
     imageUrl: string;
+    professor?: string;
 }
 
 export interface Notice {
