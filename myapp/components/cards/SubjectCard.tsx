@@ -34,22 +34,38 @@ const getSubjectIcon = (name: string): keyof typeof MaterialIcons.glyphMap => {
     return 'school';
 };
 
+// Get color based on subject name
+const getSubjectColor = (name: string): string => {
+    const lowerName = name.toLowerCase();
+    if (lowerName.includes('matemática') || lowerName.includes('math')) return '#4F46E5'; // Indigo
+    if (lowerName.includes('português') || lowerName.includes('língua')) return '#F59E0B'; // Amber
+    if (lowerName.includes('história')) return '#D97706'; // Dark Amber/Brown
+    if (lowerName.includes('geografia')) return '#059669'; // Emerald
+    if (lowerName.includes('ciências') || lowerName.includes('biologia')) return '#10B981'; // Green
+    if (lowerName.includes('física')) return '#7C3AED'; // Violet
+    if (lowerName.includes('química')) return '#DB2777'; // Pink
+    if (lowerName.includes('inglês') || lowerName.includes('english')) return '#EF4444'; // Red
+    if (lowerName.includes('arte')) return '#EC4899'; // Pink
+    return colors.primary; // Default
+};
+
 export const SubjectCard: React.FC<SubjectCardProps> = ({
     subject,
     onPress,
     style,
 }) => {
     const icon = getSubjectIcon(subject.name);
+    const accentColor = getSubjectColor(subject.name);
 
     return (
         <TouchableOpacity
-            style={[styles.container, style]}
+            style={[styles.container, { borderLeftColor: accentColor }, style]}
             onPress={onPress}
             activeOpacity={0.7}
         >
             <View>
-                <View style={styles.iconContainer}>
-                    <MaterialIcons name={icon} size={28} color={colors.primary} />
+                <View style={[styles.iconContainer, { backgroundColor: `${accentColor}15` }]}>
+                    <MaterialIcons name={icon} size={28} color={accentColor} />
                 </View>
 
                 <Text style={styles.title} numberOfLines={2}>
@@ -58,14 +74,14 @@ export const SubjectCard: React.FC<SubjectCardProps> = ({
 
                 {subject.professor && (
                     <Text style={styles.professor} numberOfLines={1}>
-                        Professor: {subject.professor}
+                        Prof. {subject.professor}
                     </Text>
                 )}
             </View>
 
             <View style={styles.footer}>
-                <Text style={styles.accessText}>Acessar</Text>
-                <MaterialIcons name="chevron-right" size={16} color={colors.primary} />
+                <Text style={[styles.accessText, { color: accentColor }]}>Acessar</Text>
+                <MaterialIcons name="chevron-right" size={16} color={accentColor} />
             </View>
         </TouchableOpacity>
     );
@@ -76,48 +92,53 @@ const styles = StyleSheet.create({
         backgroundColor: colors.white,
         borderRadius: borderRadius.lg,
         padding: spacing.md,
-        minHeight: 140, // Increased height
+        minHeight: 150,
         justifyContent: 'space-between',
-        borderWidth: 1,
-        borderColor: colors.slate200,
-        shadowColor: colors.primary,
+        // Flag Style
+        borderLeftWidth: 6,
+        // Post-it Shadow
+        shadowColor: "#64748B",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 4,
+        shadowRadius: 6,
+        elevation: 3,
+        borderWidth: 0, // No full border
     },
     iconContainer: {
         width: 48,
         height: 48,
-        borderRadius: 24,
-        backgroundColor: 'rgba(79, 70, 229, 0.1)', // colors.primary with opacity
+        borderRadius: 16, // Slightly clearer shape
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: spacing.sm,
     },
     title: {
         color: colors.textPrimary,
-        fontSize: typography.fontSize.base,
-        fontWeight: typography.fontWeight.semibold,
+        fontSize: 16,
+        fontWeight: '700',
         fontFamily: typography.fontFamily.display,
-        lineHeight: typography.fontSize.base * typography.lineHeight.tight,
-        marginBottom: 4,
+        lineHeight: 20,
+        marginBottom: 6,
     },
     professor: {
         color: colors.textSecondary,
-        fontSize: typography.fontSize.xs,
-        fontFamily: typography.fontFamily.body,
+        fontSize: 12,
+        fontStyle: 'italic',
     },
     footer: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'flex-end',
-        marginTop: spacing.sm,
+        marginTop: spacing.md,
+        borderTopWidth: 1,
+        borderTopColor: '#F1F5F9', // Very light separator
+        paddingTop: 8,
     },
     accessText: {
-        fontSize: typography.fontSize.xs,
-        color: colors.primary,
-        fontWeight: '600',
+        fontSize: 12,
+        fontWeight: '700',
+        textTransform: 'uppercase',
         marginRight: 2,
+        letterSpacing: 0.5,
     },
 });
