@@ -498,6 +498,11 @@ def share_summary(current_user, activity_id):
         return jsonify({'success': False, 'error': 'Esta ação é apenas para resumos'}), 400
     
     activity.shared_with_students = True
+    
+    # IMPORTANTE: Também ativar a atividade para ela aparecer na lista
+    activity.status = 'active'
+    activity.starts_at = datetime.utcnow()
+    
     db.session.commit()
     
     return jsonify({
@@ -561,6 +566,10 @@ def update_activity(current_user, activity_id):
         if activity.activity_type == 'quiz':
             import json
             activity.ai_generated_content = json.dumps(data['content'], ensure_ascii=False)
+            
+    # Atualizar ai_generated_content diretamente (para resumos)
+    if 'ai_generated_content' in data:
+        activity.ai_generated_content = data['ai_generated_content']
     
     # Atualizar time_limit
     if 'time_limit' in data:

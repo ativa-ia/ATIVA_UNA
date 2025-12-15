@@ -775,6 +775,8 @@ export const createCheckpoint = async (sessionId: number, reason?: string): Prom
     return response.json();
 };
 
+
+
 // Retomar sessão
 export const resumeSession = async (sessionId: number): Promise<{ success: boolean; session: TranscriptionSession }> => {
     const token = await AsyncStorage.getItem('authToken');
@@ -885,7 +887,8 @@ export const shareSummary = async (activityId: number): Promise<{ success: boole
 };
 
 // Atualizar atividade (ex: remover questões do quiz)
-export const updateActivity = async (activityId: number, content: any, timeLimit?: number): Promise<{ success: boolean; activity: LiveActivity; error?: string }> => {
+// Atualizar atividade (ex: remover questões do quiz ou editar resumo)
+export const updateActivity = async (activityId: number, data: any): Promise<{ success: boolean; activity: LiveActivity; error?: string }> => {
     const token = await AsyncStorage.getItem('authToken');
 
     const response = await fetch(`${API_URL}/transcription/activities/${activityId}/update`, {
@@ -894,10 +897,7 @@ export const updateActivity = async (activityId: number, content: any, timeLimit
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({
-            content,
-            time_limit: timeLimit
-        }),
+        body: JSON.stringify(data),
     });
 
     return response.json();

@@ -607,6 +607,42 @@ export default function TranscriptionScreen() {
         }
     };
 
+    // Estados para edição de resumo
+    const [isEditingSummary, setIsEditingSummary] = useState(false);
+    const [editedSummaryText, setEditedSummaryText] = useState('');
+
+    useEffect(() => {
+        if (generatedSummary) {
+            setEditedSummaryText(generatedSummary);
+        }
+    }, [generatedSummary]);
+
+    const handleSaveSummaryEdit = async () => {
+        if (!currentActivity || !editedSummaryText.trim()) return;
+
+        try {
+            console.log('[EDIT SUMMARY] Salvando resumo editado...');
+            const result = await updateActivity(currentActivity.id, {
+                ai_generated_content: editedSummaryText,
+                content: { summary_text: editedSummaryText }
+            });
+
+            if (result.success && result.activity) {
+                setGeneratedSummary(editedSummaryText);
+                setCurrentActivity(result.activity);
+                setIsEditingSummary(false);
+                // Also update the ai_generated_content in currentActivity if implicit logic relies on it
+                result.activity.ai_generated_content = editedSummaryText;
+                console.log('[EDIT SUMMARY] Resumo salvo com sucesso');
+            } else {
+                Alert.alert('Erro', result.error || 'Não foi possível salvar o resumo.');
+            }
+        } catch (error) {
+            console.error('[EDIT SUMMARY] Erro ao salvar:', error);
+            Alert.alert('Erro', 'Erro ao salvar resumo.');
+        }
+    };
+
 
     // Criar Pergunta Aberta
     const handleCreateOpenQuestion = async (type: 'doubts' | 'feedback') => {
@@ -774,7 +810,57 @@ export default function TranscriptionScreen() {
                             </View>
                         ) : displayMode === 'summary' && generatedSummary ? (
                             <View style={styles.summaryContent}>
-                                <Text style={styles.generatedText}>{generatedSummary}</Text>
+                                {isEditingSummary ? (
+                                    <View>
+                                        <TextInput
+                                            style={styles.editSummaryInput}
+                                            multiline
+                                            value={editedSummaryText}
+                                            onChangeText={setEditedSummaryText}
+                                            textAlignVertical="top"
+                                        />
+                                        <View style={styles.editActions}>
+                                            <TouchableOpacity
+                                                style={[styles.editButton, styles.editCancelButton]}
+                                                onPress={() => {
+                                                    setIsEditingSummary(false);
+                                                    setEditedSummaryText(generatedSummary || '');
+                                                }}
+                                            >
+                                                <Text style={styles.editCancelButtonText}>Cancelar</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity
+                                                style={[styles.editButton, styles.editSaveButton]}
+                                                onPress={handleSaveSummaryEdit}
+                                            >
+                                                <Text style={styles.editSaveButtonText}>Salvar</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                    </View>
+                                ) : (
+                                    <>
+                                        <Text style={styles.generatedText}>{generatedSummary}</Text>
+                                        <TouchableOpacity
+                                            style={styles.editModeButton}
+                                            onPress={() => setIsEditingSummary(true)}
+                                        >
+                                            <MaterialIcons name="edit" size={16} color={colors.secondary} />
+                                            <Text style={styles.editModeButtonText}>Editar Resumo</Text>
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            style={styles.sendSummaryButton}
+                                            onPress={handleShareSummary}
+                                        >
+                                            <LinearGradient
+                                                colors={['#22c55e', '#16a34a']}
+                                                style={styles.sendSummaryButtonGradient}
+                                            >
+                                                <MaterialIcons name="send" size={20} color={colors.white} />
+                                                <Text style={styles.sendSummaryButtonText}>Enviar para Alunos</Text>
+                                            </LinearGradient>
+                                        </TouchableOpacity>
+                                    </>
+                                )}
                             </View>
                         ) : displayMode === 'quiz' && generatedQuiz ? (
                             <View style={styles.quizContent}>
@@ -2323,5 +2409,77 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#d97706',
         marginRight: 8,
+    },
+    sendSummaryButton: {
+        marginTop: spacing.lg,
+        borderRadius: borderRadius.default,
+        overflow: 'hidden',
+    },
+    sendSummaryButtonGradient: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.lg,
+        gap: spacing.sm,
+    },
+    sendSummaryButtonText: {
+        color: colors.white,
+        fontWeight: 'bold',
+        fontSize: typography.fontSize.base,
+    },
+    editSummaryInput: {
+        backgroundColor: colors.white,
+        borderWidth: 1,
+        borderColor: colors.slate300,
+        borderRadius: borderRadius.default,
+        padding: spacing.md,
+        fontSize: typography.fontSize.base,
+        color: colors.textPrimary,
+        minHeight: 150,
+        marginBottom: spacing.md,
+    },
+    editActions: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        gap: spacing.md,
+    },
+    editButton: {
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.lg,
+        borderRadius: borderRadius.default,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    editCancelButton: {
+        backgroundColor: colors.slate200,
+    },
+    editSaveButton: {
+        backgroundColor: colors.secondary,
+    },
+    editCancelButtonText: {
+        color: colors.textPrimary,
+        fontWeight: 'bold',
+    },
+    editSaveButtonText: {
+        color: colors.white,
+        fontWeight: 'bold',
+    },
+    editModeButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: spacing.xs,
+        padding: spacing.sm,
+        marginBottom: spacing.sm,
+        borderWidth: 1,
+        borderColor: colors.secondary,
+        borderRadius: borderRadius.default,
+        alignSelf: 'flex-end',
+    },
+    editModeButtonText: {
+        color: colors.secondary,
+        fontWeight: 'bold',
+        fontSize: typography.fontSize.sm,
     },
 });
