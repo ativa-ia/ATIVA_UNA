@@ -68,6 +68,11 @@ export default function TranscriptionScreen() {
     const [visibleAnswers, setVisibleAnswers] = useState<Set<number>>(new Set()); // Controla quais questões mostram resposta
     const [numQuestions, setNumQuestions] = useState(5); // Quantidade de questões do quiz
 
+    // Estados para edição de questões
+    const [editingQuestion, setEditingQuestion] = useState<number | null>(null);
+    const [editedQuestionData, setEditedQuestionData] = useState<any>(null);
+    const [isRegenerating, setIsRegenerating] = useState<number | null>(null);
+
     // Estado do conteúdo gerado (exibido no painel esquerdo)
     const [generatedSummary, setGeneratedSummary] = useState<string | null>(null);
     const [generatedQuiz, setGeneratedQuiz] = useState<any>(null);
@@ -461,6 +466,147 @@ export default function TranscriptionScreen() {
         }
     };
 
+    // Editar questão
+    const handleEditQuestion = (questionIndex: number) => {
+        if (!generatedQuiz) return;
+
+        try {
+            const content = typeof generatedQuiz === 'string'
+                ? JSON.parse(generatedQuiz)
+                : generatedQuiz;
+
+            const question = content.questions[questionIndex];
+
+            setEditedQuestionData({
+                question: question.question || '',
+                options: question.options || ['', '', '', ''],
+                correct: question.correct || 0
+            });
+            setEditingQuestion(questionIndex);
+        } catch (error) {
+            console.error('[EDIT QUESTION] Erro ao carregar questão:', error);
+        }
+    };
+
+    // Salvar questão editada
+    const handleSaveEditedQuestion = async () => {
+        if (editingQuestion === null || !editedQuestionData || !currentActivity || !generatedQuiz) return;
+
+        try {
+            // Validações
+            if (!editedQuestionData.question.trim()) {
+                if (Platform.OS === 'web') {
+                    window.alert('A pergunta não pode estar vazia.');
+                } else {
+                    Alert.alert('Erro', 'A pergunta não pode estar vazia.');
+                }
+                return;
+            }
+
+            const hasEmptyOption = editedQuestionData.options.some((opt: string) => !opt.trim());
+            if (hasEmptyOption) {
+                if (Platform.OS === 'web') {
+                    window.alert('Todas as opções devem ser preenchidas.');
+                } else {
+                    Alert.alert('Erro', 'Todas as opções devem ser preenchidas.');
+                }
+                return;
+            }
+
+            // Atualizar questão no array
+            const content = typeof generatedQuiz === 'string'
+                ? JSON.parse(generatedQuiz)
+                : generatedQuiz;
+
+            const updatedQuestions = [...content.questions];
+            updatedQuestions[editingQuestion] = editedQuestionData;
+
+            const updatedContent = { ...content, questions: updatedQuestions };
+
+            console.log('[EDIT QUESTION] Salvando questão editada:', editingQuestion);
+
+            // Atualizar no backend
+            const result = await updateActivity(currentActivity.id, updatedContent, currentActivity.time_limit);
+
+            if (result.success && result.activity) {
+                setGeneratedQuiz(updatedContent);
+                setCurrentActivity(result.activity);
+                setEditingQuestion(null);
+                setEditedQuestionData(null);
+                console.log('[EDIT QUESTION] Questão salva com sucesso');
+            } else {
+                if (Platform.OS === 'web') {
+                    window.alert('Erro: ' + (result.error || 'Não foi possível salvar a questão.'));
+                } else {
+                    Alert.alert('Erro', result.error || 'Não foi possível salvar a questão.');
+                }
+            }
+        } catch (error) {
+            console.error('[EDIT QUESTION] Erro ao salvar questão:', error);
+            if (Platform.OS === 'web') {
+                window.alert('Erro ao salvar questão.');
+            } else {
+                Alert.alert('Erro', 'Erro ao salvar questão.');
+            }
+        }
+    };
+
+    // Regenerar questão com IA
+    const handleRegenerateQuestion = async (questionIndex: number) => {
+        if (!session || !generatedQuiz || !currentActivity) return;
+
+        try {
+            setIsRegenerating(questionIndex);
+
+            const content = typeof generatedQuiz === 'string'
+                ? JSON.parse(generatedQuiz)
+                : generatedQuiz;
+
+            const currentQuestion = content.questions[questionIndex];
+
+            console.log('[REGENERATE] Regenerando questão:', questionIndex);
+
+            // Chamar IA para gerar nova questão
+            const result = await generateQuiz(session.id, 1);
+
+            if (result.success && result.activity) {
+                const newQuizContent = typeof result.activity.content === 'string'
+                    ? JSON.parse(result.activity.content)
+                    : result.activity.content;
+
+                if (newQuizContent.questions && newQuizContent.questions.length > 0) {
+                    // Substituir questão antiga pela nova
+                    const updatedQuestions = [...content.questions];
+                    updatedQuestions[questionIndex] = newQuizContent.questions[0];
+
+                    const updatedContent = { ...content, questions: updatedQuestions };
+
+                    // Atualizar no backend
+                    const updateResult = await updateActivity(currentActivity.id, updatedContent, currentActivity.time_limit);
+
+                    if (updateResult.success && updateResult.activity) {
+                        setGeneratedQuiz(updatedContent);
+                        setCurrentActivity(updateResult.activity);
+                        console.log('[REGENERATE] Questão regenerada com sucesso');
+                    }
+                } else {
+                    throw new Error('Nenhuma questão gerada');
+                }
+            } else {
+                throw new Error(result.error || 'Erro ao regenerar questão');
+            }
+        } catch (error) {
+            console.error('[REGENERATE] Erro ao regenerar questão:', error);
+            if (Platform.OS === 'web') {
+                window.alert('Erro ao regenerar questão. Tente novamente.');
+            } else {
+                Alert.alert('Erro', 'Erro ao regenerar questão. Tente novamente.');
+            }
+        } finally {
+            setIsRegenerating(null);
+        }
+    };
+
 
     // Criar Pergunta Aberta
     const handleCreateOpenQuestion = async (type: 'doubts' | 'feedback') => {
@@ -569,7 +715,7 @@ export default function TranscriptionScreen() {
                 end={{ x: 1, y: 1 }}
                 style={[styles.header, { paddingTop: insets.top + spacing.sm }]}
             >
-                <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+                <TouchableOpacity style={styles.backButton} onPress={() => router.canGoBack() ? router.back() : router.push('/(teacher)/dashboard')}>
                     <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
                 </TouchableOpacity>
                 <View style={styles.headerCenter}>
@@ -689,17 +835,59 @@ export default function TranscriptionScreen() {
                                                                 {String.fromCharCode(65 + idx)}) {opt}
                                                             </Text>
                                                         ))}
-                                                        {/* Botão de exclusão no canto inferior direito */}
-                                                        <TouchableOpacity
-                                                            style={styles.deleteQuestionButtonBottomRight}
-                                                            onPress={() => handleDeleteQuestion(i)}
-                                                        >
-                                                            <MaterialIcons
-                                                                name="delete"
-                                                                size={20}
-                                                                color="#ef4444"
-                                                            />
-                                                        </TouchableOpacity>
+
+                                                        {/* Botões de ação */}
+                                                        <View style={styles.questionActions}>
+                                                            {/* Botão Editar */}
+                                                            <TouchableOpacity
+                                                                style={styles.actionButton}
+                                                                onPress={() => handleEditQuestion(i)}
+                                                            >
+                                                                <MaterialIcons
+                                                                    name="edit"
+                                                                    size={18}
+                                                                    color={colors.primary}
+                                                                />
+                                                                <Text style={styles.actionButtonText}>Editar</Text>
+                                                            </TouchableOpacity>
+
+                                                            {/* Botão Regenerar */}
+                                                            <TouchableOpacity
+                                                                style={styles.actionButton}
+                                                                onPress={() => handleRegenerateQuestion(i)}
+                                                                disabled={isRegenerating === i}
+                                                            >
+                                                                {isRegenerating === i ? (
+                                                                    <ActivityIndicator size="small" color={colors.secondary} />
+                                                                ) : (
+                                                                    <>
+                                                                        <MaterialIcons
+                                                                            name="refresh"
+                                                                            size={18}
+                                                                            color={colors.secondary}
+                                                                        />
+                                                                        <Text style={[styles.actionButtonText, { color: colors.secondary }]}>
+                                                                            Regenerar
+                                                                        </Text>
+                                                                    </>
+                                                                )}
+                                                            </TouchableOpacity>
+
+                                                            {/* Botão Excluir */}
+                                                            <TouchableOpacity
+                                                                style={styles.actionButton}
+                                                                onPress={() => handleDeleteQuestion(i)}
+                                                            >
+                                                                <MaterialIcons
+                                                                    name="delete"
+                                                                    size={18}
+                                                                    color="#ef4444"
+                                                                />
+                                                                <Text style={[styles.actionButtonText, { color: '#ef4444' }]}>
+                                                                    Excluir
+                                                                </Text>
+                                                            </TouchableOpacity>
+                                                        </View>
                                                     </View>
                                                 ))}
 
@@ -786,6 +974,103 @@ Pressione o botão do microfone para começar a falar."
                     </View>
                 </View>
             </View>
+
+            {/* Modal de Edição de Questão */}
+            <Modal
+                visible={editingQuestion !== null}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setEditingQuestion(null)}
+            >
+                <View style={styles.editModalOverlay}>
+                    <View style={styles.editModal}>
+                        <View style={styles.editModalHeader}>
+                            <Text style={styles.editModalTitle}>Editar Questão</Text>
+                            <TouchableOpacity onPress={() => setEditingQuestion(null)}>
+                                <MaterialIcons name="close" size={24} color={colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView style={styles.editModalContent}>
+                            {/* Pergunta */}
+                            <Text style={styles.editLabel}>Pergunta:</Text>
+                            <TextInput
+                                style={styles.editInput}
+                                value={editedQuestionData?.question || ''}
+                                onChangeText={(text) => setEditedQuestionData({
+                                    ...editedQuestionData,
+                                    question: text
+                                })}
+                                multiline
+                                placeholder="Digite a pergunta..."
+                                placeholderTextColor={colors.slate400}
+                            />
+
+                            {/* Opções */}
+                            {['A', 'B', 'C', 'D'].map((letter, idx) => (
+                                <View key={idx}>
+                                    <Text style={styles.editLabel}>Opção {letter}:</Text>
+                                    <TextInput
+                                        style={styles.editInput}
+                                        value={editedQuestionData?.options?.[idx] || ''}
+                                        onChangeText={(text) => {
+                                            const newOptions = [...(editedQuestionData?.options || ['', '', '', ''])];
+                                            newOptions[idx] = text;
+                                            setEditedQuestionData({
+                                                ...editedQuestionData,
+                                                options: newOptions
+                                            });
+                                        }}
+                                        placeholder={`Digite a opção ${letter}...`}
+                                        placeholderTextColor={colors.slate400}
+                                    />
+                                </View>
+                            ))}
+
+                            {/* Resposta Correta */}
+                            <Text style={styles.editLabel}>Resposta Correta:</Text>
+                            <View style={styles.correctAnswerOptions}>
+                                {['A', 'B', 'C', 'D'].map((letter, idx) => (
+                                    <TouchableOpacity
+                                        key={idx}
+                                        style={[
+                                            styles.correctAnswerOption,
+                                            editedQuestionData?.correct === idx && styles.correctAnswerOptionSelected
+                                        ]}
+                                        onPress={() => setEditedQuestionData({
+                                            ...editedQuestionData,
+                                            correct: idx
+                                        })}
+                                    >
+                                        <Text style={[
+                                            styles.correctAnswerOptionText,
+                                            editedQuestionData?.correct === idx && styles.correctAnswerOptionTextSelected
+                                        ]}>
+                                            {letter}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        </ScrollView>
+
+                        <View style={styles.editModalFooter}>
+                            <TouchableOpacity
+                                style={styles.editCancelButton}
+                                onPress={() => setEditingQuestion(null)}
+                            >
+                                <Text style={styles.editCancelButtonText}>Cancelar</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.editSaveButton}
+                                onPress={handleSaveEditedQuestion}
+                            >
+                                <MaterialIcons name="check" size={20} color={colors.white} />
+                                <Text style={styles.editSaveButtonText}>Salvar Questão</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
 
             {/* Footer */}
             <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
@@ -1875,7 +2160,145 @@ const styles = StyleSheet.create({
     individualAnswerButton: {
         padding: spacing.xs,
         borderRadius: borderRadius.default,
-        backgroundColor: 'rgba(79, 70, 229, 0.1)',
+    },
+    questionActions: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        gap: spacing.sm,
+        marginTop: spacing.md,
+        paddingTop: spacing.md,
+        borderTopWidth: 1,
+        borderTopColor: colors.slate200,
+    },
+    actionButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingVertical: spacing.xs,
+        paddingHorizontal: spacing.sm,
+        borderRadius: borderRadius.lg,
+        backgroundColor: colors.slate50,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+    },
+    actionButtonText: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: '600',
+        color: colors.primary,
+    },
+    // Modal de Edição
+    editModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: spacing.base,
+    },
+    editModal: {
+        backgroundColor: colors.white,
+        borderRadius: borderRadius.xl,
+        width: '100%',
+        maxWidth: 600,
+        maxHeight: '90%',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.3,
+        shadowRadius: 20,
+        elevation: 10,
+    },
+    editModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: spacing.lg,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.slate200,
+    },
+    editModalTitle: {
+        fontSize: typography.fontSize.xl,
+        fontWeight: typography.fontWeight.bold,
+        color: colors.textPrimary,
+    },
+    editModalContent: {
+        padding: spacing.lg,
+        maxHeight: 500,
+    },
+    editLabel: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: '600',
+        color: colors.textPrimary,
+        marginBottom: spacing.xs,
+        marginTop: spacing.sm,
+    },
+    editInput: {
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        borderRadius: borderRadius.lg,
+        padding: spacing.sm,
+        fontSize: typography.fontSize.base,
+        color: colors.textPrimary,
+        backgroundColor: colors.white,
+        minHeight: 44,
+    },
+    correctAnswerOptions: {
+        flexDirection: 'row',
+        gap: spacing.sm,
+        marginTop: spacing.xs,
+    },
+    correctAnswerOption: {
+        flex: 1,
+        paddingVertical: spacing.sm,
+        borderRadius: borderRadius.lg,
+        borderWidth: 2,
+        borderColor: colors.slate200,
+        alignItems: 'center',
+        backgroundColor: colors.white,
+    },
+    correctAnswerOptionSelected: {
+        borderColor: colors.secondary,
+        backgroundColor: colors.secondary + '10',
+    },
+    correctAnswerOptionText: {
+        fontSize: typography.fontSize.base,
+        fontWeight: '600',
+        color: colors.textSecondary,
+    },
+    correctAnswerOptionTextSelected: {
+        color: colors.secondary,
+    },
+    editModalFooter: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        gap: spacing.sm,
+        padding: spacing.lg,
+        borderTopWidth: 1,
+        borderTopColor: colors.slate200,
+    },
+    editCancelButton: {
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.lg,
+        borderRadius: borderRadius.lg,
+        borderWidth: 1,
+        borderColor: colors.slate300,
+    },
+    editCancelButtonText: {
+        fontSize: typography.fontSize.base,
+        fontWeight: '600',
+        color: colors.textSecondary,
+    },
+    editSaveButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.lg,
+        borderRadius: borderRadius.lg,
+        backgroundColor: colors.secondary,
+    },
+    editSaveButtonText: {
+        fontSize: typography.fontSize.base,
+        fontWeight: '600',
+        color: colors.white,
     },
 
     listContainer: {

@@ -50,7 +50,8 @@ export default function AttendanceCheckScreen() {
                 <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
                     <TouchableOpacity
                         style={styles.backButton}
-                        onPress={() => router.back()}
+                        onPress={() => router.canGoBack() ? router.back() : router.push('/(teacher)/dashboard')}
+
                     >
                         <MaterialIcons name="arrow-back" size={24} color={colors.white} />
                     </TouchableOpacity>
@@ -118,7 +119,7 @@ export default function AttendanceCheckScreen() {
                                     <MaterialIcons name="cancel" size={28} color="#ef4444" />
                                 )}
                                 {student.present === undefined && (
-                                    <MaterialIcons name="radio-button-unchecked" size={28} color={colors.zinc600} />
+                                    <MaterialIcons name="radio-button-unchecked" size={28} color={colors.slate600} />
                                 )}
                             </View>
                         </TouchableOpacity>
@@ -150,7 +151,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.base,
         paddingVertical: spacing.md,
         borderBottomWidth: 1,
-        borderBottomColor: colors.zinc800,
+        borderBottomColor: colors.slate800,
     },
     backButton: {
         width: 40,
@@ -175,7 +176,7 @@ const styles = StyleSheet.create({
         paddingVertical: spacing.lg,
         paddingHorizontal: spacing.base,
         borderBottomWidth: 1,
-        borderBottomColor: colors.zinc800,
+        borderBottomColor: colors.slate800,
     },
     statItem: {
         alignItems: 'center',
@@ -195,7 +196,7 @@ const styles = StyleSheet.create({
     statLabel: {
         fontSize: typography.fontSize.sm,
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc400,
+        color: colors.slate400,
         marginTop: 4,
     },
     quickAction: {
@@ -274,7 +275,7 @@ const styles = StyleSheet.create({
     footer: {
         padding: spacing.base,
         borderTopWidth: 1,
-        borderTopColor: colors.zinc800,
+        borderTopColor: colors.slate800,
     },
     saveButton: {
         height: 56,
