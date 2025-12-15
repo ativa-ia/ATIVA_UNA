@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -9,8 +9,6 @@ import {
     Alert,
     Platform
 } from 'react-native';
-
-// ... (rest of imports)
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -32,7 +30,7 @@ if (Platform.OS !== 'web') {
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
-import { getStudentHistory, getActivityDetails } from '@/services/api';
+import { getStudentHistory } from '@/services/api';
 
 interface ActivityHistoryItem {
     activity: {
@@ -48,7 +46,7 @@ interface ActivityHistoryItem {
     my_percentage?: number;
 }
 
-export default function ActivitiesScreen() {
+export default function TeacherActivitiesScreen() {
     const insets = useSafeAreaInsets();
     const params = useLocalSearchParams();
     const subjectId = parseInt(params.subjectId as string) || 0;
@@ -70,6 +68,7 @@ export default function ActivitiesScreen() {
             if (pageNumber === 1) setLoading(true);
             else setLoadingMore(true);
 
+            // Reusing getStudentHistory as it returns the activity list for the subject
             const res = await getStudentHistory(subjectId, pageNumber, 8);
             if (res.success) {
                 if (pageNumber === 1) {
@@ -93,8 +92,6 @@ export default function ActivitiesScreen() {
         }
     };
 
-
-
     const renderExportButtons = (item: ActivityHistoryItem) => {
         const isExporting = exportingId === item.activity.id;
 
@@ -112,8 +109,6 @@ export default function ActivitiesScreen() {
                     )}
                     <Text style={styles.actionButtonText}>PDF</Text>
                 </TouchableOpacity>
-
-
             </View>
         );
     };
@@ -126,8 +121,6 @@ export default function ActivitiesScreen() {
 
     const formatDate = (dateString: string) => {
         if (!dateString) return '-';
-        // Backend sends UTC string without Z (e.g. "2023-01-01T12:00:00").
-        // We append 'Z' to treat it as UTC, so Date object converts to local time.
         const date = new Date(dateString.endsWith('Z') ? dateString : dateString + 'Z');
         return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
     };
@@ -141,7 +134,6 @@ export default function ActivitiesScreen() {
 
         if (activity.activity_type === 'summary') {
             const summaryText = activity.content?.summary_text || activity.ai_generated_content || 'Sem conteúdo.';
-            // Convert simple markdown-like breaks to HTML (basic)
             const formattedText = summaryText.replace(/\n/g, '<br>');
 
             contentHtml = `
@@ -168,7 +160,7 @@ export default function ActivitiesScreen() {
 
             contentHtml = `
                 <div class="score-card">
-                    Nota obtida: <strong>${(my_percentage != null) ? Math.round(my_percentage) : 0}%</strong>
+                    Nota obtida: <strong>${typeof my_percentage === 'number' ? Math.round(my_percentage) : 0}%</strong>
                 </div>
                 ${questionsHtml}
             `;
@@ -233,9 +225,6 @@ export default function ActivitiesScreen() {
         }
     };
 
-
-
-
     return (
         <View style={styles.safeArea}>
             <LinearGradient
@@ -250,7 +239,7 @@ export default function ActivitiesScreen() {
                 >
                     <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Atividades e Quizzes</Text>
+                <Text style={styles.headerTitle}>Atividades e Quizzes (Professor)</Text>
                 <View style={styles.placeholder} />
             </LinearGradient>
 
@@ -270,7 +259,7 @@ export default function ActivitiesScreen() {
                 ) : null}
                 renderItem={({ item }) => {
                     const isQuiz = item.activity.activity_type === 'quiz';
-                    const accentColor = isQuiz ? colors.primary : '#F59E0B'; // Indigo for Quiz, Amber for Summary
+                    const accentColor = isQuiz ? colors.primary : '#F59E0B';
                     const iconName = isQuiz ? 'quiz' : 'sticky-note-2';
                     const statusLabel = isQuiz ? 'Quiz' : 'Resumo';
 
@@ -287,15 +276,15 @@ export default function ActivitiesScreen() {
 
                                 <Text style={styles.cardTitle}>{item.activity.title}</Text>
 
-                                {isQuiz && (
+                                {isQuiz && typeof item.my_percentage === 'number' && (
                                     <View style={styles.scoreContainer}>
                                         <View style={[styles.scoreBadge, {
-                                            backgroundColor: (item.my_percentage ?? 0) >= 70 ? '#DCFCE7' : '#FEE2E2',
-                                            borderColor: (item.my_percentage ?? 0) >= 70 ? '#86EFAC' : '#FECACA',
+                                            backgroundColor: item.my_percentage >= 70 ? '#DCFCE7' : '#FEE2E2',
+                                            borderColor: item.my_percentage >= 70 ? '#86EFAC' : '#FECACA',
                                             borderWidth: 1
                                         }]}>
-                                            <Text style={[styles.scoreText, { color: (item.my_percentage ?? 0) >= 70 ? '#166534' : '#991B1B' }]}>
-                                                Nota: {Math.round(item.my_percentage ?? 0)}%
+                                            <Text style={[styles.scoreText, { color: item.my_percentage >= 70 ? '#166534' : '#991B1B' }]}>
+                                                Nota: {Math.round(item.my_percentage)}%
                                             </Text>
                                         </View>
                                     </View>
@@ -316,7 +305,7 @@ export default function ActivitiesScreen() {
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
-        backgroundColor: '#F8FAFC', // Slightly grayer background for contrast
+        backgroundColor: '#F8FAFC',
     },
     header: {
         flexDirection: 'row',
@@ -360,16 +349,15 @@ const styles = StyleSheet.create({
     card: {
         backgroundColor: colors.white,
         borderRadius: borderRadius.lg,
-        padding: spacing.md, // Increased padding
+        padding: spacing.md,
         marginBottom: spacing.md,
-        borderLeftWidth: 6, // The "Flag" effect
-        // Shadow update for "Post-it" feel (lifted)
+        borderLeftWidth: 6,
         shadowColor: "#64748B",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.1,
         shadowRadius: 6,
         elevation: 3,
-        borderWidth: 0, // Remove full border, rely on shadow + left border
+        borderWidth: 0,
     },
     cardHeader: {
         marginBottom: spacing.sm,
@@ -395,7 +383,7 @@ const styles = StyleSheet.create({
         letterSpacing: 0.5,
     },
     cardTitle: {
-        fontSize: 18, // Larger title
+        fontSize: 18,
         fontWeight: '700',
         color: colors.textPrimary,
         marginBottom: 8,
@@ -433,17 +421,12 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 10, // Taller button
+        paddingVertical: 10,
         borderRadius: borderRadius.default,
         gap: 8,
     },
     pdfButton: {
         backgroundColor: colors.danger,
-    },
-    txtButton: {
-        backgroundColor: colors.slate100,
-        borderWidth: 1,
-        borderColor: colors.slate300,
     },
     actionButtonText: {
         fontSize: 14,

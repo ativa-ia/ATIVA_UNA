@@ -81,6 +81,7 @@ export default function TeacherDashboardScreen() {
 
     const navItems: NavItem[] = [
         { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
+        { id: 'calendar', label: 'Calendário', iconName: 'calendar-today' },
     ];
 
     const handleNavPress = (id: string) => {
@@ -89,6 +90,9 @@ export default function TeacherDashboardScreen() {
         switch (id) {
             case 'dashboard':
                 // Already on dashboard
+                break;
+            case 'calendar':
+                router.push('./calendar');
                 break;
         }
     };

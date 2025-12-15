@@ -136,7 +136,10 @@ export default function TeacherSubjectDetailsScreen() {
                         <TouchableOpacity
                             style={styles.secondaryButton}
                             activeOpacity={0.8}
-                            onPress={() => console.log('Atividades')}
+                            onPress={() => router.push({
+                                pathname: '/(teacher)/activities',
+                                params: { subjectId: subjectId, subjectName: subjectName }
+                            })}
                         >
                             <MaterialIcons name="assignment" size={24} color={colors.textPrimary} />
                             <Text style={styles.secondaryButtonText}>Atividades e Quizzes</Text>
