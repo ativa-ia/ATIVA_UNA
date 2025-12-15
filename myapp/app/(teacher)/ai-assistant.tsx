@@ -116,6 +116,7 @@ export default function AIAssistantScreen() {
     const [modalVisible, setModalVisible] = useState(false);
     const [modalContent, setModalContent] = useState<string | object>('');
     const [modalType, setModalType] = useState<'quiz' | 'summary'>('summary');
+    const [showSuggestionInfo, setShowSuggestionInfo] = useState(false);
 
     const handleOpenShare = (text: string) => {
         // Simple heuristic to detect JSON/Quiz
@@ -315,13 +316,19 @@ export default function AIAssistantScreen() {
                 // Gerar sugestões em background sem travar a UI
                 generateSuggestions(subjectId).then(suggestionsResult => {
                     if (suggestionsResult.success && suggestionsResult.suggestions && suggestionsResult.suggestions.length > 0) {
-                        const newActions: QuickAction[] = suggestionsResult.suggestions.map((sug: string, index: number) => ({
-                            id: `sug_${Date.now()}_${index}`,
-                            icon: 'lightbulb',
+                        const firstSuggestion = suggestionsResult.suggestions[0];
+                        const newAction: QuickAction = {
+                            id: `sug_${Date.now()}`,
+                            icon: 'auto-awesome', // Updated icon to match "AI" theme
                             title: 'Sugestão IA',
-                            description: sug
-                        }));
-                        setActiveQuickActions(prev => [...newActions, ...prev]);
+                            description: firstSuggestion
+                        };
+
+                        setActiveQuickActions(prev => {
+                            // Remove existing suggestions to keep only one
+                            const cleanPrev = prev.filter(a => !a.id.startsWith('sug_'));
+                            return [newAction, ...cleanPrev];
+                        });
                     }
                 });
 
@@ -463,6 +470,18 @@ export default function AIAssistantScreen() {
 
                         {/* Quick Actions (Pinned above input) */}
                         <View style={styles.quickActionsContainerCompact}>
+                            {activeQuickActions.some(a => a.id.startsWith('sug_')) && (
+                                <View style={styles.suggestionHeader}>
+                                    <Text style={styles.suggestionTitle}>✨ Sugestão da IA</Text>
+                                    <TouchableOpacity
+                                        style={styles.infoButton}
+                                        onPress={() => setShowSuggestionInfo(true)}
+                                    >
+                                        <MaterialIcons name="info-outline" size={14} color={colors.primary} />
+                                        <Text style={styles.infoButtonText}>O que é isso?</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            )}
                             <ScrollView
                                 horizontal
                                 showsHorizontalScrollIndicator={false}
@@ -622,6 +641,35 @@ export default function AIAssistantScreen() {
                 initialContent={modalContent}
                 type={modalType}
             />
+
+            {/* Modal de Informação da Sugestão */}
+            <Modal
+                visible={showSuggestionInfo}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowSuggestionInfo(false)}
+            >
+                <View style={styles.infoModalOverlay}>
+                    <View style={styles.infoModalContainer}>
+                        <View style={styles.infoModalHeader}>
+                            <MaterialIcons name="auto-awesome" size={24} color={colors.primary} />
+                            <Text style={styles.infoModalTitle}>Sugestão da IA</Text>
+                        </View>
+                        <Text style={styles.infoModalText}>
+                            A Inteligência Artificial analisou os arquivos que você enviou e criou esta pergunta sugerida para iniciar a conversa de forma relevante.
+                        </Text>
+                        <Text style={styles.infoModalTextSecondary}>
+                            Clique na sugestão para enviá-la para o chat.
+                        </Text>
+                        <TouchableOpacity
+                            style={styles.infoModalButton}
+                            onPress={() => setShowSuggestionInfo(false)}
+                        >
+                            <Text style={styles.infoModalButtonText}>Entendi</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
 
         </View >
     );
@@ -1029,6 +1077,30 @@ const styles = StyleSheet.create({
         borderTopWidth: 1,
         borderTopColor: colors.slate200,
     },
+    suggestionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: spacing.base,
+        marginBottom: spacing.xs,
+    },
+    suggestionTitle: {
+        fontSize: 11,
+        fontWeight: 'bold',
+        color: colors.primary,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+    },
+    infoButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    infoButtonText: {
+        fontSize: 11,
+        color: colors.primary,
+        textDecorationLine: 'underline',
+    },
     quickActionsScrollCompact: {
         paddingHorizontal: spacing.base,
         gap: spacing.sm,
@@ -1086,6 +1158,63 @@ const styles = StyleSheet.create({
         fontFamily: typography.fontFamily.display,
         maxWidth: 120,
         fontSize: typography.fontSize.xs,
+    },
+    // Info Modal Styles
+    infoModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: spacing.xl,
+    },
+    infoModalContainer: {
+        backgroundColor: colors.white,
+        borderRadius: borderRadius.xl,
+        padding: spacing.lg,
+        width: '100%',
+        maxWidth: 320,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 12,
+        elevation: 10,
+    },
+    infoModalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+        marginBottom: spacing.md,
+    },
+    infoModalTitle: {
+        fontSize: typography.fontSize.lg,
+        fontWeight: typography.fontWeight.bold,
+        color: colors.textPrimary,
+        fontFamily: typography.fontFamily.display,
+    },
+    infoModalText: {
+        fontSize: typography.fontSize.base,
+        color: colors.textPrimary,
+        lineHeight: 24,
+        fontFamily: typography.fontFamily.body,
+        marginBottom: spacing.sm,
+    },
+    infoModalTextSecondary: {
+        fontSize: typography.fontSize.sm,
+        color: colors.textSecondary,
+        fontFamily: typography.fontFamily.body,
+        marginBottom: spacing.lg,
+    },
+    infoModalButton: {
+        backgroundColor: colors.primary,
+        paddingVertical: spacing.md,
+        borderRadius: borderRadius.lg,
+        alignItems: 'center',
+    },
+    infoModalButtonText: {
+        color: colors.white,
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.semibold,
+        fontFamily: typography.fontFamily.display,
     },
 });
 

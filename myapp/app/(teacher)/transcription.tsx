@@ -86,6 +86,7 @@ export default function TranscriptionScreen() {
     const processedResultsRef = useRef<Set<number>>(new Set());
     const lastFinalTextRef = useRef('');
     const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const sessionRef = useRef<TranscriptionSession | null>(null); // Ref para acesso no cleanup
 
     // Animação
     const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -96,8 +97,18 @@ export default function TranscriptionScreen() {
         initSession();
         return () => {
             if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
+            // Salvar ao sair (cleanup)
+            if (sessionRef.current && savedTextRef.current) {
+                console.log('Salvando transcrição ao sair...');
+                updateTranscription(sessionRef.current.id, savedTextRef.current);
+            }
         };
     }, []);
+
+    // Atualizar ref da sessão sempre que session mudar
+    useEffect(() => {
+        sessionRef.current = session;
+    }, [session]);
 
     const initSession = async () => {
         try {
@@ -107,6 +118,30 @@ export default function TranscriptionScreen() {
                 setSession(result.session);
                 setTranscribedText(result.session.full_transcript || '');
                 savedTextRef.current = result.session.full_transcript || '';
+
+                // Restaurar atividades (Summary/Quiz)
+                if (result.session.activities && result.session.activities.length > 0) {
+                    // Encontrar o último resumo e quiz gerados
+                    const summaryActivity = result.session.activities.find((a) => a.activity_type === 'summary' && a.ai_generated_content);
+                    const quizActivity = result.session.activities.find((a) => a.activity_type === 'quiz' && a.content);
+
+                    if (summaryActivity) {
+                        setGeneratedSummary(summaryActivity.ai_generated_content || null);
+                        // Abrir automaticamente se houver resumo
+                        setDisplayMode('summary');
+                        // Restaurar atividade atual se for resumo
+                        if (!quizActivity) {
+                            setCurrentActivity(summaryActivity);
+                        }
+                    }
+
+                    if (quizActivity) {
+                        setGeneratedQuiz(quizActivity.content || null);
+                        // Se houver quiz também/ou só quiz, muda para quiz
+                        setDisplayMode('quiz');
+                        setCurrentActivity(quizActivity);
+                    }
+                }
             }
         } catch (error) {
             console.error('Erro ao iniciar sessão:', error);
@@ -430,7 +465,11 @@ export default function TranscriptionScreen() {
             console.log('[DELETE QUESTION] Novo tempo limite:', newTimeLimit, 'segundos');
 
             // Atualizar no backend
-            const result = await updateActivity(currentActivity.id, updatedContent, newTimeLimit);
+            // Atualizar no backend
+            const result = await updateActivity(currentActivity.id, {
+                content: updatedContent,
+                time_limit: newTimeLimit
+            });
 
             if (result.success && result.activity) {
                 // Atualizar estados locais
@@ -526,7 +565,10 @@ export default function TranscriptionScreen() {
             console.log('[EDIT QUESTION] Salvando questão editada:', editingQuestion);
 
             // Atualizar no backend
-            const result = await updateActivity(currentActivity.id, updatedContent, currentActivity.time_limit);
+            const result = await updateActivity(currentActivity.id, {
+                content: updatedContent,
+                time_limit: currentActivity.time_limit
+            });
 
             if (result.success && result.activity) {
                 setGeneratedQuiz(updatedContent);
@@ -582,7 +624,11 @@ export default function TranscriptionScreen() {
                     const updatedContent = { ...content, questions: updatedQuestions };
 
                     // Atualizar no backend
-                    const updateResult = await updateActivity(currentActivity.id, updatedContent, currentActivity.time_limit);
+                    // Atualizar no backend
+                    const updateResult = await updateActivity(currentActivity.id, {
+                        content: updatedContent,
+                        time_limit: currentActivity.time_limit
+                    });
 
                     if (updateResult.success && updateResult.activity) {
                         setGeneratedQuiz(updatedContent);
@@ -1002,7 +1048,7 @@ export default function TranscriptionScreen() {
                                         );
                                     } catch (e) {
                                         // Fallback para texto simples se não for JSON válido
-                                        return <Text style={styles.generatedText}>{String(generatedQuiz)}</Text>;
+                                        return <Text style={styles.generatedText}>{typeof generatedQuiz === 'object' ? JSON.stringify(generatedQuiz, null, 2) : String(generatedQuiz)}</Text>;
                                     }
                                 })()}
 
@@ -2451,20 +2497,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
-    editCancelButton: {
-        backgroundColor: colors.slate200,
-    },
-    editSaveButton: {
-        backgroundColor: colors.secondary,
-    },
-    editCancelButtonText: {
-        color: colors.textPrimary,
-        fontWeight: 'bold',
-    },
-    editSaveButtonText: {
-        color: colors.white,
-        fontWeight: 'bold',
-    },
+
     editModeButton: {
         flexDirection: 'row',
         alignItems: 'center',

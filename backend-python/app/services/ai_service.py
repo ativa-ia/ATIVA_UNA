@@ -1,45 +1,65 @@
 """
-Service para integração com Google Gemini AI
+Service para integração com OpenAI (Substituindo Gemini)
 Sistema de Transcrição - Geração de Resumos e Quizzes
 """
 import os
 from dotenv import load_dotenv
-import google.generativeai as genai
+import openai
 from app import db
 from app.models.ai_session import AISession, AIMessage
 from datetime import datetime
+import json
 
 # Carregar .env
 load_dotenv()
 
 # Configurar API key
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+client = None
 
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+if OPENAI_API_KEY:
+    client = openai.OpenAI(api_key=OPENAI_API_KEY)
+
+MODEL_NAME = "gpt-4o-mini" # Modelo rápido e eficiente
+
+def generate_content_with_prompt(system_instruction: str, prompt: str, json_mode: bool = False) -> str:
+    """Gera conteúdo genérico com prompts personalizados via OpenAI"""
+    if not client:
+        return "Erro: OPENAI_API_KEY não configurada."
+        
+    try:
+        kwargs = {
+            "model": MODEL_NAME,
+            "messages": [
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.7
+        }
+        
+        if json_mode:
+            kwargs["response_format"] = { "type": "json_object" }
+            
+        response = client.chat.completions.create(**kwargs)
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"Erro na geração AI: {str(e)}"
 
 
 def generate_summary(text: str, subject_name: str = "Aula") -> str:
     """
-    Gera um resumo do texto transcrito
-    
-    Args:
-        text: Texto transcrito para resumir
-        subject_name: Nome da disciplina/assunto (opcional)
-    
-    Returns:
-        Resumo gerado pela IA ou mensagem de erro
+    Gera um resumo do texto transcrito usando OpenAI
     """
-    if not GEMINI_API_KEY:
-        return "Erro: GEMINI_API_KEY não configurada."
+    if not client:
+        return "Erro: OPENAI_API_KEY não configurada."
     
     try:
-        model = genai.GenerativeModel(
-            model_name='gemini-2.5-flash-lite',
-            system_instruction=f"""Você é um assistente educacional especializado em criar resumos.
-            
+        # Lógica Adaptativa baseada no tamanho do texto
+        word_count = len(text.split())
+        is_long_text = word_count > 300
+        
+        system_instruction = """Você é um assistente educacional especializado em criar resumos.
 Sua tarefa é criar um resumo claro, objetivo e bem estruturado do conteúdo fornecido.
-Se o texto for curto ou apenas um título, use seu conhecimento para explicar o TEMA principal.
 O resumo deve:
 - Destacar os pontos principais
 - Ser organizado em tópicos usando apenas texto simples
@@ -47,35 +67,23 @@ O resumo deve:
 - Ter entre 200-400 palavras
 - NÃO usar markdown, asteriscos, hashtags ou qualquer formatação especial
 - Usar apenas texto puro com quebras de linha para separar parágrafos
-
 Responda sempre em português brasileiro."""
-        )
-        
-        # Lógica Adaptativa baseada no tamanho do texto
-        word_count = len(text.split())
-        is_long_text = word_count > 300  # Threshold para considerar "longo"
-        
+
         if is_long_text:
-            # Texto Grande -> Tópicos Interessantes e Detalhados
             prompt_instruction = f"""O texto fornecido é uma transcrição longa de uma aula de {subject_name}.
 Sua tarefa é criar um RESUMO DETALHADO EM TÓPICOS.
-
 Como a aula foi longa, você deve:
 1. Identificar os tópicos mais interessantes e relevantes discutidos.
 2. Para cada tópico, escreva um parágrafo detalhado explicando o conceito.
 3. Use marcadores (•) para separar os tópicos.
 4. Mantenha um tom educativo e engajador.
 5. Capture a essência e os detalhes importantes da fala do professor.
-
 Formato esperado:
 • Tópico 1: Explicação detalhada...
-• Tópico 2: Explicação detalhada...
-..."""
+• Tópico 2: Explicação detalhada..."""
         else:
-            # Texto Curto -> Resumo Objetivo
             prompt_instruction = f"""O texto fornecido é uma transcrição curta de uma aula de {subject_name}.
 Sua tarefa é criar um RESUMO OBJETIVO e DIRETO.
-
 Como o texto é curto, você deve:
 1. Sintetizar a ideia central em poucos parágrafos.
 2. Ser conciso e ir direto ao ponto.
@@ -89,8 +97,16 @@ Texto da Transcrição:
 
 Resumo:"""
         
-        response = model.generate_content(prompt)
-        return response.text
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7
+        )
+        
+        return response.choices[0].message.content
     
     except Exception as e:
         return f"Erro ao gerar resumo: {str(e)}"
@@ -98,36 +114,15 @@ Resumo:"""
 
 def generate_quiz(text: str, subject_name: str = "Aula", num_questions: int = 20) -> str:
     """
-    Gera um quiz baseado no texto transcrito
-    
-    Args:
-        text: Texto transcrito para gerar quiz
-        subject_name: Nome da disciplina/assunto (opcional)
-        num_questions: Número de questões (1-20)
-    
-    Returns:
-        Quiz formatado gerado pela IA ou mensagem de erro
+    Gera um quiz baseado no texto transcrito usando OpenAI
     """
-    if not GEMINI_API_KEY:
-        return "Erro: GEMINI_API_KEY não configurada."
+    if not client:
+        return "Erro: OPENAI_API_KEY não configurada."
     
     try:
-        model = genai.GenerativeModel(
-            model_name='gemini-2.5-flash-lite',
-            system_instruction=f"""Você é um assistente educacional especializado em criar quizzes sobre conteúdo de aulas.
+        system_instruction = """Você é um assistente educacional especializado em criar quizzes sobre conteúdo de aulas.
 
 REGRA CRÍTICA: O texto abaixo é uma TRANSCRIÇÃO de uma aula. Você deve criar perguntas sobre o CONTEÚDO EDUCACIONAL que está sendo ENSINADO na aula, NÃO sobre o processo de transcrição em si.
-
-EXEMPLOS DO QUE FAZER:
-✅ Se a transcrição diz "A fotossíntese é o processo...", pergunte: "O que é fotossíntese?"
-✅ Se a transcrição diz "Vamos falar sobre a Segunda Guerra Mundial...", pergunte sobre eventos da guerra
-✅ Se a transcrição diz "O teorema de Pitágoras afirma que...", pergunte sobre o teorema
-
-EXEMPLOS DO QUE NÃO FAZER:
-❌ NÃO pergunte "O que é transcrição?"
-❌ NÃO pergunte "Qual a função de uma transcrição?"
-❌ NÃO pergunte sobre o processo de gravar ou transcrever aulas
-❌ NÃO use conhecimento externo - use APENAS o que foi mencionado na transcrição
 
 Cada questão deve:
 - Ser baseada no CONTEÚDO EDUCACIONAL mencionado na transcrição
@@ -136,21 +131,17 @@ Cada questão deve:
 - Ser clara e objetiva
 - Testar compreensão do ASSUNTO da aula, não do processo de transcrição
 
-Formate as questões estritamente como um JSON válido, sem markdown ou code blocks:
-
-{{
+Formato de Saída Obrigatório (JSON):
+{
     "questions": [
-        {{
-            "question": "Pergunta sobre o conteúdo da aula...",
+        {
+            "question": "Enunciado da pergunta...",
             "options": ["Opção A", "Opção B", "Opção C", "Opção D"],
-            "correct": 0
-        }}
+            "correct": 0  // Índice da resposta correta (0-3)
+        }
     ]
-}}
+}"""
 
-Responda apenas com o JSON cru."""
-        )
-        
         prompt = f"""Abaixo está a TRANSCRIÇÃO de uma aula de {subject_name}.
 
 Crie {num_questions} questões de múltipla escolha sobre o CONTEÚDO EDUCACIONAL que está sendo ENSINADO nesta aula.
@@ -164,30 +155,34 @@ IMPORTANTE:
 TRANSCRIÇÃO DA AULA:
 {text}
 
-Retorne apenas o JSON com as questões sobre o conteúdo educacional:"""
+Retorne apenas o JSON com as questões sobre o conteúdo educacional."""
+
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": prompt}
+            ],
+            response_format={ "type": "json_object" },
+            temperature=0.5
+        )
         
-        response = model.generate_content(prompt)
-        return response.text
+        return response.choices[0].message.content
     
     except Exception as e:
         return f"Erro ao gerar quiz: {str(e)}"
-
 
 
 def format_to_quiz_json(text: str) -> str:
     """
     Formata um texto que JÁ É um quiz para JSON, sem alterar o conteúdo.
     """
-    if not GEMINI_API_KEY:
-        return "Erro: GEMINI_API_KEY não configurada."
+    if not client:
+        return "Erro: OPENAI_API_KEY não configurada."
     
     try:
-        model = genai.GenerativeModel(
-            model_name='gemini-2.5-flash-lite',
-            system_instruction=f"""Você é um formatador de dados estrito.
-            
+        system_instruction = """Você é um formatador de dados estrito.
 Sua ÚNICA tarefa é converter o texto de entrada (que contem questões de quiz) para o formato JSON especificado.
-
 REGRAS CRÍTICAS DE FIDELIDADE:
 1. NÃO MUDE O CONTEXTO DAS PERGUNTAS.
 2. NÃO INVENTE NOVAS PERGUNTAS.
@@ -196,16 +191,15 @@ REGRAS CRÍTICAS DE FIDELIDADE:
 5. Se a resposta correta não estiver indicada, marque a opção 0 (A) como correta provisoriamente.
 
 Formato de Saída (JSON puro):
-{{
+{
     "questions": [
-        {{
+        {
             "question": "Texto exato da pergunta original...",
             "options": ["Opção A", "Opção B", "Opção C", "Opção D"],
             "correct": 0
-        }}
+        }
     ]
-}}"""
-        )
+}"""
         
         prompt = f"""Converta o seguinte quiz (texto) para JSON, mantendo o conteúdo original:
 
@@ -213,8 +207,17 @@ Formato de Saída (JSON puro):
 
 JSON:"""
         
-        response = model.generate_content(prompt)
-        return response.text
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": prompt}
+            ],
+            response_format={ "type": "json_object" },
+            temperature=0.1
+        )
+        
+        return response.choices[0].message.content
     
     except Exception as e:
         return f"Erro ao formatar quiz: {str(e)}"
@@ -239,10 +242,9 @@ def create_or_get_session(teacher_id: int, subject_id: int) -> AISession:
     return session
 
 
-
-def _prepare_gemini_chat(teacher_id: int, subject_id: int):
-    """Prepara a sessão e o objeto de chat do Gemini"""
-    if not GEMINI_API_KEY:
+def _prepare_ai_context(teacher_id: int, subject_id: int):
+    """Prepara a sessão e o contexto para o chat"""
+    if not OPENAI_API_KEY:
         raise Exception("API Key não configurada")
         
     session = create_or_get_session(teacher_id, subject_id)
@@ -251,32 +253,7 @@ def _prepare_gemini_chat(teacher_id: int, subject_id: int):
     from app.models.ai_session import AIContextFile, AIMessage
     context_files = AIContextFile.query.filter_by(subject_id=subject_id).all()
     
-    system_context = ""
-    if context_files:
-        system_context = "Você tem acesso aos seguintes documentos para responder:\n\n"
-        for file in context_files:
-            system_context += f"--- DOCUMENTO: {file.filename} ---\n{file.content}\n----------------\n\n"
-        system_context += """
-ATENÇÃO - REGRA CRÍTICA:
-1. Você deve basear sua resposta EXCLUSIVAMENTE nos textos delimitados acima como 'DOCUMENTO'.
-2. O histórico de conversa serve apenas para manter o contexto do diálogo (perguntas anteriores/resoluções).
-3. Se o usuário perguntar sobre um arquivo que NÃO está listado acima (mesmo que tenha sido mencionado no histórico anterior), você DEVE responder: 'Este arquivo não está mais no contexto atual. Por favor, faça o upload dele novamente.'
-4. NÃO invente informações e NÃO use conhecimento prévio externo se o documento não contiver a resposta.
-"""
-
-    # Recuperar histórico
-    history = AIMessage.query.filter_by(session_id=session.id)\
-        .order_by(AIMessage.created_at.desc())\
-        .limit(20)\
-        .all()
-    history.reverse()
-    
-    chat_history = []
-    for msg in history:
-        role = "user" if msg.role == "user" else "model"
-        chat_history.append({"role": role, "parts": [msg.content]})
-        
-    sys_instruction = """Você é um assistente educacional útil, direto e organizado.
+    system_initial_instruction = """Você é um assistente educacional útil, direto e organizado.
 Responda de forma clara, legível e visualmente limpa.
 IMPORTANTE: NÃO USE NENHUMA FORMATAÇÃO MARKDOWN.
 - NÃO use negrito (** ou __).
@@ -288,29 +265,47 @@ IMPORTANTE: NÃO USE NENHUMA FORMATAÇÃO MARKDOWN.
 - Se precisar listar, coloque cada item em um parágrafo novo sem marcadores visuais(somente nesse você pode usar marcadores 1, 2, 3...).
 
 Se tiver acesso a documentos abaixo, use-os como fonte principal."""
-    if system_context:
-        sys_instruction += "\n\n" + system_context
 
-    model = genai.GenerativeModel(
-        model_name='gemini-2.5-flash-lite',
-        system_instruction=sys_instruction
-    )
-    chat = model.start_chat(history=chat_history)
+    system_context = ""
+    if context_files:
+        system_context = "\n\nVocê tem acesso aos seguintes documentos para responder:\n\n"
+        for file in context_files:
+            system_context += f"--- DOCUMENTO: {file.filename} ---\n{file.content}\n----------------\n\n"
+        system_context += """
+ATENÇÃO - REGRA CRÍTICA:
+1. Você deve basear sua resposta EXCLUSIVAMENTE nos textos delimitados acima como 'DOCUMENTO'.
+2. O histórico de conversa serve apenas para manter o contexto do diálogo (perguntas anteriores/resoluções).
+3. Se o usuário perguntar sobre um arquivo que NÃO está listado acima (mesmo que tenha sido mencionado no histórico anterior), você DEVE responder: 'Este arquivo não está mais no contexto atual. Por favor, faça o upload dele novamente.'
+4. NÃO invente informações e NÃO use conhecimento prévio externo se o documento não contiver a resposta.
+"""
+
+    # Recuperar histórico
+    history_msgs = AIMessage.query.filter_by(session_id=session.id)\
+        .order_by(AIMessage.created_at.desc())\
+        .limit(20)\
+        .all()
+    history_msgs.reverse()
     
-    return session, chat, context_files
+    messages = [{"role": "system", "content": system_initial_instruction + system_context}]
+    
+    for msg in history_msgs:
+        role = "user" if msg.role == "user" else "assistant"
+        messages.append({"role": role, "content": msg.content})
+        
+    return session, messages, context_files
 
 
-def chat_with_gemini(teacher_id: int, subject_id: int, message: str) -> str:
-    """Processa mensagem no chat e retorna resposta completa"""
+def chat_with_ai(teacher_id: int, subject_id: int, message: str) -> str:
+    """Processa mensagem no chat e retorna resposta completa usando OpenAI"""
     try:
         from app.models.ai_session import AIMessage
-        session, chat, context_files = _prepare_gemini_chat(teacher_id, subject_id)
+        session, messages, context_files = _prepare_ai_context(teacher_id, subject_id)
         
         # Salvar mensagem do usuário
         user_msg = AIMessage(session_id=session.id, role='user', content=message)
         db.session.add(user_msg)
         
-        # Injetar lembrete de contexto
+        # Injetar lembrete de contexto na última mensagem user
         files_list = [f.filename for f in context_files] if context_files else []
         if files_list:
             files_str = ", ".join(files_list)
@@ -320,8 +315,15 @@ def chat_with_gemini(teacher_id: int, subject_id: int, message: str) -> str:
              system_injection = "\n\n[SISTEMA: NENHUM arquivo anexado atualmente. Se o usuário perguntar sobre documentos antigos, informe que eles não estão mais disponíveis.]"
              message_to_send = message + system_injection
 
-        response = chat.send_message(message_to_send)
-        response_text = response.text
+        # Append user message to history provided to AI
+        messages.append({"role": "user", "content": message_to_send})
+        
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=messages,
+            temperature=0.7
+        )
+        response_text = response.choices[0].message.content
         
         # Salvar resposta
         ai_msg = AIMessage(session_id=session.id, role='assistant', content=response_text)
@@ -332,19 +334,21 @@ def chat_with_gemini(teacher_id: int, subject_id: int, message: str) -> str:
     except Exception as e:
         return f"Erro no chat: {str(e)}"
 
+# Alias for compatibility if needed, but better updated in routes
+chat_with_gemini = chat_with_ai
 
 def chat_stream(teacher_id: int, subject_id: int, message: str):
-    """Gera resposta em stream"""
+    """Gera resposta em stream usando OpenAI"""
     try:
         from app.models.ai_session import AIMessage
-        session, chat, context_files = _prepare_gemini_chat(teacher_id, subject_id)
+        session, messages, context_files = _prepare_ai_context(teacher_id, subject_id)
         
         # Salvar mensagem do usuário
         user_msg = AIMessage(session_id=session.id, role='user', content=message)
         db.session.add(user_msg)
         db.session.commit() # Commit user msg before streaming
         
-        # Injetar lembrete de contexto
+        # Injetar lembrete
         files_list = [f.filename for f in context_files] if context_files else []
         if files_list:
             files_str = ", ".join(files_list)
@@ -354,13 +358,22 @@ def chat_stream(teacher_id: int, subject_id: int, message: str):
              system_injection = "\n\n[SISTEMA: NENHUM arquivo anexado atualmente. Se o usuário perguntar sobre documentos antigos, informe que eles não estão mais disponíveis.]"
              message_to_send = message + system_injection
 
-        response = chat.send_message(message_to_send, stream=True)
+        messages.append({"role": "user", "content": message_to_send})
+
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=messages,
+            temperature=0.7,
+            stream=True
+        )
+        
         accumulated_text = ""
         
         for chunk in response:
-            if chunk.text:
-                yield chunk.text
-                accumulated_text += chunk.text
+            if chunk.choices[0].delta.content:
+                content = chunk.choices[0].delta.content
+                yield content
+                accumulated_text += content
         
         # Salvar resposta completa no final
         ai_msg = AIMessage(session_id=session.id, role='assistant', content=accumulated_text)
@@ -374,30 +387,28 @@ def chat_stream(teacher_id: int, subject_id: int, message: str):
 def generate_study_questions(text: str) -> list[str]:
     """
     Gera 3 sugestões de perguntas baseadas no texto fornecido.
-    
-    Args:
-        text: Texto extraído do arquivo.
-    
-    Returns:
-        Lista de strings contendo as perguntas.
     """
-    if not GEMINI_API_KEY:
+    if not client:
         return []
 
     try:
-        model = genai.GenerativeModel('gemini-2.5-flash-lite')
-        
         prompt = f"""Baseado no texto abaixo, gere 3 perguntas curtas e instigantes que um estudante poderia fazer para entender melhor o conteúdo.
-        Retorne APENAS as perguntas separadas por quebra de linha. Nenhuma numeração ou texto adicional.
+Retorne APENAS as perguntas separadas por quebra de linha. Nenhuma numeração ou texto adicional.
+
+Texto:
+{text[:10000]} # Limitar contexto
+
+Perguntas:"""
         
-        Texto:
-        {text[:10000]} # Limitar contexto para garantir rapidez
-        
-        Perguntas:"""
-        
-        response = model.generate_content(prompt)
-        questions = [q.strip() for q in response.text.strip().split('\n') if q.strip()]
-        return questions[:3] # Garantir apenas 3
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7
+        )
+        questions = [q.strip() for q in response.choices[0].message.content.strip().split('\n') if q.strip()]
+        return questions[:3]
     except Exception as e:
         print(f"Erro ao gerar sugestões: {e}")
         return []
