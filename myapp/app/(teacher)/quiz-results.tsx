@@ -17,6 +17,11 @@ import { getQuizReport, endQuiz, QuizReport } from '@/services/quiz';
 import { getLiveActivityReport, endLiveActivity, exportActivityPDF } from '@/services/api';
 import RaceVisualization from '@/components/quiz/RaceVisualization';
 import PodiumDisplay from '@/components/quiz/PodiumDisplay';
+import PerformanceDistributionChart from '@/components/quiz/PerformanceDistributionChart';
+import ScoreDistributionGraph from '@/components/quiz/ScoreDistributionGraph';
+import TimeAnalysisDashboard from '@/components/quiz/TimeAnalysisDashboard';
+import QuestionDifficultyChart from '@/components/quiz/QuestionDifficultyChart';
+import ComparativeStatsPanel from '@/components/quiz/ComparativeStatsPanel';
 import { useWebSocket } from '@/hooks/useWebSocket';
 
 /**
@@ -345,15 +350,7 @@ export default function QuizResultsScreen() {
                     )}
                 </View>
 
-                {/* Average Score */}
-                <View style={styles.averageCard}>
-                    <Text style={styles.sectionTitle}>Média da Turma</Text>
-                    <View style={styles.averageCircle}>
-                        <Text style={styles.averageValue}>{report?.average_score?.toFixed(1) || 0}%</Text>
-                    </View>
-                </View>
-
-                {/* Live Ranking / Podium */}
+                {/* Podium Display - FIRST after quiz ends */}
                 {showPodium && ranking.filter((r: any) => r.status === 'submitted').length >= 1 ? (
                     <View style={styles.section}>
                         <PodiumDisplay
@@ -370,7 +367,59 @@ export default function QuizResultsScreen() {
                                 }))}
                         />
                     </View>
-                ) : ranking.length > 0 ? (
+                ) : null}
+
+                {/* Enhanced Analytics - Only show after quiz ends */}
+                {showPodium && report?.performance_distribution && (
+                    <>
+                        {/* Performance Distribution */}
+                        <PerformanceDistributionChart
+                            distribution={report.performance_distribution}
+                            total={report.response_count}
+                        />
+
+                        {/* Score Distribution */}
+                        {report.score_distribution && (
+                            <ScoreDistributionGraph
+                                distribution={report.score_distribution}
+                            />
+                        )}
+
+                        {/* Time Analytics */}
+                        {report.time_analytics && (
+                            <TimeAnalysisDashboard
+                                timeAnalytics={report.time_analytics}
+                            />
+                        )}
+
+                        {/* Question Difficulty Analysis */}
+                        {report.question_analytics && report.question_analytics.length > 0 && (
+                            <QuestionDifficultyChart
+                                questionAnalytics={report.question_analytics}
+                            />
+                        )}
+
+                        {/* Comparative Statistics */}
+                        {report.comparative_stats && (
+                            <ComparativeStatsPanel
+                                stats={report.comparative_stats}
+                            />
+                        )}
+                    </>
+                )}
+
+                {/* Average Score - Show during active quiz */}
+                {!showPodium && (
+                    <View style={styles.averageCard}>
+                        <Text style={styles.sectionTitle}>Média da Turma</Text>
+                        <View style={styles.averageCircle}>
+                            <Text style={styles.averageValue}>{report?.average_score?.toFixed(1) || 0}%</Text>
+                        </View>
+                    </View>
+                )}
+
+                {/* Live Ranking - Show during active quiz */}
+                {!showPodium && ranking.length > 0 ? (
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>🏁 Ranking ao Vivo</Text>
                         <RaceVisualization
@@ -391,17 +440,32 @@ export default function QuizResultsScreen() {
                     </View>
                 ) : null}
 
-                {/* Worst Question */}
-                {report?.worst_question && (
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>⚠️ Pergunta Mais Errada</Text>
-                        <View style={styles.worstCard}>
-                            <Text style={styles.worstQuestion}>{report.worst_question.question}</Text>
-                            <Text style={styles.worstRate}>
-                                Apenas {report.worst_question.correct_rate?.toFixed(0)}% acertaram
-                            </Text>
-                        </View>
-                    </View>
+                {/* Best and Worst Questions - Only show after quiz ends */}
+                {showPodium && (
+                    <>
+                        {report?.best_question && (
+                            <View style={styles.section}>
+                                <Text style={styles.sectionTitle}>✅ Pergunta Mais Fácil</Text>
+                                <View style={styles.bestCard}>
+                                    <Text style={styles.bestQuestion}>{report.best_question.question}</Text>
+                                    <Text style={styles.bestRate}>
+                                        {report.best_question.correct_rate?.toFixed(0)}% acertaram
+                                    </Text>
+                                </View>
+                            </View>
+                        )}
+                        {report?.worst_question && (
+                            <View style={styles.section}>
+                                <Text style={styles.sectionTitle}>⚠️ Pergunta Mais Difícil</Text>
+                                <View style={styles.worstCard}>
+                                    <Text style={styles.worstQuestion}>{report.worst_question.question}</Text>
+                                    <Text style={styles.worstRate}>
+                                        Apenas {report.worst_question.correct_rate?.toFixed(0)}% acertaram
+                                    </Text>
+                                </View>
+                            </View>
+                        )}
+                    </>
                 )}
 
                 {/* All Responses */}
@@ -683,6 +747,25 @@ const styles = StyleSheet.create({
     worstRate: {
         fontSize: typography.fontSize.xs,
         color: '#ef4444',
+        fontWeight: typography.fontWeight.semibold,
+        fontFamily: typography.fontFamily.display,
+    },
+    bestCard: {
+        backgroundColor: '#f0fdf4', // Green-50
+        borderRadius: borderRadius.lg,
+        padding: spacing.base,
+        borderLeftWidth: 4,
+        borderLeftColor: '#10b981',
+    },
+    bestQuestion: {
+        fontSize: typography.fontSize.base,
+        color: colors.textPrimary,
+        marginBottom: spacing.sm,
+        fontFamily: typography.fontFamily.display,
+    },
+    bestRate: {
+        fontSize: typography.fontSize.xs,
+        color: '#10b981',
         fontWeight: typography.fontWeight.semibold,
         fontFamily: typography.fontFamily.display,
     },
