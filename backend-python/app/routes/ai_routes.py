@@ -3,7 +3,7 @@ Rotas da API de IA
 """
 from flask import Blueprint, request, jsonify, Response, stream_with_context
 from app.middleware.auth_middleware import token_required
-from app.services.ai_service import chat_with_gemini, chat_stream, create_or_get_session
+from app.services.ai_service import chat_with_ai, chat_stream, create_or_get_session, generate_content_with_prompt
 from app.models.ai_session import AISession, AIMessage
 
 ai_bp = Blueprint('ai', __name__)
@@ -57,7 +57,7 @@ def chat(current_user):
         )
     else:
         # Resposta normal
-        response = chat_with_gemini(current_user.id, subject_id, message)
+        response = chat_with_ai(current_user.id, subject_id, message)
         return jsonify({
             'success': True,
             'response': response
@@ -130,13 +130,11 @@ def process_content(current_user):
     
     Body:
     {
-        "content": "string",      # Conteúdo ditado pelo professor
+        "content": "string",
         "action": "string",       # 'quiz', 'summary', 'discussion'
         "subject_id": int
     }
     """
-    import google.generativeai as genai
-    import os
     import json
     
     data = request.get_json()
@@ -154,103 +152,99 @@ def process_content(current_user):
     if action not in ['quiz', 'summary', 'discussion']:
         return jsonify({'success': False, 'error': 'Ação inválida'}), 400
     
-    # Configurar Gemini
-    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-    if not GEMINI_API_KEY:
-        return jsonify({'success': False, 'error': 'GEMINI_API_KEY não configurada'}), 500
-    
-    genai.configure(api_key=GEMINI_API_KEY)
-    
     prompts = {
-        'quiz': f"""Você é um professor criando um quiz educacional.
-
-Com base no seguinte conteúdo:
----
-{content}
----
-
+        'quiz': {
+            'system': """Você é um professor criando um quiz educacional.
 Gere EXATAMENTE 10 perguntas de múltipla escolha em formato JSON.
 Cada pergunta deve ter 4 alternativas (A, B, C, D).
-
 Responda APENAS com o JSON, sem texto adicional:
-{{
+{
   "questions": [
-    {{
+    {
       "question": "Texto da pergunta?",
       "options": ["Alternativa A", "Alternativa B", "Alternativa C", "Alternativa D"],
       "correct": 0
-    }}
+    }
   ]
-}}
-
+}
 IMPORTANTE: "correct" é o índice da resposta correta (0=A, 1=B, 2=C, 3=D)""",
-
-        'summary': f"""Você é um professor criando material didático.
-
-Com base no seguinte conteúdo:
+            'json_mode': True,
+            'template': f"""Com base no seguinte conteúdo:
 ---
 {content}
----
+---"""
+        },
 
+        'summary': {
+            'system': """Você é um professor criando material didático.
 Crie um resumo didático e bem estruturado com:
 1. Título do tema
 2. Pontos principais (em tópicos)
 3. Conceitos-chave para memorizar
 4. Conclusão
-
 Seja claro e objetivo. Use linguagem acessível para estudantes.""",
-
-        'discussion': f"""Você é um professor preparando uma discussão em sala.
-
-Com base no seguinte conteúdo:
+            'json_mode': False,
+            'template': f"""Com base no seguinte conteúdo:
 ---
 {content}
----
+---"""
+        },
 
+        'discussion': {
+            'system': """Você é um professor preparando uma discussão em sala.
 Gere EXATAMENTE 5 perguntas para discussão em grupo.
 As perguntas devem estimular pensamento crítico e debate.
-
 Responda em formato JSON:
-{{
+{
   "questions": [
-    {{
+    {
       "question": "Pergunta para discussão?",
       "objective": "O que a pergunta busca desenvolver nos alunos"
-    }}
+    }
   ]
-}}"""
+}""",
+            'json_mode': True,
+            'template': f"""Com base no seguinte conteúdo:
+---
+{content}
+---"""
+        }
     }
     
     try:
-        model = genai.GenerativeModel('gemini-2.5-flash')
-        response = model.generate_content(prompts[action])
-        result_text = response.text
+        config = prompts[action]
+        result_text = generate_content_with_prompt(
+            system_instruction=config['system'],
+            prompt=config['template'],
+            json_mode=config['json_mode']
+        )
         
         # Para quiz e discussion, tentar parsear como JSON
         if action in ['quiz', 'discussion']:
-            # Limpar resposta de possíveis marcadores markdown
-            clean_text = result_text.strip()
-            if clean_text.startswith('```json'):
-                clean_text = clean_text[7:]
-            if clean_text.startswith('```'):
-                clean_text = clean_text[3:]
-            if clean_text.endswith('```'):
-                clean_text = clean_text[:-3]
-            
             try:
-                parsed = json.loads(clean_text.strip())
+                parsed = json.loads(result_text.strip())
                 return jsonify({
                     'success': True,
                     'action': action,
                     'result': parsed
                 })
             except json.JSONDecodeError:
-                # Se não conseguir parsear, retorna texto bruto
-                return jsonify({
-                    'success': True,
-                    'action': action,
-                    'result': {'raw': result_text}
-                })
+                # Se não conseguir parsear, tenta limpar markdown ou retorna erro
+                try: 
+                    # Last ditch effort for common markdown wrapping
+                    cleaned = result_text.replace('```json', '').replace('```', '').strip()
+                    parsed = json.loads(cleaned)
+                    return jsonify({
+                        'success': True,
+                        'action': action,
+                        'result': parsed
+                    })
+                except:
+                    return jsonify({
+                        'success': True,
+                        'action': action,
+                        'result': {'raw': result_text}
+                    })
         else:
             # Para summary, retorna texto
             return jsonify({

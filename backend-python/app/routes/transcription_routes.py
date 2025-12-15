@@ -41,18 +41,23 @@ def create_session(current_user):
     if not subject_id:
         return jsonify({'success': False, 'error': 'ID da disciplina não fornecido'}), 400
     
-    # Verificar se já existe sessão ativa
-    existing = TranscriptionSession.query.filter_by(
-        subject_id=subject_id,
-        teacher_id=current_user.id,
-        status='active'
+    # Verificar se já existe sessão ativa ou pausada
+    existing = TranscriptionSession.query.filter(
+        TranscriptionSession.subject_id == subject_id,
+        TranscriptionSession.teacher_id == current_user.id,
+        TranscriptionSession.status.in_(['active', 'paused'])
     ).first()
     
     if existing:
+        # Se estiver pausada, retomamos automaticamente ao entrar na tela
+        if existing.status == 'paused':
+            existing.status = 'active'
+            db.session.commit()
+
         return jsonify({
             'success': True,
             'message': 'Sessão existente encontrada',
-            'session': existing.to_dict(include_checkpoints=True)
+            'session': existing.to_dict(include_checkpoints=True, include_activities=True)
         })
     
     # Criar nova sessão
