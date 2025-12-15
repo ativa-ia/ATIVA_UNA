@@ -17,7 +17,7 @@ def generate_quiz_report_pdf(quiz_data, ranking_data, output_path):
     
     Args:
         quiz_data: Dados do quiz (dict)
-        ranking_data: Dados do ranking (list)
+        ranking_data: Dados do ranking e analytics (dict)
         output_path: Caminho para salvar o PDF
     
     Returns:
@@ -116,6 +116,122 @@ def generate_quiz_report_pdf(quiz_data, ranking_data, output_path):
     elements.append(stats_table)
     elements.append(Spacer(1, 20))
     
+    # ========== PERFORMANCE DISTRIBUTION ==========
+    if stats.get('performance_distribution'):
+        elements.append(Paragraph("📈 Distribuição de Desempenho", heading_style))
+        
+        perf_dist = stats['performance_distribution']
+        perf_data = [
+            ['Categoria', 'Faixa', 'Quantidade', 'Percentual'],
+            ['Excelente', '90-100%', str(perf_dist.get('excellent', 0)), 
+             f"{(perf_dist.get('excellent', 0) / response_count * 100):.1f}%" if response_count > 0 else '0%'],
+            ['Bom', '70-89%', str(perf_dist.get('good', 0)),
+             f"{(perf_dist.get('good', 0) / response_count * 100):.1f}%" if response_count > 0 else '0%'],
+            ['Médio', '50-69%', str(perf_dist.get('average', 0)),
+             f"{(perf_dist.get('average', 0) / response_count * 100):.1f}%" if response_count > 0 else '0%'],
+            ['Abaixo da Média', '<50%', str(perf_dist.get('below_average', 0)),
+             f"{(perf_dist.get('below_average', 0) / response_count * 100):.1f}%" if response_count > 0 else '0%'],
+        ]
+        
+        perf_table = Table(perf_data, colWidths=[1.5*inch, 1*inch, 1*inch, 1.5*inch])
+        perf_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), pdf_colors.HexColor('#10b981')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), pdf_colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+            ('BACKGROUND', (0, 1), (-1, 1), pdf_colors.HexColor('#d1fae5')),  # Green-100
+            ('BACKGROUND', (0, 2), (-1, 2), pdf_colors.HexColor('#dbeafe')),  # Blue-100
+            ('BACKGROUND', (0, 3), (-1, 3), pdf_colors.HexColor('#fef3c7')),  # Yellow-100
+            ('BACKGROUND', (0, 4), (-1, 4), pdf_colors.HexColor('#fee2e2')),  # Red-100
+            ('GRID', (0, 0), (-1, -1), 1, pdf_colors.grey),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+        ]))
+        elements.append(perf_table)
+        elements.append(Spacer(1, 20))
+    
+    # ========== TIME ANALYTICS ==========
+    if stats.get('time_analytics'):
+        elements.append(Paragraph("⏱️ Análise de Tempo", heading_style))
+        
+        time_data = stats['time_analytics']
+        time_table_data = [
+            ['Métrica', 'Valor'],
+            ['Tempo Médio', f"{time_data.get('average_completion_time', 0):.1f}s"],
+            ['Mais Rápido', f"{time_data.get('fastest_completion', 0)}s"],
+            ['Mais Lento', f"{time_data.get('slowest_completion', 0)}s"],
+        ]
+        
+        time_table = Table(time_table_data, colWidths=[2.5*inch, 2.5*inch])
+        time_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), pdf_colors.HexColor('#f59e0b')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), pdf_colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('BACKGROUND', (0, 1), (-1, -1), pdf_colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, pdf_colors.grey),
+        ]))
+        elements.append(time_table)
+        elements.append(Spacer(1, 20))
+    
+    # ========== SCORE DISTRIBUTION ==========
+    if stats.get('score_distribution'):
+        elements.append(Paragraph("📊 Distribuição de Notas", heading_style))
+        
+        score_dist_data = [['Faixa', 'Quantidade']]
+        for range_item in stats['score_distribution']:
+            score_dist_data.append([
+                range_item.get('label', ''),
+                str(range_item.get('count', 0))
+            ])
+        
+        score_table = Table(score_dist_data, colWidths=[2.5*inch, 2.5*inch])
+        score_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), pdf_colors.HexColor('#3B82F6')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), pdf_colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('BACKGROUND', (0, 1), (-1, -1), pdf_colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, pdf_colors.grey),
+        ]))
+        elements.append(score_table)
+        elements.append(Spacer(1, 20))
+    
+    # ========== QUESTION ANALYTICS ==========
+    if stats.get('question_analytics'):
+        elements.append(Paragraph("❓ Análise de Questões", heading_style))
+        
+        question_data = [['Questão', 'Acertos', 'Erros', 'Taxa']]
+        for q in stats['question_analytics'][:10]:  # Limitar a 10 questões
+            question_text = q['question_text'][:50] + '...' if len(q['question_text']) > 50 else q['question_text']
+            question_data.append([
+                question_text,
+                str(q['correct_count']),
+                str(q['incorrect_count']),
+                f"{q['correct_rate']:.1f}%"
+            ])
+        
+        question_table = Table(question_data, colWidths=[2.5*inch, 0.8*inch, 0.8*inch, 0.9*inch])
+        question_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), pdf_colors.HexColor('#8b5cf6')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), pdf_colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('BACKGROUND', (0, 1), (-1, -1), pdf_colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, pdf_colors.grey),
+        ]))
+        elements.append(question_table)
+        elements.append(Spacer(1, 20))
+    
     # Ranking completo
     if stats.get('ranking'):
         elements.append(Paragraph("🏅 Ranking Completo", heading_style))
@@ -161,7 +277,7 @@ def generate_activity_report_pdf(activity_data, ranking_data, output_path):
     
     Args:
         activity_data: Dados da atividade (dict)
-        ranking_data: Dados do ranking (dict)
+        ranking_data: Dados do ranking e analytics (dict)
         output_path: Caminho para salvar o PDF
     
     Returns:
@@ -232,8 +348,9 @@ def generate_activity_report_pdf(activity_data, ranking_data, output_path):
     elements.append(Spacer(1, 20))
     
     # Estatísticas
-    enrolled_count = ranking_data.get('enrolled_count', 0)
-    response_count = ranking_data.get('response_count', 0)
+    stats = ranking_data
+    enrolled_count = stats.get('enrolled_count', 0)
+    response_count = stats.get('response_count', 0)
     
     elements.append(Paragraph("📊 Estatísticas Gerais", heading_style))
     
@@ -244,7 +361,7 @@ def generate_activity_report_pdf(activity_data, ranking_data, output_path):
     ]
     
     # Calcular média de pontos se houver ranking
-    ranking_list = ranking_data.get('ranking', [])
+    ranking_list = stats.get('ranking', [])
     if ranking_list:
         avg_points = sum(s['points'] for s in ranking_list) / len(ranking_list)
         avg_percentage = sum(s['percentage'] for s in ranking_list) / len(ranking_list)
@@ -265,6 +382,122 @@ def generate_activity_report_pdf(activity_data, ranking_data, output_path):
     ]))
     elements.append(stats_table)
     elements.append(Spacer(1, 20))
+    
+    # ========== PERFORMANCE DISTRIBUTION ==========
+    if stats.get('performance_distribution'):
+        elements.append(Paragraph("📈 Distribuição de Desempenho", heading_style))
+        
+        perf_dist = stats['performance_distribution']
+        perf_data = [
+            ['Categoria', 'Faixa', 'Quantidade', 'Percentual'],
+            ['Excelente', '90-100%', str(perf_dist.get('excellent', 0)), 
+             f"{(perf_dist.get('excellent', 0) / response_count * 100):.1f}%" if response_count > 0 else '0%'],
+            ['Bom', '70-89%', str(perf_dist.get('good', 0)),
+             f"{(perf_dist.get('good', 0) / response_count * 100):.1f}%" if response_count > 0 else '0%'],
+            ['Médio', '50-69%', str(perf_dist.get('average', 0)),
+             f"{(perf_dist.get('average', 0) / response_count * 100):.1f}%" if response_count > 0 else '0%'],
+            ['Abaixo da Média', '<50%', str(perf_dist.get('below_average', 0)),
+             f"{(perf_dist.get('below_average', 0) / response_count * 100):.1f}%" if response_count > 0 else '0%'],
+        ]
+        
+        perf_table = Table(perf_data, colWidths=[1.5*inch, 1*inch, 1*inch, 1.5*inch])
+        perf_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), pdf_colors.HexColor('#10b981')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), pdf_colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+            ('BACKGROUND', (0, 1), (-1, 1), pdf_colors.HexColor('#d1fae5')),  # Green-100
+            ('BACKGROUND', (0, 2), (-1, 2), pdf_colors.HexColor('#dbeafe')),  # Blue-100
+            ('BACKGROUND', (0, 3), (-1, 3), pdf_colors.HexColor('#fef3c7')),  # Yellow-100
+            ('BACKGROUND', (0, 4), (-1, 4), pdf_colors.HexColor('#fee2e2')),  # Red-100
+            ('GRID', (0, 0), (-1, -1), 1, pdf_colors.grey),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+        ]))
+        elements.append(perf_table)
+        elements.append(Spacer(1, 20))
+    
+    # ========== TIME ANALYTICS ==========
+    if stats.get('time_analytics'):
+        elements.append(Paragraph("⏱️ Análise de Tempo", heading_style))
+        
+        time_data = stats['time_analytics']
+        time_table_data = [
+            ['Métrica', 'Valor'],
+            ['Tempo Médio', f"{time_data.get('average_completion_time', 0):.1f}s"],
+            ['Mais Rápido', f"{time_data.get('fastest_completion', 0)}s"],
+            ['Mais Lento', f"{time_data.get('slowest_completion', 0)}s"],
+        ]
+        
+        time_table = Table(time_table_data, colWidths=[2.5*inch, 2.5*inch])
+        time_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), pdf_colors.HexColor('#f59e0b')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), pdf_colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('BACKGROUND', (0, 1), (-1, -1), pdf_colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, pdf_colors.grey),
+        ]))
+        elements.append(time_table)
+        elements.append(Spacer(1, 20))
+    
+    # ========== SCORE DISTRIBUTION ==========
+    if stats.get('score_distribution'):
+        elements.append(Paragraph("📊 Distribuição de Notas", heading_style))
+        
+        score_dist_data = [['Faixa', 'Quantidade']]
+        for range_item in stats['score_distribution']:
+            score_dist_data.append([
+                range_item.get('label', ''),
+                str(range_item.get('count', 0))
+            ])
+        
+        score_table = Table(score_dist_data, colWidths=[2.5*inch, 2.5*inch])
+        score_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), pdf_colors.HexColor('#3B82F6')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), pdf_colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, -1), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('BACKGROUND', (0, 1), (-1, -1), pdf_colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, pdf_colors.grey),
+        ]))
+        elements.append(score_table)
+        elements.append(Spacer(1, 20))
+    
+    # ========== QUESTION ANALYTICS ==========
+    if stats.get('question_analytics'):
+        elements.append(Paragraph("❓ Análise de Questões", heading_style))
+        
+        question_data = [['Questão', 'Acertos', 'Erros', 'Taxa']]
+        for q in stats['question_analytics'][:10]:  # Limitar a 10 questões
+            question_text = q['question_text'][:50] + '...' if len(q['question_text']) > 50 else q['question_text']
+            question_data.append([
+                question_text,
+                str(q['correct_count']),
+                str(q['incorrect_count']),
+                f"{q['correct_rate']:.1f}%"
+            ])
+        
+        question_table = Table(question_data, colWidths=[2.5*inch, 0.8*inch, 0.8*inch, 0.9*inch])
+        question_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), pdf_colors.HexColor('#8b5cf6')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), pdf_colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ('BACKGROUND', (0, 1), (-1, -1), pdf_colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, pdf_colors.grey),
+        ]))
+        elements.append(question_table)
+        elements.append(Spacer(1, 20))
     
     # Ranking completo
     if ranking_list:

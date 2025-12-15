@@ -18,18 +18,8 @@ import { spacing, borderRadius } from '@/constants/spacing';
 // Configurar idioma Português
 LocaleConfig.locales['pt-br'] = {
     monthNames: [
-        'Janeiro',
-        'Fevereiro',
-        'Março',
-        'Abril',
-        'Maio',
-        'Junho',
-        'Julho',
-        'Agosto',
-        'Setembro',
-        'Outubro',
-        'Novembro',
-        'Dezembro'
+        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
     ],
     monthNamesShort: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'],
     dayNames: ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'],
@@ -38,7 +28,7 @@ LocaleConfig.locales['pt-br'] = {
 };
 LocaleConfig.defaultLocale = 'pt-br';
 
-export default function CalendarScreen() {
+export default function TeacherCalendarScreen() {
     const [activeNavId, setActiveNavId] = useState('calendar');
     const [selectedDate, setSelectedDate] = useState('');
 
@@ -55,9 +45,6 @@ export default function CalendarScreen() {
                 router.push('./dashboard');
                 break;
             case 'calendar':
-                break;
-            case 'grades':
-                router.push('./grades');
                 break;
         }
     };
@@ -191,10 +178,7 @@ const styles = StyleSheet.create({
     },
     content: {
         flex: 1,
-    },
-    scrollContent: {
         padding: spacing.base,
-        paddingBottom: spacing.xl,
     },
     calendarContainer: {
         backgroundColor: colors.white,

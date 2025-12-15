@@ -46,7 +46,52 @@ export interface QuizReport {
         question: string;
         correct_rate: number;
     };
+    best_question?: {
+        question: string;
+        correct_rate: number;
+    };
     all_responses: QuizResponse[];
+
+    // Enhanced Analytics
+    performance_distribution: {
+        excellent: number;    // 90-100%
+        good: number;         // 70-89%
+        average: number;      // 50-69%
+        below_average: number; // <50%
+    };
+
+    question_analytics: Array<{
+        question_id: number;
+        question_text: string;
+        correct_count: number;
+        incorrect_count: number;
+        correct_rate: number;
+        difficulty_level: 'easy' | 'medium' | 'hard';
+        most_common_wrong_answer: number | null;
+    }>;
+
+    time_analytics: {
+        average_completion_time: number;
+        fastest_completion: number;
+        slowest_completion: number;
+        median_time: number;
+    };
+
+    score_distribution: {
+        ranges: Array<{
+            min: number;
+            max: number;
+            count: number;
+            percentage: number;
+        }>;
+    };
+
+    comparative_stats: {
+        class_median: number;
+        class_mode: number;
+        standard_deviation: number;
+        participation_rate: number;
+    };
 }
 
 // Criar quiz a partir das perguntas geradas pela IA

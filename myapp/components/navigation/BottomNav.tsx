@@ -54,7 +54,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                                 <MaterialIcons
                                     name={item.iconName}
                                     size={24}
-                                    color={isActive ? colors.primary : (darkMode ? colors.zinc400 : colors.zinc500)}
+                                    color={isActive ? colors.primary : (darkMode ? colors.slate400 : colors.slate500)}
                                 />
                                 <Text
                                     style={[
@@ -77,7 +77,6 @@ export const BottomNav: React.FC<BottomNavProps> = ({
 
 const styles = StyleSheet.create({
     wrapper: {
-        // No absolute positioning - sits at bottom of flex container
         paddingHorizontal: spacing.base,
         paddingTop: spacing.sm,
     },
@@ -88,26 +87,26 @@ const styles = StyleSheet.create({
         backgroundColor: colors.backgroundDark,
     },
     container: {
-        borderRadius: borderRadius.xl,
-        borderWidth: 1,
-        overflow: 'hidden',
-        elevation: 8,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
+        borderRadius: 24,
+        elevation: 10,
+        shadowColor: '#4F46E5',
+        shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.15,
-        shadowRadius: 12,
+        shadowRadius: 20,
+        // The user specifically asked for the border on the "rectangle behind"
+        borderWidth: 1,
+        borderColor: colors.primaryLight, // Visible colored border (not black)
     },
     containerLight: {
-        backgroundColor: '#f6f6f8',
-        borderColor: colors.zinc200,
+        backgroundColor: '#FFFFFF',
     },
     containerDark: {
-        backgroundColor: '#1a1f2e',
-        borderColor: colors.zinc800,
+        backgroundColor: '#1E293B',
+        borderColor: 'rgba(255, 255, 255, 0.1)',
     },
     content: {
         flexDirection: 'row',
-        height: 60,
+        height: 70,
         maxWidth: 600,
         marginHorizontal: 'auto',
         alignItems: 'center',
@@ -125,15 +124,17 @@ const styles = StyleSheet.create({
         minWidth: 70,
     },
     label: {
-        fontSize: typography.fontSize.xs,
-        fontWeight: typography.fontWeight.medium,
+        fontSize: typography.fontSize.xs, // Restored to 12
+        fontWeight: '600',
         fontFamily: typography.fontFamily.display,
-        color: colors.zinc500,
+        color: colors.slate400,
+        marginTop: 2,
     },
     labelActive: {
         color: colors.primary,
+        fontWeight: 'bold',
     },
     labelDark: {
-        color: colors.zinc400,
+        color: colors.slate500,
     },
 });

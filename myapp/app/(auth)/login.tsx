@@ -78,73 +78,71 @@ export default function LoginScreen() {
 
     return (
         <View style={styles.mainContainer}>
-            {/* Header com Gradiente */}
             <LinearGradient
-                colors={['#4f46e5', '#8b5cf6']}
-                style={styles.headerGradient}
+                colors={['#312e81', '#6366f1', '#a78bfa']} // Deep Indigo -> Indigo -> Soft Purple
+                style={styles.backgroundGradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
             >
-                <SafeAreaView style={styles.safeAreaHeader}>
-                    <View style={styles.logoContainer}>
-                        <MaterialIcons name="school" size={48} color={colors.white} />
-                    </View>
-                    <Text style={styles.title}>Ativa AI</Text>
-                    <Text style={styles.subtitle}>Acesso Rápido</Text>
+                <SafeAreaView style={styles.safeArea}>
+                    <ScrollView
+                        contentContainerStyle={styles.contentContainer}
+                        showsVerticalScrollIndicator={false}
+                    >
+                        {/* Logo / Brand Section */}
+                        <View style={styles.logoSection}>
+                            <View style={styles.logoBackground}>
+                                <MaterialIcons name="school" size={40} color={colors.white} />
+                            </View>
+                            <Text style={styles.appTitle}>ATIVA IA</Text>
+                            <Text style={styles.appTagline}>Acesso Rápido</Text>
+                        </View>
+
+                        {/* Glassmorphism Card */}
+                        <View style={styles.glassCard}>
+
+
+                            <View style={styles.form}>
+                                <Input
+                                    iconName="person"
+                                    placeholder="Seu Nome"
+                                    value={name}
+                                    onChangeText={setName}
+                                    autoCapitalize="words"
+                                />
+
+                                <Input
+                                    iconName="email"
+                                    placeholder="Email"
+                                    keyboardType="email-address"
+                                    autoCapitalize="none"
+                                    value={email}
+                                    onChangeText={setEmail}
+                                />
+                            </View>
+
+                            {statusMessage ? (
+                                <Text style={styles.statusText}>{statusMessage}</Text>
+                            ) : null}
+
+                            <View style={styles.actions}>
+                                <Button
+                                    title="Entrar"
+                                    onPress={handleAccess}
+                                    variant="primary"
+                                    loading={isLoading}
+                                    disabled={isLoading}
+                                />
+                            </View>
+                        </View>
+
+                        <Text style={styles.footerText}>
+                            Acesso seguro e simplificado.{'\n'}
+                            Seus dados estão protegidos.
+                        </Text>
+                    </ScrollView>
                 </SafeAreaView>
             </LinearGradient>
-
-            <SafeAreaView style={styles.safeAreaContent}>
-                <ScrollView
-                    style={styles.container}
-                    contentContainerStyle={styles.content}
-                    showsVerticalScrollIndicator={false}
-                >
-                    <View style={styles.card}>
-                        {/* Form */}
-                        <View style={styles.form}>
-                            <Input
-                                iconName="person"
-                                placeholder="Seu Nome"
-                                value={name}
-                                onChangeText={setName}
-                            />
-                            <Input
-                                iconName="email"
-                                placeholder="E-mail"
-                                keyboardType="email-address"
-                                autoCapitalize="none"
-                                value={email}
-                                onChangeText={setEmail}
-                            />
-                        </View>
-
-                        {/* Status Message */}
-                        {statusMessage ? (
-                            <Text style={styles.statusText}>{statusMessage}</Text>
-                        ) : null}
-
-                        {/* Actions */}
-                        <View style={styles.actions}>
-                            <Button
-                                title="Acessar"
-                                onPress={handleAccess}
-                                variant="primary"
-                                loading={isLoading}
-                                disabled={isLoading}
-                            />
-                        </View>
-                    </View>
-
-                    <View style={styles.footer}>
-                        <Text style={styles.footerText}>
-                            Digite seu nome e email para acessar.{'\n'}
-                            Se você já tem conta, será conectado automaticamente.{'\n'}
-                            Caso contrário, uma conta será criada para você.
-                        </Text>
-                    </View>
-                </ScrollView>
-            </SafeAreaView>
         </View>
     );
 }
@@ -152,89 +150,94 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
     mainContainer: {
         flex: 1,
-        backgroundColor: colors.slate50,
     },
-    headerGradient: {
+    backgroundGradient: {
+        flex: 1,
         width: '100%',
-        paddingBottom: spacing.lg,
-        borderBottomLeftRadius: 24,
-        borderBottomRightRadius: 24,
-        shadowColor: colors.primary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
-        elevation: 8,
+        height: '100%',
     },
-    safeAreaHeader: {
-        alignItems: 'center',
-        paddingTop: spacing.md,
-    },
-    safeAreaContent: {
+    safeArea: {
         flex: 1,
     },
-    container: {
-        flex: 1,
-    },
-    content: {
+    contentContainer: {
         flexGrow: 1,
-        alignItems: 'center',
-        paddingHorizontal: spacing.lg,
-        paddingTop: spacing.md,
-        paddingBottom: spacing['4xl'],
-    },
-    logoContainer: {
-        marginBottom: spacing.xs,
-        alignItems: 'center',
         justifyContent: 'center',
+        padding: spacing.lg,
     },
-    title: {
-        fontSize: typography.fontSize.xl,
-        fontWeight: typography.fontWeight.bold,
+    logoSection: {
+        alignItems: 'center',
+        marginBottom: spacing['2xl'],
+    },
+    logoBackground: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: spacing.md,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.3)',
+    },
+    appTitle: {
+        fontSize: 32,
+        fontWeight: 'bold',
         color: colors.white,
-        letterSpacing: typography.letterSpacing.tight,
-        textAlign: 'center',
+        fontFamily: typography.fontFamily.display,
+        marginBottom: 8,
+        textShadowColor: 'rgba(0,0,0,0.1)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 4,
     },
-    subtitle: {
-        fontSize: typography.fontSize.sm,
+    appTagline: {
+        fontSize: 16,
         color: 'rgba(255, 255, 255, 0.9)',
-        marginTop: 0,
-        fontWeight: typography.fontWeight.medium,
+        fontFamily: typography.fontFamily.body,
     },
-    card: {
+    glassCard: {
+        backgroundColor: 'rgba(255, 255, 255, 0.95)', // High opacity for readability
+        borderRadius: 32,
+        padding: spacing.xl,
         width: '100%',
         maxWidth: 400,
-        backgroundColor: colors.white,
-        borderRadius: borderRadius.xl,
-        padding: spacing.xl,
-        marginTop: spacing.lg, // Add space between header and card
-        shadowColor: colors.primary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-        elevation: 6,
+        alignSelf: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 20 },
+        shadowOpacity: 0.2,
+        shadowRadius: 30,
+        elevation: 10,
+    },
+    welcomeText: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: colors.textPrimary,
+        marginBottom: spacing.lg,
+        textAlign: 'center',
     },
     form: {
-        width: '100%',
-        gap: spacing.base,
+        gap: spacing.md,
+    },
+    inputLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: colors.slate600,
+        marginBottom: 4,
+        marginLeft: 4,
     },
     actions: {
-        width: '100%',
         marginTop: spacing.xl,
     },
     statusText: {
-        color: colors.textSecondary,
-        marginTop: spacing.md,
-        fontSize: typography.fontSize.sm,
         textAlign: 'center',
-    },
-    footer: {
-        marginTop: spacing['2xl'],
-        paddingHorizontal: spacing.xl,
+        marginTop: spacing.md,
+        color: colors.primary,
+        fontWeight: '500',
     },
     footerText: {
-        color: colors.textSecondary,
-        fontSize: typography.fontSize.xs,
+        color: 'rgba(255, 255, 255, 0.7)',
         textAlign: 'center',
-        lineHeight: 20,
+        marginTop: spacing.xl,
+        fontSize: 12,
+        lineHeight: 18,
     }
 });
