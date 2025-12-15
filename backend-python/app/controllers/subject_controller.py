@@ -24,8 +24,19 @@ def get_user_subjects(current_user):
         else:
             return jsonify({'error': 'Invalid user role'}), 400
         
-        # Converter para dicionário
-        subjects_data = [subject.to_dict() for subject in subjects]
+        # Converter para dicionário e adicionar professor
+        subjects_data = []
+        for subject in subjects:
+            s_dict = subject.to_dict()
+            # Buscar professor responsável
+            teaching = Teaching.query.filter_by(subject_id=subject.id).first()
+            if teaching:
+                teacher = User.query.get(teaching.teacher_id)
+                s_dict['professor'] = teacher.name if teacher else 'Professor'
+            else:
+                s_dict['professor'] = 'Professor'
+            
+            subjects_data.append(s_dict)
         
         return jsonify(subjects_data), 200
         
