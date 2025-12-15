@@ -51,8 +51,40 @@ O resumo deve:
 Responda sempre em português brasileiro."""
         )
         
-        prompt = f"""Crie um resumo do seguinte conteúdo de {subject_name}:
+        # Lógica Adaptativa baseada no tamanho do texto
+        word_count = len(text.split())
+        is_long_text = word_count > 300  # Threshold para considerar "longo"
+        
+        if is_long_text:
+            # Texto Grande -> Tópicos Interessantes e Detalhados
+            prompt_instruction = f"""O texto fornecido é uma transcrição longa de uma aula de {subject_name}.
+Sua tarefa é criar um RESUMO DETALHADO EM TÓPICOS.
 
+Como a aula foi longa, você deve:
+1. Identificar os tópicos mais interessantes e relevantes discutidos.
+2. Para cada tópico, escreva um parágrafo detalhado explicando o conceito.
+3. Use marcadores (•) para separar os tópicos.
+4. Mantenha um tom educativo e engajador.
+5. Capture a essência e os detalhes importantes da fala do professor.
+
+Formato esperado:
+• Tópico 1: Explicação detalhada...
+• Tópico 2: Explicação detalhada...
+..."""
+        else:
+            # Texto Curto -> Resumo Objetivo
+            prompt_instruction = f"""O texto fornecido é uma transcrição curta de uma aula de {subject_name}.
+Sua tarefa é criar um RESUMO OBJETIVO e DIRETO.
+
+Como o texto é curto, você deve:
+1. Sintetizar a ideia central em poucos parágrafos.
+2. Ser conciso e ir direto ao ponto.
+3. Não use tópicos, prefira texto corrido (parágrafos).
+4. Resuma o que foi dito de forma clara."""
+
+        prompt = f"""{prompt_instruction}
+
+Texto da Transcrição:
 {text}
 
 Resumo:"""
