@@ -215,8 +215,12 @@ def get_student_materials(current_user):
             subject = Subject.query.get(m.subject_id)
             m_dict['subject'] = subject.name if subject else 'Disciplina'
             m_dict['source'] = 'class' # Material da turma
+            
+            # Map for frontend
+            m_dict['size'] = m_dict.get('file_size')
             if m.uploaded_at:
-                m_dict['upload_date'] = m.uploaded_at.strftime('%d %b')
+                m_dict['uploadDate'] = m.uploaded_at.strftime('%d %b')
+                
             all_materials.append(m_dict)
             
         # Adicionar materiais pessoais
@@ -225,8 +229,13 @@ def get_student_materials(current_user):
             subject = Subject.query.get(m.subject_id)
             m_dict['subject'] = subject.name if subject else 'Disciplina'
             m_dict['source'] = 'personal' # Material pessoal/reforço
+            
+            # Map for frontend
+            m_dict['size'] = m_dict.get('file_size')
+            m_dict['url'] = m_dict.get('content_url')
             if m.created_at:
-                m_dict['upload_date'] = m.created_at.strftime('%d %b')
+                 m_dict['uploadDate'] = m.created_at.strftime('%d %b')
+                 
             all_materials.append(m_dict)
             
         # Ordenar por data (mais recente primeiro)

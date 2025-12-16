@@ -44,6 +44,7 @@ export default function CalendarScreen() {
 
     const navItems: NavItem[] = [
         { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
+        { id: 'materials', label: 'Materiais', iconName: 'folder-open' },
         { id: 'calendar', label: 'Calendário', iconName: 'calendar-today' },
     ];
 
@@ -53,6 +54,9 @@ export default function CalendarScreen() {
         switch (id) {
             case 'dashboard':
                 router.push('./dashboard');
+                break;
+            case 'materials':
+                router.push('/(student)/materials');
                 break;
             case 'calendar':
                 break;

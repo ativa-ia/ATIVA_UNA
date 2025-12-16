@@ -31,6 +31,7 @@ export interface Material {
     type: 'pdf' | 'video' | 'link' | 'document';
     uploadDate: string;
     size?: string;
+    url?: string;
 }
 
 export interface Student {

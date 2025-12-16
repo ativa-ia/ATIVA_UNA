@@ -1139,7 +1139,12 @@ export const distributeActivityMaterial = async (activityId: number, file: any, 
 
     if (file) {
         if (Platform.OS === 'web') {
-            formData.append('file', file);
+            // Expo Document Picker on Web returns the File object in the 'file' property of the asset
+            if (file.file) {
+                formData.append('file', file.file);
+            } else {
+                formData.append('file', file);
+            }
         } else {
             formData.append('file', {
                 uri: file.uri,
@@ -1155,7 +1160,7 @@ export const distributeActivityMaterial = async (activityId: number, file: any, 
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${token}`,
-            'Content-Type': 'multipart/form-data',
+            // 'Content-Type': 'multipart/form-data', // Do NOT set this manually with FormData
         },
         body: formData,
     });
