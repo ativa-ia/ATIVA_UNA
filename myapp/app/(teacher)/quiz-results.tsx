@@ -19,7 +19,6 @@ import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { getQuizReport, endQuiz, QuizReport } from '@/services/quiz';
 import { getLiveActivityReport, endLiveActivity, exportActivityPDF, distributeActivityMaterial, generateActivitySummary } from '@/services/api';
-import * as DocumentPicker from 'expo-document-picker';
 import RaceVisualization from '@/components/quiz/RaceVisualization';
 import PodiumDisplay from '@/components/quiz/PodiumDisplay';
 import PerformanceDistributionChart from '@/components/quiz/PerformanceDistributionChart';
@@ -47,10 +46,8 @@ export default function QuizResultsScreen() {
     const [ranking, setRanking] = useState<any[]>([]);
     const [isExportingPDF, setIsExportingPDF] = useState(false);
 
-    // Distribution Modal State
-    const [distModalVisible, setDistModalVisible] = useState(false);
-    const [distType, setDistType] = useState<'file' | 'ai'>('file');
     const [aiSummary, setAiSummary] = useState('');
+    const [customTitle, setCustomTitle] = useState('');
     const [isGeneratingAI, setIsGeneratingAI] = useState(false);
     const [isDistributing, setIsDistributing] = useState(false);
 
@@ -267,17 +264,13 @@ export default function QuizResultsScreen() {
     };
 
     // Material Distribution Logic
-    const openDistributionModal = () => {
-        setDistModalVisible(true);
-        // Reset state
-        setDistType('file');
-        setAiSummary('');
-    };
+
 
     const handleGenerateSummary = async () => {
         const id = activityId > 0 ? activityId : quizId;
         if (!id) return;
 
+        setAiSummary(''); // Clear previous summary to show loading state (switching to empty view)
         setIsGeneratingAI(true);
         try {
             const res = await generateActivitySummary(id);
@@ -302,15 +295,15 @@ export default function QuizResultsScreen() {
             return;
         }
 
+        const titleToSend = customTitle.trim() || 'Conteúdo extra para melhor desempenho';
+
         setIsDistributing(true);
         try {
-            const title = 'Resumo IA: ' + (report?.quiz?.title || 'Atividade');
             // Pass NULL for file, and aiSummary for textContent
-            const response = await distributeActivityMaterial(id, null, title, aiSummary);
+            const response = await distributeActivityMaterial(id, null, titleToSend, aiSummary);
 
             if (response.success) {
                 Alert.alert("Sucesso", response.message || "Material enviado!");
-                setDistModalVisible(false);
             } else {
                 Alert.alert("Erro", response.error || "Erro ao enviar.");
             }
@@ -322,36 +315,7 @@ export default function QuizResultsScreen() {
         }
     };
 
-    const handleSendFile = async () => {
-        const id = activityId > 0 ? activityId : quizId;
-        if (!id) return;
 
-        try {
-            const result = await DocumentPicker.getDocumentAsync({
-                type: 'application/pdf',
-                copyToCacheDirectory: true
-            });
-
-            if (result.canceled) return;
-            const asset = result.assets[0];
-
-            setIsDistributing(true);
-            // Pass asset for file
-            const response = await distributeActivityMaterial(id, asset, 'Material de Reforço - ' + (report?.quiz?.title || 'Quiz'));
-
-            if (response.success) {
-                Alert.alert("Sucesso", response.message || 'Material enviado!');
-                setDistModalVisible(false);
-            } else {
-                Alert.alert("Erro", response.error || 'Erro desconhecido');
-            }
-        } catch (error) {
-            console.error('Erro ao distribuir material:', error);
-            Alert.alert("Erro", "Falha ao enviar arquivo.");
-        } finally {
-            setIsDistributing(false);
-        }
-    };
 
     const isActive = report?.quiz?.status === 'active';
 
@@ -431,25 +395,6 @@ export default function QuizResultsScreen() {
                     {/* End Quiz Button */}
                     {(isActive || showPodium) && (
                         <View style={{ gap: spacing.sm }}>
-                            {!isActive && showPodium && (
-                                <TouchableOpacity
-                                    style={[styles.endButton, { backgroundColor: colors.primary }]}
-                                    onPress={openDistributionModal}
-                                    disabled={isDistributing}
-                                >
-                                    {isDistributing ? (
-                                        <ActivityIndicator size="small" color={colors.white} />
-                                    ) : (
-                                        <>
-                                            <MaterialIcons name="send" size={20} color={colors.white} />
-                                            <Text style={styles.endButtonText}>
-                                                Enviar Material (Abaixo da Média)
-                                            </Text>
-                                        </>
-                                    )}
-                                </TouchableOpacity>
-                            )}
-
                             <TouchableOpacity
                                 style={styles.endButton}
                                 onPress={handleEndQuiz}
@@ -588,6 +533,92 @@ export default function QuizResultsScreen() {
                     </>
                 )}
 
+                {/* AI Reinforcement Card - New Location */}
+                {showPodium && report?.average_score && (
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>✨ Material de Reforço</Text>
+                        <View style={styles.aiCard}>
+                            <View style={styles.aiHeader}>
+                                <View style={styles.aiIconContainer}>
+                                    <MaterialIcons name="auto-awesome" size={24} color={colors.white} />
+                                </View>
+                                <View style={styles.aiInfo}>
+                                    <Text style={styles.aiTitle}>Conteúdo Personalizado</Text>
+                                    <Text style={styles.aiDescription}>
+                                        Gere um resumo automático para ajudar os alunos com desempenho abaixo da média ({report?.average_score?.toFixed(1) || 0}%).
+                                    </Text>
+                                </View>
+                            </View>
+
+                            {!aiSummary ? (
+                                <TouchableOpacity
+                                    style={[styles.generateButton, { backgroundColor: '#059669' }]} // Emerald-600
+                                    onPress={handleGenerateSummary}
+                                    disabled={isGeneratingAI}
+                                >
+                                    {isGeneratingAI ? (
+                                        <ActivityIndicator color={colors.white} />
+                                    ) : (
+                                        <>
+                                            <MaterialIcons name="bolt" size={24} color={colors.white} />
+                                            <Text style={styles.generateButtonText}>Gerar Resumo</Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
+                            ) : (
+                                <View style={styles.aiContentContainer}>
+                                    <View style={styles.inputGroup}>
+                                        <Text style={styles.inputLabel}>Título do Material:</Text>
+                                        <TextInput
+                                            style={styles.titleInput}
+                                            value={customTitle}
+                                            onChangeText={setCustomTitle}
+                                            placeholder="Ex: Resumo sobre..."
+                                            placeholderTextColor={colors.slate400}
+                                        />
+                                    </View>
+
+                                    <View style={styles.summaryContainer}>
+                                        <Text style={styles.summaryLabel}>Resumo Gerado:</Text>
+                                        <TextInput
+                                            style={styles.summaryInput}
+                                            multiline
+                                            value={aiSummary}
+                                            onChangeText={setAiSummary}
+                                            placeholder="O resumo aparecerá aqui..."
+                                            placeholderTextColor={colors.slate400}
+                                        />
+                                    </View>
+
+                                    <View style={styles.aiActionRow}>
+                                        <TouchableOpacity
+                                            style={styles.cancelButton}
+                                            onPress={() => setAiSummary('')}
+                                        >
+                                            <Text style={styles.cancelButtonText}>Cancelar</Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            style={[styles.sendButton, isDistributing && { opacity: 0.7 }]}
+                                            onPress={handleSendAI}
+                                            disabled={isDistributing}
+                                        >
+                                            {isDistributing ? (
+                                                <ActivityIndicator color={colors.white} size="small" />
+                                            ) : (
+                                                <>
+                                                    <Text style={styles.sendButtonText}>Enviar</Text>
+                                                    <MaterialIcons name="send" size={20} color={colors.white} />
+                                                </>
+                                            )}
+                                        </TouchableOpacity>
+                                    </View>
+                                </View>
+                            )}
+                        </View>
+                    </View>
+                )}
+
                 {/* All Responses */}
                 {report?.all_responses && report.all_responses.length > 0 && (
                     <View style={styles.section}>
@@ -612,108 +643,6 @@ export default function QuizResultsScreen() {
                     </View>
                 )}
             </ScrollView>
-
-            {/* Distribution Modal */}
-            <Modal
-                visible={distModalVisible}
-                transparent={true}
-                animationType="slide"
-                onRequestClose={() => setDistModalVisible(false)}
-            >
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Enviar Material de Reforço</Text>
-                            <TouchableOpacity onPress={() => setDistModalVisible(false)}>
-                                <MaterialIcons name="close" size={24} color={colors.textSecondary} />
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.tabContainer}>
-                            <TouchableOpacity
-                                style={[styles.tabButton, distType === 'file' && styles.activeTab]}
-                                onPress={() => setDistType('file')}
-                            >
-                                <MaterialIcons name="upload-file" size={20} color={distType === 'file' ? colors.primary : colors.textSecondary} />
-                                <Text style={[styles.tabText, distType === 'file' && styles.activeTabText]}>Arquivo</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                                style={[styles.tabButton, distType === 'ai' && styles.activeTab]}
-                                onPress={() => setDistType('ai')}
-                            >
-                                <MaterialIcons name="auto-awesome" size={20} color={distType === 'ai' ? colors.primary : colors.textSecondary} />
-                                <Text style={[styles.tabText, distType === 'ai' && styles.activeTabText]}>IA Resumo</Text>
-                            </TouchableOpacity>
-                        </View>
-
-                        <View style={styles.modalBody}>
-                            {distType === 'file' ? (
-                                <View style={styles.fileOptionContainer}>
-                                    <Text style={styles.bodyText}>
-                                        Selecione um arquivo PDF do seu dispositivo para enviar aos alunos com nota abaixo da média.
-                                    </Text>
-                                    <TouchableOpacity
-                                        style={styles.actionButton}
-                                        onPress={handleSendFile}
-                                        disabled={isDistributing}
-                                    >
-                                        {isDistributing ? <ActivityIndicator color="#fff" /> : <Text style={styles.actionButtonText}>Selecionar e Enviar Arquivo</Text>}
-                                    </TouchableOpacity>
-                                </View>
-                            ) : (
-                                <View style={styles.aiOptionContainer}>
-                                    {!aiSummary ? (
-                                        <View style={styles.aiEmptyState}>
-                                            <Text style={styles.bodyText}>
-                                                A IA pode gerar um resumo personalizado do assunto deste Quiz.
-                                            </Text>
-                                            <TouchableOpacity
-                                                style={styles.actionButton}
-                                                onPress={handleGenerateSummary}
-                                                disabled={isGeneratingAI}
-                                            >
-                                                {isGeneratingAI ? <ActivityIndicator color="#fff" /> : <Text style={styles.actionButtonText}>Gerar Resumo com IA</Text>}
-                                            </TouchableOpacity>
-                                        </View>
-                                    ) : (
-                                        <View style={styles.aiResultContainer}>
-                                            <TextInput
-                                                style={styles.summaryInput}
-                                                multiline
-                                                value={aiSummary}
-                                                onChangeText={setAiSummary}
-                                                placeholder="Resumo gerado..."
-                                            />
-                                            <View style={styles.aiActions}>
-                                                <TouchableOpacity
-                                                    style={styles.secondaryButton}
-                                                    onPress={handleGenerateSummary}
-                                                    disabled={isGeneratingAI}
-                                                >
-                                                    <Text style={styles.secondaryButtonText}>Regenerar</Text>
-                                                </TouchableOpacity>
-                                                <TouchableOpacity
-                                                    style={styles.deleteButton}
-                                                    onPress={() => setAiSummary('')}
-                                                >
-                                                    <MaterialIcons name="delete" size={20} color="#ef4444" />
-                                                </TouchableOpacity>
-                                                <TouchableOpacity
-                                                    style={styles.actionButtonSmall}
-                                                    onPress={handleSendAI}
-                                                    disabled={isDistributing}
-                                                >
-                                                    {isDistributing ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.actionButtonText}>Enviar</Text>}
-                                                </TouchableOpacity>
-                                            </View>
-                                        </View>
-                                    )}
-                                </View>
-                            )}
-                        </View>
-                    </View>
-                </View>
-            </Modal>
         </View>
     );
 }
@@ -721,7 +650,7 @@ export default function QuizResultsScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: colors.slate50, // Light Background
+        backgroundColor: colors.slate50,
     },
     centered: {
         justifyContent: 'center',
@@ -738,7 +667,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         paddingHorizontal: spacing.base,
         paddingBottom: spacing.md,
-        backgroundColor: colors.white, // White Header
+        backgroundColor: colors.white,
         borderBottomWidth: 1,
         borderBottomColor: colors.slate200,
     },
@@ -788,7 +717,7 @@ const styles = StyleSheet.create({
     activeCard: {
         backgroundColor: colors.white,
         borderWidth: 1,
-        borderColor: '#10b981', // Border indicates active
+        borderColor: '#10b981',
     },
     endedCard: {
         backgroundColor: colors.white,
@@ -798,375 +727,320 @@ const styles = StyleSheet.create({
     statusHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: spacing.md,
-        marginBottom: spacing.lg,
+        marginBottom: spacing.md,
     },
     statusInfo: {
+        marginLeft: spacing.md,
         flex: 1,
     },
     statusTitle: {
         fontSize: typography.fontSize.sm,
-        color: '#10b981',
-        fontWeight: typography.fontWeight.semibold,
-        fontFamily: typography.fontFamily.display,
+        fontWeight: typography.fontWeight.bold,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        color: colors.slate500,
     },
     quizTitle: {
         fontSize: typography.fontSize.lg,
         fontWeight: typography.fontWeight.bold,
         color: colors.textPrimary,
-        marginTop: spacing.xs,
-        fontFamily: typography.fontFamily.display,
+        marginTop: 2,
     },
     statsRow: {
         flexDirection: 'row',
-        justifyContent: 'space-around',
-        marginBottom: spacing.lg,
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: spacing.md,
+        borderTopWidth: 1,
+        borderTopColor: colors.slate100,
+        marginBottom: spacing.md,
     },
     statItem: {
         alignItems: 'center',
+        flex: 1,
     },
     statValue: {
-        fontSize: typography.fontSize['2xl'],
-        fontWeight: typography.fontWeight.bold,
+        fontSize: 24,
+        fontWeight: 'bold',
         color: colors.textPrimary,
-        fontFamily: typography.fontFamily.display,
     },
     statLabel: {
-        fontSize: typography.fontSize.xs,
+        fontSize: 12,
         color: colors.textSecondary,
-        marginTop: spacing.xs,
-        fontFamily: typography.fontFamily.display,
+        marginTop: 2,
     },
     statDivider: {
         width: 1,
+        height: 30,
         backgroundColor: colors.slate200,
     },
     endButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: spacing.sm,
-        backgroundColor: '#ef4444',
-        paddingVertical: spacing.md,
+        backgroundColor: colors.danger,
+        paddingVertical: 12,
+        paddingHorizontal: spacing.xl,
         borderRadius: borderRadius.lg,
-        shadowColor: '#ef4444',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-        elevation: 2,
+        gap: 8,
     },
     endButtonText: {
-        fontSize: typography.fontSize.base,
-        fontWeight: typography.fontWeight.semibold,
         color: colors.white,
+        fontWeight: 'bold',
+        fontSize: 14,
+    },
+    section: {
+        marginBottom: spacing.lg,
+    },
+    sectionTitle: {
+        fontSize: typography.fontSize.lg,
+        fontWeight: typography.fontWeight.bold,
+        color: colors.textPrimary,
+        marginBottom: spacing.sm,
+        marginLeft: 4,
     },
     averageCard: {
         backgroundColor: colors.white,
-        borderRadius: borderRadius.xl,
         padding: spacing.lg,
+        borderRadius: borderRadius.lg,
         alignItems: 'center',
-        marginBottom: spacing.md,
+        marginBottom: spacing.lg,
         borderWidth: 1,
         borderColor: colors.slate200,
-        shadowColor: colors.primary,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 2,
     },
     averageCircle: {
         width: 100,
         height: 100,
         borderRadius: 50,
-        backgroundColor: 'rgba(16, 185, 129, 0.1)',
-        borderWidth: 3,
-        borderColor: '#10b981',
+        backgroundColor: colors.slate50,
         justifyContent: 'center',
         alignItems: 'center',
-        marginTop: spacing.md,
+        borderWidth: 8,
+        borderColor: colors.primary,
+        marginTop: spacing.sm,
     },
     averageValue: {
-        fontSize: typography.fontSize['2xl'],
-        fontWeight: typography.fontWeight.bold,
-        color: '#10b981',
-        fontFamily: typography.fontFamily.display,
+        fontSize: 28,
+        fontWeight: 'bold',
+        color: colors.primary,
     },
-    section: {
-        backgroundColor: colors.white,
-        borderRadius: borderRadius.xl,
-        padding: spacing.lg,
-        marginBottom: spacing.md,
-        borderWidth: 1,
-        borderColor: colors.slate200,
-        shadowColor: colors.primary,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 2,
-    },
-    sectionTitle: {
-        fontSize: typography.fontSize.base,
-        fontWeight: typography.fontWeight.semibold,
-        color: colors.textPrimary,
-        marginBottom: spacing.md,
-        fontFamily: typography.fontFamily.display,
-    },
-    studentRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: spacing.sm,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.slate100,
-    },
-    medal: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        backgroundColor: colors.slate100,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: spacing.md,
-    },
-    goldMedal: {
-        backgroundColor: '#fef3c7', // Yellow-100
-    },
-    silverMedal: {
-        backgroundColor: '#f3f4f6', // Gray-100
-    },
-    bronzeMedal: {
-        backgroundColor: '#ffedd5', // Orange-100
-    },
-    medalText: {
-        fontSize: typography.fontSize.sm,
-        fontWeight: typography.fontWeight.bold,
-        color: colors.textPrimary,
-    },
-    studentName: {
-        flex: 1,
-        fontSize: typography.fontSize.base,
-        color: colors.textPrimary,
-        fontFamily: typography.fontFamily.display,
-    },
-    studentScore: {
-        fontSize: typography.fontSize.base,
-        fontWeight: typography.fontWeight.bold,
-        color: '#10b981',
-        fontFamily: typography.fontFamily.display,
-    },
-    worstCard: {
-        backgroundColor: '#fef2f2', // Red-50
+    bestCard: {
+        backgroundColor: '#DCFCE7',
         padding: spacing.md,
         borderRadius: borderRadius.lg,
         borderWidth: 1,
-        borderColor: '#fecaca', // Red-200
-    },
-    worstQuestion: {
-        fontSize: typography.fontSize.sm,
-        color: colors.textPrimary,
-        marginBottom: spacing.sm,
-        fontFamily: typography.fontFamily.display,
-    },
-    worstRate: {
-        fontSize: typography.fontSize.xs,
-        color: '#ef4444',
-        fontWeight: typography.fontWeight.semibold,
-        fontFamily: typography.fontFamily.display,
-    },
-    bestCard: {
-        backgroundColor: '#f0fdf4', // Green-50
-        borderRadius: borderRadius.lg,
-        padding: spacing.base,
-        borderLeftWidth: 4,
-        borderLeftColor: '#10b981',
+        borderColor: '#86EFAC',
     },
     bestQuestion: {
-        fontSize: typography.fontSize.base,
-        color: colors.textPrimary,
-        marginBottom: spacing.sm,
-        fontFamily: typography.fontFamily.display,
+        fontSize: 14,
+        color: '#166534',
+        marginBottom: 4,
+        fontWeight: '500',
     },
     bestRate: {
-        fontSize: typography.fontSize.xs,
-        color: '#10b981',
-        fontWeight: typography.fontWeight.semibold,
-        fontFamily: typography.fontFamily.display,
+        fontSize: 12,
+        color: '#15803D',
+        fontWeight: 'bold',
+    },
+    worstCard: {
+        backgroundColor: '#FEE2E2',
+        padding: spacing.md,
+        borderRadius: borderRadius.lg,
+        borderWidth: 1,
+        borderColor: '#FECACA',
+    },
+    worstQuestion: {
+        fontSize: 14,
+        color: '#991B1B',
+        marginBottom: 4,
+        fontWeight: '500',
+    },
+    worstRate: {
+        fontSize: 12,
+        color: '#B91C1C',
+        fontWeight: 'bold',
     },
     responseRow: {
         flexDirection: 'row',
-        alignItems: 'center',
         justifyContent: 'space-between',
-        paddingVertical: spacing.sm,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.slate100,
+        alignItems: 'center',
+        padding: spacing.md,
+        backgroundColor: colors.white,
+        marginBottom: 8,
+        borderRadius: borderRadius.lg,
+        borderWidth: 1,
+        borderColor: colors.slate100,
     },
     responseName: {
-        fontSize: typography.fontSize.sm,
+        fontSize: 14,
+        fontWeight: '500',
         color: colors.textPrimary,
-        fontFamily: typography.fontFamily.display,
     },
     responseScore: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: spacing.md,
+        alignItems: 'flex-end',
     },
     responseScoreText: {
-        fontSize: typography.fontSize.sm,
+        fontSize: 12,
         color: colors.textSecondary,
-        fontFamily: typography.fontFamily.display,
     },
     responsePercent: {
-        fontSize: typography.fontSize.sm,
-        fontWeight: typography.fontWeight.bold,
-        minWidth: 45,
-        textAlign: 'right',
-        fontFamily: typography.fontFamily.display,
+        fontSize: 14,
+        fontWeight: 'bold',
     },
-    goodScore: {
-        color: '#10b981',
-    },
-    mediumScore: {
-        color: '#f59e0b',
-    },
-    badScore: {
-        color: '#ef4444',
-    },
-    // Modal Styles
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'center',
-        padding: spacing.md,
-    },
-    modalContent: {
+    goodScore: { color: '#16a34a' },
+    mediumScore: { color: '#ca8a04' },
+    badScore: { color: '#dc2626' },
+
+    // AI Card Styles
+    aiCard: {
         backgroundColor: colors.white,
         borderRadius: borderRadius.xl,
-        maxHeight: '80%',
+        padding: spacing.lg,
+        borderWidth: 1,
+        borderColor: '#E0E7FF',
+        shadowColor: '#4f46e5',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+        elevation: 4,
         overflow: 'hidden',
     },
-    modalHeader: {
+    aiHeader: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: spacing.lg,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.slate100,
+        gap: spacing.md,
+        marginBottom: spacing.lg,
     },
-    modalTitle: {
-        fontSize: typography.fontSize.lg,
-        fontWeight: typography.fontWeight.bold,
-        color: colors.textPrimary,
-        fontFamily: typography.fontFamily.display,
-    },
-    tabContainer: {
-        flexDirection: 'row',
-        borderBottomWidth: 1,
-        borderBottomColor: colors.slate100,
-    },
-    tabButton: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: spacing.sm,
-        paddingVertical: spacing.md,
-        backgroundColor: colors.slate50,
-    },
-    activeTab: {
-        backgroundColor: colors.white,
-        borderBottomWidth: 2,
-        borderBottomColor: colors.primary,
-    },
-    tabText: {
-        fontSize: typography.fontSize.sm,
-        fontWeight: typography.fontWeight.medium,
-        color: colors.textSecondary,
-    },
-    activeTabText: {
-        color: colors.primary,
-        fontWeight: typography.fontWeight.bold,
-    },
-    modalBody: {
-        padding: spacing.lg,
-    },
-    fileOptionContainer: {
-        alignItems: 'center',
-        gap: spacing.lg,
-        paddingVertical: spacing.xl,
-    },
-    bodyText: {
-        fontSize: typography.fontSize.base,
-        color: colors.textSecondary,
-        textAlign: 'center',
-        lineHeight: 24,
-    },
-    actionButton: {
+    aiIconContainer: {
+        width: 48,
+        height: 48,
+        borderRadius: 12,
         backgroundColor: colors.primary,
-        paddingVertical: spacing.md,
-        paddingHorizontal: spacing.xl,
-        borderRadius: borderRadius.lg,
-        width: '100%',
-        alignItems: 'center',
-    },
-    actionButtonText: {
-        color: colors.white,
-        fontSize: typography.fontSize.base,
-        fontWeight: typography.fontWeight.bold,
-    },
-    aiOptionContainer: {
-        minHeight: 300,
-    },
-    aiEmptyState: {
-        flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        gap: spacing.xl,
-        paddingVertical: spacing.xl,
     },
-    aiResultContainer: {
+    aiInfo: {
         flex: 1,
+        justifyContent: 'center',
+    },
+    aiTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: colors.textPrimary,
+        marginBottom: 4,
+    },
+    aiDescription: {
+        fontSize: 12,
+        color: colors.textSecondary,
+        lineHeight: 18,
+    },
+    generateButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: colors.primary,
+        paddingVertical: 14,
+        borderRadius: borderRadius.lg,
+        gap: 8,
+    },
+    generateButtonText: {
+        color: colors.white,
+        fontSize: 14,
+        fontWeight: 'bold',
+    },
+    aiContentContainer: {
         gap: spacing.md,
     },
-    summaryInput: {
-        flex: 1,
+    inputGroup: {
+        marginBottom: spacing.xs,
+    },
+    inputLabel: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        color: colors.slate500,
+        marginBottom: 8,
+        textTransform: 'uppercase',
+    },
+    titleInput: {
         borderWidth: 1,
         borderColor: colors.slate200,
         borderRadius: borderRadius.lg,
         padding: spacing.md,
-        textAlignVertical: 'top',
-        fontSize: typography.fontSize.base,
+        fontSize: 14,
         color: colors.textPrimary,
         backgroundColor: colors.slate50,
-        minHeight: 200,
     },
-    aiActions: {
+    summaryContainer: {
+        backgroundColor: colors.slate50,
+        borderRadius: borderRadius.lg,
+        padding: spacing.md,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+    },
+    summaryLabel: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        color: colors.slate500,
+        marginBottom: 8,
+        textTransform: 'uppercase',
+    },
+    summaryInput: {
+        fontSize: 14,
+        color: colors.textPrimary,
+        lineHeight: 22,
+        minHeight: 100,
+        textAlignVertical: 'top',
+    },
+    aiActionRow: {
         flexDirection: 'row',
         gap: spacing.md,
-        justifyContent: 'flex-end',
         alignItems: 'center',
     },
-    secondaryButton: {
-        paddingVertical: spacing.sm,
+    cancelButton: {
+        paddingVertical: 12,
         paddingHorizontal: spacing.md,
         borderRadius: borderRadius.lg,
         backgroundColor: colors.slate100,
-    },
-    secondaryButtonText: {
-        color: colors.textSecondary,
-        fontSize: typography.fontSize.sm,
-        fontWeight: typography.fontWeight.medium,
-    },
-    deleteButton: {
-        padding: spacing.sm,
-        backgroundColor: '#fee2e2',
-        borderRadius: borderRadius.lg,
-    },
-    actionButtonSmall: {
-        backgroundColor: colors.primary,
-        paddingVertical: spacing.sm,
-        paddingHorizontal: spacing.xl,
-        borderRadius: borderRadius.lg,
         alignItems: 'center',
         justifyContent: 'center',
-        minWidth: 100,
+        flex: 1,
+    },
+    cancelButtonText: {
+        color: colors.slate600,
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    secondaryButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: spacing.md,
+        borderRadius: borderRadius.lg,
+        backgroundColor: colors.white,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        gap: 6,
+        flex: 1,
+    },
+    secondaryButtonText: {
+        color: colors.primary,
+        fontSize: 13,
+        fontWeight: '600',
+    },
+    sendButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        paddingHorizontal: spacing.md,
+        borderRadius: borderRadius.lg,
+        backgroundColor: colors.primary,
+        gap: 6,
+        flex: 2,
+    },
+    sendButtonText: {
+        color: colors.white,
+        fontSize: 13,
+        fontWeight: 'bold',
     },
 });

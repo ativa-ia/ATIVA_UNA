@@ -1,0 +1,125 @@
+Erro ao gerar resumo IA: 'LiveActivity' object has no attribute 'questions'
+Traceback (most recent call last):
+  File "C:\Users\Admin\Documents\PvBp\Assistente360\backend-python\app\routes\transcription_routes.py", line 1622, in generate_ai_summary_for_activity
+    questions = activity.questions.get('questions', []) if activity.questions else []
+                                                           ^^^^^^^^^^^^^^^^^^
+AttributeError: 'LiveActivity' object has no attribute 'questions'
+
+Erro ao distribuir material: 'user_id' is an invalid keyword argument for Notification
+Traceback (most recent call last):
+  File "C:\Users\Admin\Documents\PvBp\Assistente360\backend-python\app\routes\transcription_routes.py", line 1584, in distribute_material
+    notif = Notification(
+            ^^^^^^^^^^^^^
+  File "<string>", line 4, in __init__
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\state.py", line 571, in _initialize_instance
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 224, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\state.py", line 569, in _initialize_instance
+    manager.original_init(*mixed[1:], **kwargs)
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\decl_base.py", line 2179, in _declarative_constructor
+    raise TypeError(
+TypeError: 'user_id' is an invalid keyword argument for Notification
+
+Erro ao distribuir material: 'user_id' is an invalid keyword argument for Notification
+Traceback (most recent call last):
+  File "C:\Users\Admin\Documents\PvBp\Assistente360\backend-python\app\routes\transcription_routes.py", line 1584, in distribute_material
+    notif = Notification(
+            ^^^^^^^^^^^^^
+  File "<string>", line 4, in __init__
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\state.py", line 571, in _initialize_instance
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 224, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\state.py", line 569, in _initialize_instance
+    manager.original_init(*mixed[1:], **kwargs)
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\decl_base.py", line 2179, in _declarative_constructor
+    raise TypeError(
+TypeError: 'user_id' is an invalid keyword argument for Notification
+
+Erro ao distribuir material: 'user_id' is an invalid keyword argument for Notification
+Traceback (most recent call last):
+  File "C:\Users\Admin\Documents\PvBp\Assistente360\backend-python\app\routes\transcription_routes.py", line 1584, in distribute_material
+    notif = Notification(
+            ^^^^^^^^^^^^^
+  File "<string>", line 4, in __init__
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\state.py", line 571, in _initialize_instance
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 224, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\state.py", line 569, in _initialize_instance
+    manager.original_init(*mixed[1:], **kwargs)
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\decl_base.py", line 2179, in _declarative_constructor
+    raise TypeError(
+TypeError: 'user_id' is an invalid keyword argument for Notification
+
+Erro ao distribuir material: 'user_id' is an invalid keyword argument for Notification
+Traceback (most recent call last):
+  File "C:\Users\Admin\Documents\PvBp\Assistente360\backend-python\app\routes\transcription_routes.py", line 1607, in distribute_material
+    notif = Notification(
+            ^^^^^^^^^^^^^
+  File "<string>", line 4, in __init__
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\state.py", line 571, in _initialize_instance
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 224, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\state.py", line 569, in _initialize_instance
+    manager.original_init(*mixed[1:], **kwargs)
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\decl_base.py", line 2179, in _declarative_constructor
+    raise TypeError(
+TypeError: 'user_id' is an invalid keyword argument for Notification
+
+Erro ao distribuir material: 'user_id' is an invalid keyword argument for Notification
+Traceback (most recent call last):
+  File "C:\Users\Admin\Documents\PvBp\Assistente360\backend-python\app\routes\transcription_routes.py", line 1607, in distribute_material
+    notif = Notification(
+            ^^^^^^^^^^^^^
+  File "<string>", line 4, in __init__
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\state.py", line 571, in _initialize_instance
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 224, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\state.py", line 569, in _initialize_instance
+    manager.original_init(*mixed[1:], **kwargs)
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\decl_base.py", line 2179, in _declarative_constructor
+    raise TypeError(
+TypeError: 'user_id' is an invalid keyword argument for Notification
+
+Erro ao distribuir material: 'user_id' is an invalid keyword argument for Notification
+Traceback (most recent call last):
+  File "C:\Users\Admin\Documents\PvBp\Assistente360\backend-python\app\routes\transcription_routes.py", line 1607, in distribute_material
+    notif = Notification(
+            ^^^^^^^^^^^^^
+  File "<string>", line 4, in __init__
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\state.py", line 571, in _initialize_instance
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 224, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\state.py", line 569, in _initialize_instance
+    manager.original_init(*mixed[1:], **kwargs)
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\decl_base.py", line 2179, in _declarative_constructor
+    raise TypeError(
+TypeError: 'user_id' is an invalid keyword argument for Notification
+
+Erro ao distribuir material: 'user_id' is an invalid keyword argument for Notification
+Traceback (most recent call last):
+  File "C:\Users\Admin\Documents\PvBp\Assistente360\backend-python\app\routes\transcription_routes.py", line 1607, in distribute_material
+    notif = Notification(
+            ^^^^^^^^^^^^^
+  File "<string>", line 4, in __init__
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\state.py", line 571, in _initialize_instance
+    with util.safe_reraise():
+         ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 224, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\state.py", line 569, in _initialize_instance
+    manager.original_init(*mixed[1:], **kwargs)
+  File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\decl_base.py", line 2179, in _declarative_constructor
+    raise TypeError(
+TypeError: 'user_id' is an invalid keyword argument for Notification
