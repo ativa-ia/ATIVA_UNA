@@ -26,7 +26,17 @@ export default function LiveQuizScreen() {
     const params = useLocalSearchParams();
     const quizData = params.quiz ? JSON.parse(params.quiz as string) : null;
 
-    const [quiz, setQuiz] = useState<Quiz | null>(quizData);
+    const [quiz, setQuiz] = useState<Quiz | null>(() => {
+        if (!quizData) return null;
+        // Force IDs to be indices to ensure alignment with backend enumerate() logic
+        if (quizData.questions) {
+            quizData.questions = quizData.questions.map((q: any, i: number) => ({
+                ...q,
+                id: i // Force usage of index as ID
+            }));
+        }
+        return quizData;
+    });
     const [currentQuestion, setCurrentQuestion] = useState(0);
     const [answers, setAnswers] = useState<Record<string, number>>({});
     const [timeRemaining, setTimeRemaining] = useState(quizData?.time_remaining || 300);
@@ -91,7 +101,7 @@ export default function LiveQuizScreen() {
         const totalQuestions = quiz.questions?.length || 0;
         const minRequired = Math.ceil(totalQuestions * 0.8); // 80% mínimo
 
-        if (!autoSubmit && answeredCount < minRequired) {
+        if (answeredCount < minRequired && !autoSubmit) {
             Alert.alert(
                 '⚠️ Responda Mais Perguntas',
                 `Você precisa responder pelo menos ${minRequired} de ${totalQuestions} perguntas (80%).\n\nVocê respondeu apenas ${answeredCount}.`,
@@ -100,8 +110,18 @@ export default function LiveQuizScreen() {
             return;
         }
 
+        // DEBUG: Mostrar o que está sendo enviado
+        // console.log('Enviando respostas:', JSON.stringify(answers));
+        // Alert.alert('Debug', `Enviando: ${JSON.stringify(answers)}`);
+
         await submitAnswers();
     };
+
+    // Keep a ref of answers to ensure submission function always has latest state
+    const answersRef = useRef(answers);
+    useEffect(() => {
+        answersRef.current = answers;
+    }, [answers]);
 
     const submitAnswers = async () => {
         if (!quiz) return;
@@ -112,9 +132,12 @@ export default function LiveQuizScreen() {
         // Calculate time taken in seconds
         const timeTaken = Math.floor((Date.now() - startTime) / 1000);
 
+        // Use Ref to guarantee latest answers
+        const currentAnswers = answersRef.current;
+
         try {
             const response = await submitActivityResponse(quiz.id, {
-                answers,
+                answers: currentAnswers,
                 time_taken: timeTaken
             });
             console.log('Submit response:', response);
@@ -122,7 +145,7 @@ export default function LiveQuizScreen() {
             if (response.success) {
                 // Use result data from response
                 const resultData = response.result || {
-                    score: Object.keys(answers).length,
+                    score: Object.keys(currentAnswers).length,
                     total: quiz.questions?.length || 0,
                     percentage: 0,
                     points: 0

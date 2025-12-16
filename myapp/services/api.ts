@@ -134,18 +134,19 @@ export interface SubjectDetails extends Subject {
     pending_activities?: number;
 }
 
-export interface Material {
-    id: number;
-    subject_id: number;
-    subject?: string;
-    title: string;
-    type: 'pdf' | 'video' | 'link';
-    url?: string;
-    size?: string;
-    uploaded_by: number;
-    uploaded_at?: string;
-    upload_date?: string;
-}
+import { Material } from '@/types';
+
+// ... (other code)
+
+// Material defined in @/types/index.ts
+// export interface Material {
+//     id: string;
+//     title: string;
+//     subject: string;
+//     type: 'pdf' | 'video' | 'link' | 'document';
+//     uploadDate: string;
+//     size?: string;
+// }
 
 // Buscar disciplinas do usuário logado
 export const getSubjects = async (): Promise<Subject[]> => {
@@ -195,7 +196,18 @@ export const getSubjectMaterials = async (subjectId: number): Promise<Material[]
         },
     });
 
-    return response.json();
+    const data = await response.json();
+
+    // Map API response to Frontend Model
+    return data.map((item: any) => ({
+        id: item.id.toString(),
+        title: item.title,
+        subject: item.subject || 'Disciplina', // Should retrieve from context if missing
+        type: item.type || 'document',
+        uploadDate: item.upload_date || item.uploaded_at || new Date().toISOString(),
+        size: item.size || undefined,
+        url: item.url
+    }));
 };
 
 // ========== TEACHER API ==========
@@ -1115,4 +1127,87 @@ export const convertContent = async (content: string, type: 'quiz' | 'summary') 
         console.error('Erro ao converter conteúdo:', error);
         return { success: false, error: 'Erro de conexão ao converter' };
     }
+};
+
+// Professor: Listar atividades ativas da disciplina
+export const getActiveActivitiesList = async (subjectId: number): Promise<{ success: boolean; activities: LiveActivity[] }> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/transcription/subjects/${subjectId}/active_list`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+    return response.json();
+};
+
+// Professor:// Distribuir material de reforço (Professor)
+export const distributeActivityMaterial = async (activityId: number, file: any, title: string, textContent?: string): Promise<{ success: boolean; message?: string; count?: number; average?: number; error?: string }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const formData = new FormData();
+    formData.append('title', title);
+
+    if (file) {
+        if (Platform.OS === 'web') {
+            formData.append('file', file);
+        } else {
+            formData.append('file', {
+                uri: file.uri,
+                name: file.name,
+                type: file.mimeType || 'application/pdf'
+            } as any);
+        }
+    } else if (textContent) {
+        formData.append('text_content', textContent);
+    }
+
+    const response = await fetch(`${API_URL}/transcription/activities/${activityId}/distribute_material`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data',
+        },
+        body: formData,
+    });
+
+    return response.json();
+};
+
+// Gerar resumo de IA para reforço
+export const generateActivitySummary = async (activityId: number): Promise<{ success: boolean; summary?: string; error?: string }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/activities/${activityId}/ai_summary`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+        },
+    });
+
+    return response.json();
+};
+
+// Obter materiais do aluno (Aluno)
+export const getStudentMaterials = async (): Promise<Material[]> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/subjects/student/materials`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    const data = await response.json();
+
+    // Map API response (snake_case) to Frontend Model (camelCase)
+    return data.map((item: any) => ({
+        id: item.id.toString(),
+        title: item.title,
+        subject: item.subject || 'Geral',
+        type: item.type || 'document',
+        uploadDate: item.upload_date || item.created_at || new Date().toISOString(),
+        size: item.file_size || item.size || undefined,
+        url: item.content_url || item.url
+    }));
 };

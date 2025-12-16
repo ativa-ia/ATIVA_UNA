@@ -228,9 +228,23 @@ class LiveActivityResponse(db.Model):
         total_questions = len(questions)
         
         for i, question in enumerate(questions):
-            student_answer = answers.get(str(i))
-            if student_answer is not None and student_answer == question.get('correct'):
-                correct_count += 1
+            # Tentar encontrar resposta pelo ID da questão ou pelo índice
+            q_id = str(question.get('id', i))
+            student_answer = answers.get(q_id)
+            
+            # Fallback: tentar pelo índice string se não achou pelo ID
+            if student_answer is None and q_id != str(i):
+                student_answer = answers.get(str(i))
+                
+            if student_answer is not None:
+                # Converter para int se necessário para comparar
+                try:
+                    ans_int = int(student_answer)
+                    correct_int = int(question.get('correct'))
+                    if ans_int == correct_int:
+                        correct_count += 1
+                except (ValueError, TypeError):
+                    pass
         
         self.score = correct_count
         self.total = total_questions
