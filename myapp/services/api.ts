@@ -4,10 +4,10 @@ import { supabase } from './supabase';
 
 // URL da API (mude para seu IP local se testar em dispositivo físico)
 // Para desenvolvimento local, use localhost
-export const API_URL = 'http://localhost:3000/api';
+//export const API_URL = 'http://localhost:3000/api';
 
 // Para produção/Vercel, use:
-//export const API_URL = 'https://ativa-ia-9rkb.vercel.app/api';
+export const API_URL = 'https://ativa-ia-9rkb.vercel.app/api';
 
 export interface LoginData {
     email: string;
@@ -878,28 +878,32 @@ export const createOpenQuestion = async (sessionId: number, question: 'doubts' |
 };
 
 // Iniciar atividade para alunos
-export const broadcastActivity = async (activityId: number): Promise<{ success: boolean; activity: LiveActivity; enrolled_students?: number }> => {
+export const broadcastActivity = async (activityId: number, title?: string): Promise<{ success: boolean; activity: LiveActivity; enrolled_students?: number }> => {
     const token = await AsyncStorage.getItem('authToken');
 
     const response = await fetch(`${API_URL}/transcription/activities/${activityId}/broadcast`, {
         method: 'PUT',
         headers: {
+            'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
         },
+        body: JSON.stringify({ title })
     });
 
     return response.json();
 };
 
 // Compartilhar resumo com alunos
-export const shareSummary = async (activityId: number): Promise<{ success: boolean; activity: LiveActivity }> => {
+export const shareSummary = async (activityId: number, title?: string): Promise<{ success: boolean; activity: LiveActivity }> => {
     const token = await AsyncStorage.getItem('authToken');
 
     const response = await fetch(`${API_URL}/transcription/activities/${activityId}/share`, {
         method: 'PUT',
         headers: {
+            'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
         },
+        body: JSON.stringify({ title })
     });
 
     return response.json();

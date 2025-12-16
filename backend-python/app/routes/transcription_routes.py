@@ -472,6 +472,11 @@ def broadcast_activity(current_user, activity_id):
     if activity.status != 'waiting':
         return jsonify({'success': False, 'error': 'Atividade já foi iniciada ou encerrada'}), 400
     
+    # Atualizar título se fornecido
+    data = request.get_json() or {}
+    if 'title' in data and data['title']:
+        activity.title = data['title']
+    
     activity.broadcast()
     
     # Contar alunos matriculados na disciplina
@@ -501,6 +506,11 @@ def share_summary(current_user, activity_id):
     
     if activity.activity_type != 'summary':
         return jsonify({'success': False, 'error': 'Esta ação é apenas para resumos'}), 400
+    
+    # Atualizar título se fornecido
+    data = request.get_json() or {}
+    if 'title' in data and data['title']:
+        activity.title = data['title']
     
     activity.shared_with_students = True
     
