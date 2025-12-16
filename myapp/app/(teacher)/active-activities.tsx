@@ -16,6 +16,7 @@ import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { LiveActivity, getActiveActivitiesList, endLiveActivity } from '@/services/api';
+import ConfirmationModal from '@/components/modals/ConfirmationModal';
 
 export default function ActiveActivitiesScreen() {
     const insets = useSafeAreaInsets();
@@ -26,6 +27,9 @@ export default function ActiveActivitiesScreen() {
     const [activities, setActivities] = useState<LiveActivity[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [modalVisible, setModalVisible] = useState(false);
+    const [selectedActivity, setSelectedActivity] = useState<LiveActivity | null>(null);
+    const [isEnding, setIsEnding] = useState(false);
 
     const loadActivities = async () => {
         if (!subjectId) return;
@@ -51,36 +55,30 @@ export default function ActiveActivitiesScreen() {
         loadActivities();
     };
 
-    const handleEndActivity = async (activity: LiveActivity) => {
-        const confirmEnd = () => {
-            return new Promise((resolve) => {
-                if (Platform.OS === 'web') {
-                    resolve(window.confirm(`Deseja encerrar "${activity.title}"?`));
-                } else {
-                    Alert.alert(
-                        "Encerrar Atividade",
-                        `Deseja encerrar "${activity.title}"?`,
-                        [
-                            { text: "Cancelar", style: "cancel", onPress: () => resolve(false) },
-                            { text: "Encerrar", style: "destructive", onPress: () => resolve(true) }
-                        ]
-                    );
-                }
-            });
-        };
+    const handleEndActivity = (activity: LiveActivity) => {
+        setSelectedActivity(activity);
+        setModalVisible(true);
+    };
 
-        if (await confirmEnd()) {
-            try {
-                const result = await endLiveActivity(activity.id);
-                if (result.success) {
-                    if (Platform.OS !== 'web') Alert.alert("Sucesso", "Atividade encerrada.");
-                    loadActivities(); // Refresh list
-                } else {
-                    alert(result.error || "Falha ao encerrar atividade.");
-                }
-            } catch (error) {
-                alert("Erro de conexão ao encerrar atividade.");
+    const confirmEndActivity = async () => {
+        if (!selectedActivity) return;
+
+        setIsEnding(true);
+        try {
+            const result = await endLiveActivity(selectedActivity.id);
+            if (result.success) {
+                // Remove from list locally immediately for better UX
+                setActivities(prev => prev.filter(a => a.id !== selectedActivity.id));
+                loadActivities(); // Background refresh
+            } else {
+                Alert.alert("Erro", result.error || "Falha ao encerrar atividade.");
             }
+        } catch (error) {
+            Alert.alert("Erro", "Erro de conexão ao encerrar atividade.");
+        } finally {
+            setIsEnding(false);
+            setModalVisible(false);
+            setSelectedActivity(null);
         }
     };
 
@@ -151,6 +149,17 @@ export default function ActiveActivitiesScreen() {
                         </View>
                     ) : null
                 }
+            />
+
+            <ConfirmationModal
+                visible={modalVisible}
+                title="Encerrar Atividade"
+                message={selectedActivity ? `Deseja encerrar "${selectedActivity.title}"?` : "Deseja encerrar esta atividade?"}
+                confirmText={isEnding ? "Encerrando..." : "Encerrar"}
+                cancelText="Cancelar"
+                onCancel={() => setModalVisible(false)}
+                onConfirm={confirmEndActivity}
+                isDestructive={true}
             />
         </View>
     );

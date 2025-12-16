@@ -1507,13 +1507,15 @@ def distribute_material(current_user, activity_id):
     """
     Distribui material (arquivo ou texto) para alunos com nota abaixo da média.
     """
-    from app.models.study_material import StudyMaterial
-    from app.models.notification import Notification
-    from werkzeug.utils import secure_filename
-    from datetime import datetime
-    import os
-    
     try:
+        from app.models.study_material import StudyMaterial
+        from app.models.notification import Notification
+        from werkzeug.utils import secure_filename
+        from datetime import datetime
+        import os
+        import traceback
+        
+        print(f"DTO [START] distribute_material activity_id={activity_id}")
         # Verificar se a requisição tem o arquivo ou conteúdo de texto
         file = request.files.get('file')
         text_content = request.form.get('text_content')
@@ -1598,24 +1600,25 @@ def distribute_material(current_user, activity_id):
         # URL relativa para acesso
         content_url = f"/static/uploads/{filename}"
         
-        # Criar registros de Material e Notificação
+        # Criar registros de Material
         count = 0
+        print(f"DTO [LOOP] Checking {len(target_student_ids)} students")
         for student_id in target_student_ids:
             # Verificar se já não foi enviado (opcional, aqui permitimos reenviar)
-            material = StudyMaterial(
-                student_id=student_id,
-                subject_id=session.subject_id,
-                activity_id=activity_id,
-                title=title,
-                type='pdf', # Simplificação: assumindo PDF por enquanto, ou extrair da extensão
-                content_url=content_url,
-                file_size=file_size
-            )
-            db.session.add(material)
-            
-            # Notificação (Removido pois o modelo Notification é para anúncios gerais)
-            # pass
-            count += 1
+            try:
+                material = StudyMaterial(
+                    student_id=student_id,
+                    subject_id=session.subject_id,
+                    activity_id=activity_id,
+                    title=title,
+                    type='pdf', 
+                    content_url=content_url,
+                    file_size=file_size
+                )
+                db.session.add(material)
+                count += 1
+            except Exception as loop_error:
+                print(f"DTO [LOOP ERROR] Student {student_id}: {loop_error}")
             
         db.session.commit()
         
@@ -1624,6 +1627,12 @@ def distribute_material(current_user, activity_id):
             with open("debug_distribution.txt", "a") as f:
                 f.write(f"Committed {count} materials to DB.\n")
         except: pass
+
+        return jsonify({
+            'success': True,
+            'message': f'Material distribuído para {count} alunos',
+            'count': count
+        })
     except Exception as e:
         import traceback
         error_msg = f"Erro ao distribuir material: {str(e)}\n{traceback.format_exc()}"
