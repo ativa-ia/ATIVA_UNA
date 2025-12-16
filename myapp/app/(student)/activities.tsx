@@ -32,7 +32,7 @@ if (Platform.OS !== 'web') {
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
-import { getStudentHistory, getActivityDetails } from '@/services/api';
+import { getStudentHistory } from '@/services/api';
 
 interface ActivityHistoryItem {
     activity: {
@@ -70,7 +70,7 @@ export default function ActivitiesScreen() {
             if (pageNumber === 1) setLoading(true);
             else setLoadingMore(true);
 
-            const res = await getStudentHistory(subjectId, pageNumber, 8);
+            const res = await getStudentHistory(subjectId);
             if (res.success) {
                 if (pageNumber === 1) {
                     setHistory(res.history);
