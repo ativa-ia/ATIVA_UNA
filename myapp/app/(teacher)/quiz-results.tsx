@@ -9,7 +9,7 @@ import {
     Platform,
     Modal,
     TextInput,
-    Alert, // Import Alert
+    Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -28,6 +28,7 @@ import QuestionDifficultyChart from '@/components/quiz/QuestionDifficultyChart';
 import ComparativeStatsPanel from '@/components/quiz/ComparativeStatsPanel';
 import SupportActionPanel from '@/components/quiz/SupportActionPanel';
 import { useWebSocket } from '@/hooks/useWebSocket';
+import ConfirmationModal from '@/components/modals/ConfirmationModal';
 
 /**
  * QuizResultsScreen - Resultados do Quiz em Tempo Real (Professor)
@@ -51,6 +52,7 @@ export default function QuizResultsScreen() {
     const [customTitle, setCustomTitle] = useState('');
     const [isGeneratingAI, setIsGeneratingAI] = useState(false);
     const [isDistributing, setIsDistributing] = useState(false);
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
 
     // WebSocket para atualizações em tempo real
     const { isConnected, ranking: wsRanking } = useWebSocket({
@@ -296,9 +298,19 @@ export default function QuizResultsScreen() {
             return;
         }
 
+        // Open custom confirmation modal
+        setShowConfirmModal(true);
+    };
+
+    const confirmSendAI = async () => {
+        const id = activityId > 0 ? activityId : quizId;
+        if (!id) return;
+
         const titleToSend = customTitle.trim() || 'Conteúdo extra para melhor desempenho';
 
+        setShowConfirmModal(false); // Close modal first
         setIsDistributing(true);
+
         try {
             // Pass NULL for file, and aiSummary for textContent
             const response = await distributeActivityMaterial(id, null, titleToSend, aiSummary);
@@ -659,6 +671,15 @@ export default function QuizResultsScreen() {
                     </View>
                 )}
             </ScrollView>
+            <ConfirmationModal
+                visible={showConfirmModal}
+                title="Confirmar Envio"
+                message="Deseja enviar este material personalizado para os alunos selecionados?"
+                confirmText="Enviar"
+                cancelText="Cancelar"
+                onCancel={() => setShowConfirmModal(false)}
+                onConfirm={confirmSendAI}
+            />
         </View>
     );
 }

@@ -1030,9 +1030,9 @@ export const submitActivityResponse = async (activityId: number, data: any): Pro
     }
 };
 
-export const getStudentHistory = async (subjectId: number) => {
+export const getStudentHistory = async (subjectId: number, page: number = 1, limit: number = 10) => {
     const token = await AsyncStorage.getItem('authToken');
-    const response = await fetch(`${API_URL}/transcription/subjects/${subjectId}/history`, {
+    const response = await fetch(`${API_URL}/transcription/subjects/${subjectId}/history?page=${page}&per_page=${limit}`, {
         headers: {
             'Authorization': `Bearer ${token}`,
         },
