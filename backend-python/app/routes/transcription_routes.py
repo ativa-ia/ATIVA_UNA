@@ -46,7 +46,7 @@ def create_session(current_user):
         TranscriptionSession.subject_id == subject_id,
         TranscriptionSession.teacher_id == current_user.id,
         TranscriptionSession.status.in_(['active', 'paused'])
-    ).first()
+    ).order_by(TranscriptionSession.id.desc()).first()
     
     if existing:
         # Se estiver pausada, retomamos automaticamente ao entrar na tela
@@ -1056,13 +1056,28 @@ def get_activity_report(current_user, activity_id):
             
             for response in responses:
                 answers = response.response_data.get('answers', {})
-                student_answer = answers.get(str(i))
+                
+                # Tentar encontrar resposta pelo ID (se houver) ou pelo índice
+                q_id = str(question.get('id', i))
+                student_answer = answers.get(q_id)
+                
+                # Fallback: tentar pelo índice string se não achou pelo ID
+                if student_answer is None and q_id != str(i):
+                    student_answer = answers.get(str(i))
+                
                 if student_answer is not None:
-                    if student_answer == question.get('correct'):
-                        correct_count += 1
-                    else:
-                        incorrect_count += 1
-                        wrong_answers[student_answer] = wrong_answers.get(student_answer, 0) + 1
+                    # Comparar convertendo para int
+                    try:
+                        ans_int = int(student_answer)
+                        correct_int = int(question.get('correct'))
+                        
+                        if ans_int == correct_int:
+                            correct_count += 1
+                        else:
+                            incorrect_count += 1
+                            wrong_answers[ans_int] = wrong_answers.get(ans_int, 0) + 1
+                    except (ValueError, TypeError):
+                        pass
             
             total_answers = correct_count + incorrect_count
             correct_rate = (correct_count / total_answers * 100) if total_answers > 0 else 0
@@ -1393,4 +1408,255 @@ def get_badges():
     return jsonify({
         'success': True,
         'badges': [b.to_dict() for b in badges]
+    })
+
+
+@transcription_bp.route('/subjects/<int:subject_id>/active', methods=['GET'])
+@token_required
+def get_active_activity_for_subject(current_user, subject_id):
+    """
+    Retorna a atividade ativa mais recente para uma disciplina
+    (Usado pelo Dashboard do Aluno)
+    """
+    from datetime import datetime, timedelta
+    
+    # Buscar sessão ativa ou recente (últimas 12 horas)
+    # Filtra sessões que NÃO estão encerradas
+    cutoff_time = datetime.utcnow() - timedelta(hours=1)
+    
+    session = TranscriptionSession.query.filter(
+        TranscriptionSession.subject_id == subject_id,
+        TranscriptionSession.status.in_(['active', 'paused']),
+        TranscriptionSession.started_at >= cutoff_time
+    ).order_by(TranscriptionSession.id.desc()).first()
+    
+    if not session:
+        return jsonify({'success': True, 'active': False})
+        
+    # Buscar atividade ativa ou em espera (waiting) desta sessão
+    # Ordenar por criação (mais recente)
+    activity = LiveActivity.query.filter(
+        LiveActivity.session_id == session.id,
+        LiveActivity.status.in_(['active', 'waiting'])
+    ).order_by(LiveActivity.created_at.desc()).first()
+    
+    if not activity:
+        return jsonify({'success': True, 'active': False})
+        
+    # Verificar se atividade é 'summary' e se tem conteúdo
+    has_summary = False
+    summary_activity = None
+    
+    if activity.activity_type == 'summary':
+        has_summary = True
+        summary_activity = activity.to_dict()
+        
+    return jsonify({
+        'success': True, 
+        'active': True, 
+        'activity': activity.to_dict(),
+        'has_summary': has_summary,
+        'summary': summary_activity
+    })
+
+
+
+@transcription_bp.route('/subjects/<int:subject_id>/active_list', methods=['GET'])
+@token_required
+def get_subject_active_activities(current_user, subject_id):
+    """
+    Lista TODAS as atividades ativas de uma disciplina para o professor gerenciar
+    """
+    # Buscar sessões da disciplina
+    sessions = TranscriptionSession.query.filter_by(subject_id=subject_id).all()
+    session_ids = [s.id for s in sessions]
+    
+    if not session_ids:
+        return jsonify({'success': True, 'activities': []})
+        
+    # Buscar atividades ativas
+    # status != 'ended'
+    activities = LiveActivity.query.filter(
+        LiveActivity.session_id.in_(session_ids),
+        LiveActivity.status.in_(['active', 'waiting'])
+    ).order_by(LiveActivity.created_at.desc()).all()
+    
+    return jsonify({
+        'success': True, 
+        'activities': [a.to_dict() for a in activities]
+    })
+
+
+# ==================== MATERIAL DISTRIBUTION ====================
+
+@transcription_bp.route('/activities/<int:activity_id>/distribute_material', methods=['POST'])
+@token_required
+def distribute_material(current_user, activity_id):
+    """
+    Distribui material de reforço para alunos com nota abaixo da média na atividade.
+    """
+    from app.models.study_material import StudyMaterial
+    from app.models.notification import Notification
+    from werkzeug.utils import secure_filename
+    from datetime import datetime
+    import os
+    
+    # Verificar se a requisição tem o arquivo ou conteúdo de texto
+    file = request.files.get('file')
+    text_content = request.form.get('text_content')
+    title = request.form.get('title', 'Material de Reforço')
+    
+    if not file and not text_content:
+        return jsonify({'success': False, 'error': 'Nenhum arquivo ou texto enviado'}), 400
+
+        
+    activity = LiveActivity.query.get(activity_id)
+    if not activity:
+        return jsonify({'success': False, 'error': 'Atividade não encontrada'}), 404
+        
+    # Verificar permissão (apenas professor da disciplina)
+    session = TranscriptionSession.query.get(activity.session_id)
+    if session.teacher_id != current_user.id:
+        return jsonify({'success': False, 'error': 'Não autorizado'}), 403
+
+    # Calcular média da turma
+    responses = LiveActivityResponse.query.filter_by(activity_id=activity_id).all()
+    if not responses:
+         return jsonify({'success': False, 'error': 'Nenhuma resposta nesta atividade para calcular média'}), 400
+         
+    total_score = sum([r.percentage for r in responses])
+    average_score = total_score / len(responses)
+    
+    # Identificar alunos abaixo da média
+    target_responses = [r for r in responses if r.percentage < average_score]
+    target_student_ids = [r.student_id for r in target_responses]
+    
+    if not target_student_ids:
+        return jsonify({'success': True, 'message': 'Nenhum aluno abaixo da média encontrada. Material não distribuído.', 'count': 0})
+
+    # Salvar arquivo ou criar a partir do texto
+    upload_folder = os.path.join(os.getcwd(), 'app', 'static', 'uploads')
+    if not os.path.exists(upload_folder):
+        os.makedirs(upload_folder)
+        
+    filename = ""
+    file_size = "0 KB"
+    
+    if file:
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'Nome do arquivo vazio'}), 400
+        safe_filename = secure_filename(file.filename)
+        filename = f"{activity_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{safe_filename}"
+        file_path = os.path.join(upload_folder, filename)
+        file.save(file_path)
+        file_size = f"{os.path.getsize(file_path) / 1024:.1f} KB"
+        
+    elif text_content:
+        # Criar arquivo markdown
+        safe_filename = f"resumo_ia_{datetime.now().strftime('%Y%m%d%H%M%S')}.md"
+        filename = f"{activity_id}_{safe_filename}"
+        file_path = os.path.join(upload_folder, filename)
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(text_content)
+        file_size = f"{os.path.getsize(file_path) / 1024:.1f} KB"
+    
+    # URL relativa para acesso
+    content_url = f"/static/uploads/{filename}"
+    
+    # Criar registros de Material e Notificação
+    count = 0
+    for student_id in target_student_ids:
+        # Verificar se já não foi enviado (opcional, aqui permitimos reenviar)
+        material = StudyMaterial(
+            student_id=student_id,
+            subject_id=session.subject_id,
+            activity_id=activity_id,
+            title=title,
+            type='pdf', # Simplificação: assumindo PDF por enquanto, ou extrair da extensão
+            content_url=content_url,
+            file_size=file_size
+        )
+        db.session.add(material)
+        
+        # Notificação
+        notif = Notification(
+            user_id=student_id,
+            title="📚 Material de Reforço Recebido",
+            message=f"Você recebeu um material de apoio referente à atividade '{activity.questions.get('title', 'Quiz') if activity.questions else 'Quiz'}'.",
+            type="material",
+            subject_id=session.subject_id
+        )
+        db.session.add(notif)
+        count += 1
+        
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': f'Material enviado com sucesso para {count} alunos abaixo da média ({average_score:.1f}%).',
+        'count': count,
+        'average': average_score
+    })
+
+
+@transcription_bp.route('/activities/<int:activity_id>/ai_summary', methods=['POST'])
+@token_required
+def generate_ai_summary_for_activity(current_user, activity_id):
+    """
+    Gera um resumo do assunto abordado na atividade usando IA.
+    Útil para enviar como material de reforço.
+    """
+    from app.services.ai_service import generate_content_with_prompt
+    
+    activity = LiveActivity.query.get(activity_id)
+    if not activity:
+        return jsonify({'success': False, 'error': 'Atividade não encontrada'}), 404
+        
+    # Construir o contexto base
+    context_text = ""
+    activity_type = activity.activity_type
+    
+    if activity_type == 'quiz':
+        # Extrair perguntas e respostas para formar o contexto
+        questions = activity.questions.get('questions', []) if activity.questions else []
+        context_text = f"Quiz: {activity.title}\n\n"
+        for i, q in enumerate(questions):
+            context_text += f"Q{i+1}: {q.get('question')}\n"
+            # Adicionar opções para contexto se necessário
+            options = q.get('options', [])
+            context_text += f"Opções: {', '.join(options)}\n"
+            # Resposta correta
+            correct_idx = q.get('correct', 0)
+            if 0 <= correct_idx < len(options):
+                 context_text += f"Resposta Correta: {options[correct_idx]}\n"
+            context_text += "\n"
+            
+    elif activity_type == 'summary':
+         # Para resumo, o contexto é o próprio conteúdo gerado ou o prompt original?
+         context_text = f"Resumo sobre: {activity.title}\n{activity.ai_generated_content or ''}"
+         
+    else: # open_question
+         context_text = f"Pergunta Aberta: {activity.title}\n{activity.questions.get('question', '') if activity.questions else ''}"
+
+    system_instruction = """Você é um professor particular experiente e didático.
+Sua tarefa é criar um RESUMO EXPLICATIVO para um aluno que teve dificuldades neste assunto.
+O resumo deve:
+1. Explicar os conceitos principais abordados nas questões/tópicos abaixo.
+2. Ser claro, encorajador e fácil de entender.
+3. Focar em esclarecer as dúvidas prováveis (baseado nas questões).
+4. Ter cerca de 300 palavras.
+5. Usar linguagem direta (sem markdown complexo, apenas parágrafos).
+6. Título sugerido na primeira linha."""
+
+    prompt = f"""Baseado no seguinte conteúdo de atividade avaliativa, crie um material de revisão para o aluno:
+
+{context_text}
+
+Gere um resumo que explique o assunto para que o aluno possa estudar e melhorar seu desempenho."""
+
+    summary = generate_content_with_prompt(system_instruction, prompt)
+    
+    return jsonify({
+        'success': True,
+        'summary': summary
     })

@@ -29,3 +29,9 @@ def get_materials(current_user, subject_id):
 def get_activities(current_user, subject_id):
     """GET /api/subjects/:id/activities - Atividades de uma disciplina"""
     return subject_controller.get_subject_activities(current_user, subject_id)
+
+@subject_bp.route('/student/materials', methods=['GET'])
+@token_required
+def get_student_materials(current_user):
+    """GET /api/subjects/student/materials - Todos os materiais do aluno"""
+    return subject_controller.get_student_materials(current_user)

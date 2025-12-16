@@ -12,6 +12,7 @@ import {
     Easing,
     Modal,
     ActivityIndicator,
+    useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -37,17 +38,36 @@ import {
 } from '@/services/api';
 // import { useAuth } from '@/context/AuthContext'; // Ajuste o caminho se necessário
 import { useRouter } from 'expo-router';
+import ConfirmationModal from '@/components/modals/ConfirmationModal';
 
 /**
  * TranscriptionScreen - Tela de transcrição com sessões persistentes e atividades
  */
+// Variável global fora do componente para garantir Singleton real
+let globalRecognition: any = null;
+
 export default function TranscriptionScreen() {
     const router = useRouter();
+    // ... rest of component
     // const { user } = useAuth(); // Se precisar do user
+    const { width } = useWindowDimensions();
+    const isMobile = width < 768; // Breakpoint para mobile/tablet
     const insets = useSafeAreaInsets();
     const params = useLocalSearchParams();
     const subjectId = parseInt(params.subjectId as string) || 1;
     const subjectName = params.subject as string || 'Disciplina';
+
+    // Wrapper condicional para scroll no mobile
+    const MainContentWrapper = isMobile ? ScrollView : View;
+    const mainContentWrapperProps = isMobile
+        ? {
+            style: { flex: 1 },
+            contentContainerStyle: { padding: 16, paddingBottom: 100, gap: 16 },
+            keyboardShouldPersistTaps: 'handled' as 'handled'
+        }
+        : {
+            style: styles.contentContainer
+        };
 
     // Estado da sessão
     const [session, setSession] = useState<TranscriptionSession | null>(null);
@@ -82,6 +102,18 @@ export default function TranscriptionScreen() {
     // History / Checkpoints
     const [showHistoryModal, setShowHistoryModal] = useState(false);
 
+    // Confirmation Modal State
+    const [confirmModal, setConfirmModal] = useState({
+        visible: false,
+        title: '',
+        message: '',
+        onConfirm: () => { },
+        confirmText: 'Confirmar',
+        isDestructive: false
+    });
+
+    const closeConfirmModal = () => setConfirmModal(prev => ({ ...prev, visible: false }));
+
     // Refs
     const recognitionRef = useRef<any>(null);
     const isRecordingRef = useRef(false);
@@ -101,9 +133,14 @@ export default function TranscriptionScreen() {
         return () => {
             if (autoSaveTimeoutRef.current) clearTimeout(autoSaveTimeoutRef.current);
             // Salvar ao sair (cleanup)
-            if (sessionRef.current && savedTextRef.current) {
+            // Salvar ao sair (cleanup)
+            if (sessionRef.current && typeof savedTextRef.current === 'string') {
                 console.log('Salvando transcrição ao sair...');
-                updateTranscription(sessionRef.current.id, savedTextRef.current);
+                // Usar sendBeacon ou fetch keepalive se fosse web puro, mas aqui é React Native/Expo
+                // Garantir que a função de update seja chamada
+                updateTranscription(sessionRef.current.id, savedTextRef.current).catch(err => {
+                    console.error('Erro ao salvar no cleanup:', err);
+                });
             }
         };
     }, []);
@@ -118,6 +155,8 @@ export default function TranscriptionScreen() {
             setIsLoading(true);
             const result = await createTranscriptionSession(subjectId, `Aula - ${subjectName}`);
             if (result.success && result.session) {
+                console.log('Sessão carregada:', result.session.id, result.session.status);
+                console.log('Texto recuperado:', (result.session.full_transcript || '').substring(0, 50) + '...');
                 setSession(result.session);
                 setTranscribedText(result.session.full_transcript || '');
                 savedTextRef.current = result.session.full_transcript || '';
@@ -214,22 +253,62 @@ export default function TranscriptionScreen() {
                 ])
             );
             animationRef.current.start();
+
+            if (Platform.OS === 'web') {
+                // Tentar Wake Lock API para manter a tela ligada
+                if ('wakeLock' in navigator) {
+                    try {
+                        // @ts-ignore
+                        navigator.wakeLock.request('screen').then(lock => {
+                            console.log('Wake Lock ativo');
+                        }).catch(e => console.log('Wake Lock falhou', e));
+                    } catch (e) { }
+                }
+
+                // HACK: Tocar áudio silencioso para evitar throttling do navegador em background
+                try {
+                    const silentAudio = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAGZGF0YQQAAAAAAA==");
+                    silentAudio.loop = true;
+                    silentAudio.play().catch(e => console.log('Audio autoplay falhou', e));
+                    // @ts-ignore - Guardar referência para parar depois se necessário
+                    window._silentAudio = silentAudio;
+                } catch (e) {
+                    console.log('Silent audio falhou', e);
+                }
+            }
+
         } else {
             if (animationRef.current) {
                 animationRef.current.stop();
             }
             pulseAnim.setValue(1);
+
+            if (Platform.OS === 'web') {
+                // Parar áudio silencioso
+                // @ts-ignore
+                if (window._silentAudio) {
+                    // @ts-ignore
+                    window._silentAudio.pause();
+                    // @ts-ignore
+                    window._silentAudio = null;
+                }
+            }
         }
 
         return () => {
+            // @ts-ignore
+            if (Platform.OS === 'web' && window._silentAudio) {
+                // @ts-ignore
+                window._silentAudio.pause();
+            }
+
             if (animationRef.current) {
                 animationRef.current.stop();
             }
         };
     }, [isRecording]);
 
-    // Variável global para rastrear a instância ativa (fora do componente)
-    let globalRecognition: any = null;
+    // Animação quando gravando
 
     // Inicializar speech recognition
     useEffect(() => {
@@ -370,6 +449,26 @@ export default function TranscriptionScreen() {
         setTranscribedText(text);
         savedTextRef.current = text;
         triggerAutoSave(text);
+    };
+
+    const handleClearTranscription = () => {
+        if (!transcribedText.trim()) return;
+
+        setConfirmModal({
+            visible: true,
+            title: 'Limpar Transcrição',
+            message: 'Tem certeza que deseja apagar todo o texto transcrito? Esta ação não pode ser desfeita, mas ficará salva no histórico de versões se houver checkpoints.',
+            confirmText: 'Limpar Tudo',
+            isDestructive: true,
+            onConfirm: async () => {
+                closeConfirmModal();
+                setTranscribedText('');
+                savedTextRef.current = '';
+                if (session) {
+                    await updateTranscription(session.id, '');
+                }
+            }
+        });
     };
 
     // Pausar e abrir menu de atividades
@@ -744,62 +843,30 @@ export default function TranscriptionScreen() {
 
 
     const handleDeleteSummary = () => {
-        console.log('Botão excluir pressionado');
-
-        const deleteAction = async () => {
-            if (currentActivity) {
-                try {
-                    setGeneratedSummary(null);
-                    setIsEditingSummary(false);
-                    await updateActivity(currentActivity.id, {
-                        ai_generated_content: '',
-                        content: { summary_text: '' },
-                        status: 'ended'
-                    });
-                    setCurrentActivity(null);
-                } catch (e) {
-                    console.error('Erro', e);
-                }
-            }
-        };
-
-        if (Platform.OS === 'web') {
-            if (window.confirm('Excluir resumo?')) deleteAction();
-            return;
-        }
-
-        Alert.alert(
-            'Excluir Resumo',
-            'Tem certeza que deseja excluir o resumo gerado? Esta ação não pode ser desfeita.',
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                    text: 'Excluir',
-                    style: 'destructive',
-                    onPress: async () => {
-                        if (currentActivity) {
-                            try {
-                                // Limpar conteúdo e marcar como encerrada
-                                setGeneratedSummary(null);
-                                setIsEditingSummary(false);
-
-                                // Opcional: Atualizar no backend para garantir que não volta
-                                await updateActivity(currentActivity.id, {
-                                    ai_generated_content: '',
-                                    content: { summary_text: '' },
-                                    status: 'ended' // Encerrar atividade
-                                });
-
-                                setCurrentActivity(null); // Limpar atividade atual
-                                console.log('Resumo excluído');
-                            } catch (e) {
-                                console.error('Erro ao excluir resumo:', e);
-                            }
-                        }
+        setConfirmModal({
+            visible: true,
+            title: 'Excluir Resumo',
+            message: 'Tem certeza que deseja excluir o resumo gerado? Esta ação não pode ser desfeita.',
+            confirmText: 'Excluir',
+            isDestructive: true,
+            onConfirm: async () => {
+                closeConfirmModal();
+                if (currentActivity) {
+                    try {
+                        setGeneratedSummary(null);
+                        setIsEditingSummary(false);
+                        await updateActivity(currentActivity.id, {
+                            ai_generated_content: '',
+                            content: { summary_text: '' },
+                            status: 'ended'
+                        });
+                        setCurrentActivity(null);
+                    } catch (e) {
+                        console.error('Erro', e);
                     }
                 }
-            ]
-        );
+            }
+        });
     };
 
 
@@ -807,84 +874,56 @@ export default function TranscriptionScreen() {
 
 
     const handleDeleteQuiz = () => {
-        console.log('Botão excluir quiz pressionado');
-
-        const deleteAction = async () => {
-            if (currentActivity) {
-                try {
-                    setGeneratedQuiz(null);
-                    // setIsEditingQuiz(false); // Não existe estado de edição para quiz ainda, mas se existisse...
-
-                    await updateActivity(currentActivity.id, {
-                        ai_generated_content: '', // Limpar JSON
-                        content: null,
-                        status: 'ended'
-                    });
-                    setCurrentActivity(null);
-                    console.log('Quiz excluído');
-                } catch (e) {
-                    console.error('Erro ao excluir quiz:', e);
+        setConfirmModal({
+            visible: true,
+            title: 'Excluir Quiz',
+            message: 'Tem certeza que deseja excluir o quiz gerado?',
+            confirmText: 'Excluir',
+            isDestructive: true,
+            onConfirm: async () => {
+                closeConfirmModal();
+                if (currentActivity) {
+                    try {
+                        setGeneratedQuiz(null);
+                        await updateActivity(currentActivity.id, {
+                            ai_generated_content: '',
+                            content: null,
+                            status: 'ended'
+                        });
+                        setCurrentActivity(null);
+                    } catch (e) {
+                        console.error('Erro ao excluir quiz:', e);
+                    }
                 }
             }
-        };
-
-        if (Platform.OS === 'web') {
-            if (window.confirm('Excluir quiz?')) deleteAction();
-            return;
-        }
-
-        Alert.alert(
-            'Excluir Quiz',
-            'Tem certeza que deseja excluir o quiz gerado?',
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                    text: 'Excluir',
-                    style: 'destructive',
-                    onPress: deleteAction
-                }
-            ]
-        );
+        });
     };
 
     // Restaurar Checkpoint
     const handleRestoreCheckpoint = (checkpoint: any) => {
-        console.log('Restaurando checkpoint:', checkpoint.id);
+        setConfirmModal({
+            visible: true,
+            title: 'Restaurar Versão',
+            message: 'Deseja restaurar esta versão da transcrição? O texto atual será substituído.',
+            confirmText: 'Restaurar',
+            isDestructive: true,
+            onConfirm: async () => {
+                closeConfirmModal();
+                // Restaurar texto localmente
+                setTranscribedText(checkpoint.transcript_at_checkpoint);
+                savedTextRef.current = checkpoint.transcript_at_checkpoint;
 
-        const restore = async () => {
-            // Restaurar texto localmente
-            setTranscribedText(checkpoint.transcript_at_checkpoint);
-            savedTextRef.current = checkpoint.transcript_at_checkpoint;
+                // Atualizar no backend para persistir a restauração
+                try {
+                    await updateTranscription(session!.id, checkpoint.transcript_at_checkpoint);
+                    console.log('Versão restaurada com sucesso');
+                } catch (e) {
+                    console.error('Erro ao salvar versão restaurada:', e);
+                }
 
-            // Atualizar no backend para persistir a restauração
-            try {
-                await updateTranscription(session!.id, checkpoint.transcript_at_checkpoint);
-                console.log('Versão restaurada com sucesso');
-            } catch (e) {
-                console.error('Erro ao salvar versão restaurada:', e);
+                setShowHistoryModal(false);
             }
-
-            setShowHistoryModal(false);
-        };
-
-        if (Platform.OS === 'web') {
-            if (window.confirm('Deseja restaurar esta versão da transcrição? O texto atual será substituído.')) {
-                restore();
-            }
-        } else {
-            Alert.alert(
-                'Restaurar Versão',
-                'Deseja restaurar esta versão da transcrição? O texto atual será substituído.',
-                [
-                    { text: 'Cancelar', style: 'cancel' },
-                    {
-                        text: 'Restaurar',
-                        style: 'destructive',
-                        onPress: restore
-                    }
-                ]
-            );
-        }
+        });
     };
 
     // Criar Pergunta Aberta
@@ -1028,283 +1067,295 @@ export default function TranscriptionScreen() {
             )}
 
             {/* Transcribed Text Area - Split Screen */}
-            <View style={styles.contentContainer}>
+            <MainContentWrapper {...mainContentWrapperProps}>
                 {/* Painel Esquerdo - Conteúdo Gerado */}
-                <View style={styles.leftPanel}>
-                    <View style={styles.panelHeader}>
-                        <MaterialIcons
-                            name={displayMode === 'quiz' ? 'quiz' : 'summarize'}
-                            size={20}
-                            color={displayMode === 'quiz' ? colors.primary : colors.secondary}
-                        />
-                        <Text style={styles.panelTitle}>
-                            {displayMode === 'quiz' ? 'Quiz Gerado' : displayMode === 'summary' ? 'Resumo Gerado' : 'Aguardando...'}
-                        </Text>
-                    </View>
+                {/* No mobile, se não tiver conteúdo gerado (modo 'none'), pode esconder esse painel ou deixá-lo menor */}
+                {(displayMode !== 'none' || !isMobile) && (
+                    <View style={[styles.leftPanel, isMobile && { width: '100%', flex: 0, minHeight: 300 }]}>
+                        <View style={styles.panelHeader}>
+                            <MaterialIcons
+                                name={displayMode === 'quiz' ? 'quiz' : 'summarize'}
+                                size={20}
+                                color={displayMode === 'quiz' ? colors.primary : colors.secondary}
+                            />
+                            <Text style={styles.panelTitle}>
+                                {displayMode === 'quiz' ? 'Quiz Gerado' : displayMode === 'summary' ? 'Resumo Gerado' : 'Aguardando...'}
+                            </Text>
+                        </View>
 
-                    <ScrollView
-                        style={styles.panelScroll}
-                        contentContainerStyle={styles.panelScrollContent}
-                    >
-                        {isGenerating && displayMode !== 'none' ? (
-                            <View style={styles.loadingContainer}>
-                                <ActivityIndicator size="large" color={displayMode === 'quiz' ? colors.primary : colors.secondary} />
-                                <Text style={styles.loadingText}>Gerando com IA...</Text>
-                            </View>
-                        ) : displayMode === 'summary' && generatedSummary ? (
-                            <View style={styles.summaryContent}>
-                                {isEditingSummary ? (
-                                    <View>
-                                        <TextInput
-                                            style={styles.editSummaryInput}
-                                            multiline
-                                            value={editedSummaryText}
-                                            onChangeText={setEditedSummaryText}
-                                            textAlignVertical="top"
-                                        />
-                                        <View style={styles.editActions}>
-                                            <TouchableOpacity
-                                                style={[styles.editButton, styles.editCancelButton]}
-                                                onPress={() => {
-                                                    setIsEditingSummary(false);
-                                                    setEditedSummaryText(generatedSummary || '');
-                                                }}
-                                            >
-                                                <Text style={styles.editCancelButtonText}>Cancelar</Text>
-                                            </TouchableOpacity>
-                                            <TouchableOpacity
-                                                style={[styles.editButton, styles.editSaveButton]}
-                                                onPress={handleSaveSummaryEdit}
-                                            >
-                                                <Text style={styles.editSaveButtonText}>Salvar</Text>
-                                            </TouchableOpacity>
+                        <ScrollView
+                            style={styles.panelScroll}
+                            contentContainerStyle={styles.panelScrollContent}
+                        >
+                            {isGenerating && displayMode !== 'none' ? (
+                                <View style={styles.loadingContainer}>
+                                    <ActivityIndicator size="large" color={displayMode === 'quiz' ? colors.primary : colors.secondary} />
+                                    <Text style={styles.loadingText}>Gerando com IA...</Text>
+                                </View>
+                            ) : displayMode === 'summary' && generatedSummary ? (
+                                <View style={styles.summaryContent}>
+                                    {isEditingSummary ? (
+                                        <View>
+                                            <TextInput
+                                                style={styles.editSummaryInput}
+                                                multiline
+                                                value={editedSummaryText}
+                                                onChangeText={setEditedSummaryText}
+                                                textAlignVertical="top"
+                                            />
+                                            <View style={styles.editActions}>
+                                                <TouchableOpacity
+                                                    style={[styles.editButton, styles.editCancelButton]}
+                                                    onPress={() => {
+                                                        setIsEditingSummary(false);
+                                                        setEditedSummaryText(generatedSummary || '');
+                                                    }}
+                                                >
+                                                    <Text style={styles.editCancelButtonText}>Cancelar</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={[styles.editButton, styles.editSaveButton]}
+                                                    onPress={handleSaveSummaryEdit}
+                                                >
+                                                    <Text style={styles.editSaveButtonText}>Salvar</Text>
+                                                </TouchableOpacity>
+                                            </View>
                                         </View>
-                                    </View>
-                                ) : (
-                                    <>
-                                        <Text style={styles.generatedText}>{generatedSummary}</Text>
-                                        <TouchableOpacity
-                                            style={styles.editModeButton}
-                                            onPress={() => setIsEditingSummary(true)}
-                                        >
-                                            <MaterialIcons name="edit" size={16} color={colors.secondary} />
-                                            <Text style={styles.editModeButtonText}>Editar Resumo</Text>
-                                        </TouchableOpacity>
+                                    ) : (
+                                        <>
+                                            <Text style={styles.generatedText}>{generatedSummary}</Text>
+                                            <TouchableOpacity
+                                                style={styles.editModeButton}
+                                                onPress={() => setIsEditingSummary(true)}
+                                            >
+                                                <MaterialIcons name="edit" size={16} color={colors.secondary} />
+                                                <Text style={styles.editModeButtonText}>Editar Resumo</Text>
+                                            </TouchableOpacity>
 
+                                            <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
+                                                <TouchableOpacity
+                                                    style={[styles.deleteButton, { width: 48, height: 48, paddingHorizontal: 0, paddingVertical: 0 }]}
+                                                    onPress={handleDeleteSummary}
+                                                >
+                                                    <MaterialIcons name="delete" size={24} color="#ef4444" />
+                                                </TouchableOpacity>
+
+                                                <TouchableOpacity
+                                                    style={[styles.sendSummaryButton, { flex: 1, marginTop: 0 }]}
+                                                    onPress={handleShareSummary}
+                                                >
+                                                    <LinearGradient
+                                                        colors={['#22c55e', '#16a34a']}
+                                                        style={styles.sendSummaryButtonGradient}
+                                                    >
+                                                        <MaterialIcons name="send" size={20} color={colors.white} />
+                                                        <Text style={styles.sendSummaryButtonText}>Enviar para Alunos</Text>
+                                                    </LinearGradient>
+                                                </TouchableOpacity>
+                                            </View>
+                                        </>
+                                    )}
+                                </View>
+                            ) : displayMode === 'quiz' && generatedQuiz ? (
+                                <View style={styles.quizContent}>
+                                    {(() => {
+                                        try {
+                                            // Tentar parsear se for string, ou usar direto se já for objeto
+                                            const content = typeof generatedQuiz === 'string'
+                                                ? JSON.parse(generatedQuiz)
+                                                : generatedQuiz;
+
+                                            const questions = content.questions || [];
+
+                                            if (!questions.length) {
+                                                return (
+                                                    <View style={styles.emptyState}>
+                                                        <MaterialIcons name="error-outline" size={48} color={colors.slate400} />
+                                                        <Text style={styles.emptyStateText}>
+                                                            Não foi possível gerar questões. O texto pode ser muito curto ou não conter informações suficientes.
+                                                        </Text>
+                                                        <Text style={[styles.emptyStateText, { marginTop: 8, fontSize: 12 }]}>
+                                                            Tente ditar mais conteúdo ou falar sobre tópicos específicos.
+                                                        </Text>
+                                                    </View>
+                                                );
+                                            }
+
+                                            return (
+                                                <View>
+                                                    {/* Contador de questões */}
+                                                    <View style={styles.questionCountBadge}>
+                                                        <MaterialIcons name="quiz" size={16} color={colors.primary} />
+                                                        <Text style={styles.questionCountText}>
+                                                            {questions.length} {questions.length === 1 ? 'questão' : 'questões'}
+                                                        </Text>
+                                                    </View>
+
+                                                    {questions.map((q: any, i: number) => (
+                                                        <View key={i} style={styles.previewQuestionCard}>
+                                                            <View style={styles.questionHeader}>
+                                                                <Text style={styles.previewQuestionTitle}>
+                                                                    {i + 1}. {q.question}
+                                                                </Text>
+                                                                {/* Botão de visibilidade no header */}
+                                                                <TouchableOpacity
+                                                                    style={styles.individualAnswerButton}
+                                                                    onPress={() => {
+                                                                        const newVisible = new Set(visibleAnswers);
+                                                                        if (newVisible.has(i)) {
+                                                                            newVisible.delete(i);
+                                                                        } else {
+                                                                            newVisible.add(i);
+                                                                        }
+                                                                        setVisibleAnswers(newVisible);
+                                                                    }}
+                                                                >
+                                                                    <MaterialIcons
+                                                                        name={visibleAnswers.has(i) ? 'visibility-off' : 'visibility'}
+                                                                        size={18}
+                                                                        color={visibleAnswers.has(i) ? colors.secondary : colors.slate400}
+                                                                    />
+                                                                </TouchableOpacity>
+                                                            </View>
+                                                            {q.options?.map((opt: string, idx: number) => (
+                                                                <Text key={idx} style={[
+                                                                    styles.previewOption,
+                                                                    (showAnswerKey || visibleAnswers.has(i)) && idx === q.correct && styles.previewCorrectOption
+                                                                ]}>
+                                                                    {String.fromCharCode(65 + idx)}) {opt}
+                                                                </Text>
+                                                            ))}
+
+                                                            {/* Botões de ação */}
+                                                            <View style={styles.questionActions}>
+                                                                {/* Botão Editar */}
+                                                                <TouchableOpacity
+                                                                    style={styles.actionButton}
+                                                                    onPress={() => handleEditQuestion(i)}
+                                                                >
+                                                                    <MaterialIcons
+                                                                        name="edit"
+                                                                        size={18}
+                                                                        color={colors.primary}
+                                                                    />
+                                                                    <Text style={styles.actionButtonText}>Editar</Text>
+                                                                </TouchableOpacity>
+
+                                                                {/* Botão Regenerar */}
+                                                                <TouchableOpacity
+                                                                    style={styles.actionButton}
+                                                                    onPress={() => handleRegenerateQuestion(i)}
+                                                                    disabled={isRegenerating === i}
+                                                                >
+                                                                    {isRegenerating === i ? (
+                                                                        <ActivityIndicator size="small" color={colors.secondary} />
+                                                                    ) : (
+                                                                        <>
+                                                                            <MaterialIcons
+                                                                                name="refresh"
+                                                                                size={18}
+                                                                                color={colors.secondary}
+                                                                            />
+                                                                            <Text style={[styles.actionButtonText, { color: colors.secondary }]}>
+                                                                                Regenerar
+                                                                            </Text>
+                                                                        </>
+                                                                    )}
+                                                                </TouchableOpacity>
+
+                                                                {/* Botão Excluir */}
+                                                                <TouchableOpacity
+                                                                    style={styles.actionButton}
+                                                                    onPress={() => handleDeleteQuestion(i)}
+                                                                >
+                                                                    <MaterialIcons
+                                                                        name="delete"
+                                                                        size={18}
+                                                                        color="#ef4444"
+                                                                    />
+                                                                    <Text style={[styles.actionButtonText, { color: '#ef4444' }]}>
+                                                                        Excluir
+                                                                    </Text>
+                                                                </TouchableOpacity>
+                                                            </View>
+                                                        </View>
+                                                    ))}
+
+                                                    {/* Botão para mostrar/ocultar TODAS as respostas */}
+                                                    <TouchableOpacity
+                                                        style={styles.toggleAnswerKeyButton}
+                                                        onPress={() => {
+                                                            const newState = !showAnswerKey;
+                                                            setShowAnswerKey(newState);
+                                                            // Se estiver mostrando todas, limpar individuais
+                                                            if (newState) {
+                                                                setVisibleAnswers(new Set());
+                                                            }
+                                                        }}
+                                                    >
+                                                        <MaterialIcons
+                                                            name={showAnswerKey ? 'visibility-off' : 'visibility'}
+                                                            size={20}
+                                                            color={colors.white}
+                                                        />
+                                                        <Text style={styles.toggleAnswerKeyText}>
+                                                            {showAnswerKey ? 'Ocultar Todas' : 'Mostrar Todas'}
+                                                        </Text>
+                                                    </TouchableOpacity>
+                                                </View>
+                                            );
+                                        } catch (e) {
+                                            // Fallback para texto simples se não for JSON válido
+                                            return <Text style={styles.generatedText}>{typeof generatedQuiz === 'object' ? JSON.stringify(generatedQuiz, null, 2) : String(generatedQuiz)}</Text>;
+                                        }
+                                    })()}
+
+                                    {currentActivity && (
                                         <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
                                             <TouchableOpacity
                                                 style={[styles.deleteButton, { width: 48, height: 48, paddingHorizontal: 0, paddingVertical: 0 }]}
-                                                onPress={handleDeleteSummary}
+                                                onPress={handleDeleteQuiz}
                                             >
                                                 <MaterialIcons name="delete" size={24} color="#ef4444" />
                                             </TouchableOpacity>
 
                                             <TouchableOpacity
-                                                style={[styles.sendSummaryButton, { flex: 1, marginTop: 0 }]}
-                                                onPress={handleShareSummary}
+                                                style={[styles.sendButton, { flex: 1, marginTop: 0 }]}
+                                                onPress={() => startActivity(currentActivity.id)}
                                             >
-                                                <LinearGradient
-                                                    colors={['#22c55e', '#16a34a']}
-                                                    style={styles.sendSummaryButtonGradient}
-                                                >
-                                                    <MaterialIcons name="send" size={20} color={colors.white} />
-                                                    <Text style={styles.sendSummaryButtonText}>Enviar para Alunos</Text>
-                                                </LinearGradient>
+                                                <MaterialIcons name="send" size={18} color={colors.white} />
+                                                <Text style={styles.sendButtonText}>Enviar Quiz para Alunos</Text>
                                             </TouchableOpacity>
                                         </View>
-                                    </>
-                                )}
-                            </View>
-                        ) : displayMode === 'quiz' && generatedQuiz ? (
-                            <View style={styles.quizContent}>
-                                {(() => {
-                                    try {
-                                        // Tentar parsear se for string, ou usar direto se já for objeto
-                                        const content = typeof generatedQuiz === 'string'
-                                            ? JSON.parse(generatedQuiz)
-                                            : generatedQuiz;
-
-                                        const questions = content.questions || [];
-
-                                        if (!questions.length) {
-                                            return (
-                                                <View style={styles.emptyState}>
-                                                    <MaterialIcons name="error-outline" size={48} color={colors.slate400} />
-                                                    <Text style={styles.emptyStateText}>
-                                                        Não foi possível gerar questões. O texto pode ser muito curto ou não conter informações suficientes.
-                                                    </Text>
-                                                    <Text style={[styles.emptyStateText, { marginTop: 8, fontSize: 12 }]}>
-                                                        Tente ditar mais conteúdo ou falar sobre tópicos específicos.
-                                                    </Text>
-                                                </View>
-                                            );
-                                        }
-
-                                        return (
-                                            <View>
-                                                {/* Contador de questões */}
-                                                <View style={styles.questionCountBadge}>
-                                                    <MaterialIcons name="quiz" size={16} color={colors.primary} />
-                                                    <Text style={styles.questionCountText}>
-                                                        {questions.length} {questions.length === 1 ? 'questão' : 'questões'}
-                                                    </Text>
-                                                </View>
-
-                                                {questions.map((q: any, i: number) => (
-                                                    <View key={i} style={styles.previewQuestionCard}>
-                                                        <View style={styles.questionHeader}>
-                                                            <Text style={styles.previewQuestionTitle}>
-                                                                {i + 1}. {q.question}
-                                                            </Text>
-                                                            {/* Botão de visibilidade no header */}
-                                                            <TouchableOpacity
-                                                                style={styles.individualAnswerButton}
-                                                                onPress={() => {
-                                                                    const newVisible = new Set(visibleAnswers);
-                                                                    if (newVisible.has(i)) {
-                                                                        newVisible.delete(i);
-                                                                    } else {
-                                                                        newVisible.add(i);
-                                                                    }
-                                                                    setVisibleAnswers(newVisible);
-                                                                }}
-                                                            >
-                                                                <MaterialIcons
-                                                                    name={visibleAnswers.has(i) ? 'visibility-off' : 'visibility'}
-                                                                    size={18}
-                                                                    color={visibleAnswers.has(i) ? colors.secondary : colors.slate400}
-                                                                />
-                                                            </TouchableOpacity>
-                                                        </View>
-                                                        {q.options?.map((opt: string, idx: number) => (
-                                                            <Text key={idx} style={[
-                                                                styles.previewOption,
-                                                                (showAnswerKey || visibleAnswers.has(i)) && idx === q.correct && styles.previewCorrectOption
-                                                            ]}>
-                                                                {String.fromCharCode(65 + idx)}) {opt}
-                                                            </Text>
-                                                        ))}
-
-                                                        {/* Botões de ação */}
-                                                        <View style={styles.questionActions}>
-                                                            {/* Botão Editar */}
-                                                            <TouchableOpacity
-                                                                style={styles.actionButton}
-                                                                onPress={() => handleEditQuestion(i)}
-                                                            >
-                                                                <MaterialIcons
-                                                                    name="edit"
-                                                                    size={18}
-                                                                    color={colors.primary}
-                                                                />
-                                                                <Text style={styles.actionButtonText}>Editar</Text>
-                                                            </TouchableOpacity>
-
-                                                            {/* Botão Regenerar */}
-                                                            <TouchableOpacity
-                                                                style={styles.actionButton}
-                                                                onPress={() => handleRegenerateQuestion(i)}
-                                                                disabled={isRegenerating === i}
-                                                            >
-                                                                {isRegenerating === i ? (
-                                                                    <ActivityIndicator size="small" color={colors.secondary} />
-                                                                ) : (
-                                                                    <>
-                                                                        <MaterialIcons
-                                                                            name="refresh"
-                                                                            size={18}
-                                                                            color={colors.secondary}
-                                                                        />
-                                                                        <Text style={[styles.actionButtonText, { color: colors.secondary }]}>
-                                                                            Regenerar
-                                                                        </Text>
-                                                                    </>
-                                                                )}
-                                                            </TouchableOpacity>
-
-                                                            {/* Botão Excluir */}
-                                                            <TouchableOpacity
-                                                                style={styles.actionButton}
-                                                                onPress={() => handleDeleteQuestion(i)}
-                                                            >
-                                                                <MaterialIcons
-                                                                    name="delete"
-                                                                    size={18}
-                                                                    color="#ef4444"
-                                                                />
-                                                                <Text style={[styles.actionButtonText, { color: '#ef4444' }]}>
-                                                                    Excluir
-                                                                </Text>
-                                                            </TouchableOpacity>
-                                                        </View>
-                                                    </View>
-                                                ))}
-
-                                                {/* Botão para mostrar/ocultar TODAS as respostas */}
-                                                <TouchableOpacity
-                                                    style={styles.toggleAnswerKeyButton}
-                                                    onPress={() => {
-                                                        const newState = !showAnswerKey;
-                                                        setShowAnswerKey(newState);
-                                                        // Se estiver mostrando todas, limpar individuais
-                                                        if (newState) {
-                                                            setVisibleAnswers(new Set());
-                                                        }
-                                                    }}
-                                                >
-                                                    <MaterialIcons
-                                                        name={showAnswerKey ? 'visibility-off' : 'visibility'}
-                                                        size={20}
-                                                        color={colors.white}
-                                                    />
-                                                    <Text style={styles.toggleAnswerKeyText}>
-                                                        {showAnswerKey ? 'Ocultar Todas' : 'Mostrar Todas'}
-                                                    </Text>
-                                                </TouchableOpacity>
-                                            </View>
-                                        );
-                                    } catch (e) {
-                                        // Fallback para texto simples se não for JSON válido
-                                        return <Text style={styles.generatedText}>{typeof generatedQuiz === 'object' ? JSON.stringify(generatedQuiz, null, 2) : String(generatedQuiz)}</Text>;
-                                    }
-                                })()}
-
-                                {currentActivity && (
-                                    <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
-                                        <TouchableOpacity
-                                            style={[styles.deleteButton, { width: 48, height: 48, paddingHorizontal: 0, paddingVertical: 0 }]}
-                                            onPress={handleDeleteQuiz}
-                                        >
-                                            <MaterialIcons name="delete" size={24} color="#ef4444" />
-                                        </TouchableOpacity>
-
-                                        <TouchableOpacity
-                                            style={[styles.sendButton, { flex: 1, marginTop: 0 }]}
-                                            onPress={() => startActivity(currentActivity.id)}
-                                        >
-                                            <MaterialIcons name="send" size={18} color={colors.white} />
-                                            <Text style={styles.sendButtonText}>Enviar Quiz para Alunos</Text>
-                                        </TouchableOpacity>
-                                    </View>
-                                )}
-                            </View>
-                        ) : (
-                            <View style={styles.emptyState}>
-                                <MaterialIcons name="auto-awesome" size={48} color={colors.slate400} />
-                                <Text style={styles.emptyStateText}>
-                                    Clique em "Resumo" ou "Quiz" para gerar conteúdo com IA
-                                </Text>
-                            </View>
-                        )}
-                    </ScrollView>
-                </View>
+                                    )}
+                                </View>
+                            ) : (
+                                <View style={styles.emptyState}>
+                                    <MaterialIcons name="auto-awesome" size={48} color={colors.slate400} />
+                                    <Text style={styles.emptyStateText}>
+                                        Clique em "Resumo" ou "Quiz" para gerar conteúdo com IA
+                                    </Text>
+                                </View>
+                            )}
+                        </ScrollView>
+                    </View>
+                )}
 
                 {/* Painel Direito - Transcrição */}
-                <View style={styles.rightPanel}>
+                <View style={[styles.rightPanel, isMobile && { width: '100%', flex: 1, minHeight: 400 }]}>
                     <View style={styles.panelHeader}>
-                        <MaterialIcons name="mic" size={20} color={colors.primary} />
-                        <Text style={styles.panelTitle}>Transcrição</Text>
-                        <Text style={styles.wordCount}>{wordCount} palavras</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <MaterialIcons name="mic" size={20} color={colors.primary} />
+                            <Text style={styles.panelTitle}>Transcrição</Text>
+                        </View>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                            <Text style={styles.wordCount}>{wordCount} palavras</Text>
+                            {transcribedText.length > 0 && (
+                                <TouchableOpacity onPress={handleClearTranscription}>
+                                    <MaterialIcons name="delete-outline" size={20} color={colors.slate400} />
+                                </TouchableOpacity>
+                            )}
+                        </View>
                     </View>
 
                     <ScrollView
@@ -1331,7 +1382,7 @@ Pressione o botão do microfone para começar a falar."
                         </Text>
                     </View>
                 </View>
-            </View>
+            </MainContentWrapper>
 
             {/* Modal de Histórico */}
             <Modal
@@ -1584,7 +1635,16 @@ Pressione o botão do microfone para começar a falar."
                 </Text>
             </View>
 
-        </View>
+            <ConfirmationModal
+                visible={confirmModal.visible}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                confirmText={confirmModal.confirmText}
+                isDestructive={confirmModal.isDestructive}
+                onConfirm={confirmModal.onConfirm}
+                onCancel={closeConfirmModal}
+            />
+        </View >
     );
 }
 

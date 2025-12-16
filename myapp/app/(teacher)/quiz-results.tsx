@@ -6,6 +6,10 @@ import {
     ScrollView,
     TouchableOpacity,
     ActivityIndicator,
+    Platform,
+    Modal,
+    TextInput,
+    Alert, // Import Alert
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -14,7 +18,8 @@ import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { getQuizReport, endQuiz, QuizReport } from '@/services/quiz';
-import { getLiveActivityReport, endLiveActivity, exportActivityPDF } from '@/services/api';
+import { getLiveActivityReport, endLiveActivity, exportActivityPDF, distributeActivityMaterial, generateActivitySummary } from '@/services/api';
+import * as DocumentPicker from 'expo-document-picker';
 import RaceVisualization from '@/components/quiz/RaceVisualization';
 import PodiumDisplay from '@/components/quiz/PodiumDisplay';
 import PerformanceDistributionChart from '@/components/quiz/PerformanceDistributionChart';
@@ -42,6 +47,13 @@ export default function QuizResultsScreen() {
     const [showPodium, setShowPodium] = useState(false);
     const [ranking, setRanking] = useState<any[]>([]);
     const [isExportingPDF, setIsExportingPDF] = useState(false);
+
+    // Distribution Modal State
+    const [distModalVisible, setDistModalVisible] = useState(false);
+    const [distType, setDistType] = useState<'file' | 'ai'>('file');
+    const [aiSummary, setAiSummary] = useState('');
+    const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+    const [isDistributing, setIsDistributing] = useState(false);
 
     // WebSocket para atualizações em tempo real
     const { isConnected, ranking: wsRanking } = useWebSocket({
@@ -255,6 +267,93 @@ export default function QuizResultsScreen() {
         setIsExportingPDF(false);
     };
 
+    // Material Distribution Logic
+    const openDistributionModal = () => {
+        setDistModalVisible(true);
+        // Reset state
+        setDistType('file');
+        setAiSummary('');
+    };
+
+    const handleGenerateSummary = async () => {
+        const id = activityId > 0 ? activityId : quizId;
+        if (!id) return;
+
+        setIsGeneratingAI(true);
+        try {
+            const res = await generateActivitySummary(id);
+            if (res.success && res.summary) {
+                setAiSummary(res.summary);
+            } else {
+                Alert.alert("Erro", "Falha ao gerar resumo: " + (res.error || 'Erro desconhecido'));
+            }
+        } catch (e) {
+            console.error(e);
+            Alert.alert("Erro", "Falha na comunicação com IA");
+        } finally {
+            setIsGeneratingAI(false);
+        }
+    };
+
+    const handleSendAI = async () => {
+        const id = activityId > 0 ? activityId : quizId;
+        if (!id) return;
+        if (!aiSummary.trim()) {
+            Alert.alert("Atenção", "O resumo está vazio.");
+            return;
+        }
+
+        setIsDistributing(true);
+        try {
+            const title = 'Resumo IA: ' + (report?.quiz?.title || 'Atividade');
+            // Pass NULL for file, and aiSummary for textContent
+            const response = await distributeActivityMaterial(id, null, title, aiSummary);
+
+            if (response.success) {
+                Alert.alert("Sucesso", response.message || "Material enviado!");
+                setDistModalVisible(false);
+            } else {
+                Alert.alert("Erro", response.error || "Erro ao enviar.");
+            }
+        } catch (e) {
+            console.error(e);
+            Alert.alert("Erro", "Falha ao enviar material.");
+        } finally {
+            setIsDistributing(false);
+        }
+    };
+
+    const handleSendFile = async () => {
+        const id = activityId > 0 ? activityId : quizId;
+        if (!id) return;
+
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: 'application/pdf',
+                copyToCacheDirectory: true
+            });
+
+            if (result.canceled) return;
+            const asset = result.assets[0];
+
+            setIsDistributing(true);
+            // Pass asset for file
+            const response = await distributeActivityMaterial(id, asset, 'Material de Reforço - ' + (report?.quiz?.title || 'Quiz'));
+
+            if (response.success) {
+                Alert.alert("Sucesso", response.message || 'Material enviado!');
+                setDistModalVisible(false);
+            } else {
+                Alert.alert("Erro", response.error || 'Erro desconhecido');
+            }
+        } catch (error) {
+            console.error('Erro ao distribuir material:', error);
+            Alert.alert("Erro", "Falha ao enviar arquivo.");
+        } finally {
+            setIsDistributing(false);
+        }
+    };
+
     const isActive = report?.quiz?.status === 'active';
 
     if (loading) {
@@ -332,22 +431,43 @@ export default function QuizResultsScreen() {
 
                     {/* End Quiz Button */}
                     {(isActive || showPodium) && (
-                        <TouchableOpacity
-                            style={styles.endButton}
-                            onPress={handleEndQuiz}
-                            disabled={ending}
-                        >
-                            {ending ? (
-                                <ActivityIndicator size="small" color={colors.white} />
-                            ) : (
-                                <>
-                                    <MaterialIcons name={showPodium ? "close" : "stop"} size={20} color={colors.white} />
-                                    <Text style={styles.endButtonText}>
-                                        {showPodium ? 'Fechar' : 'Encerrar e Ver Pódio'}
-                                    </Text>
-                                </>
+                        <View style={{ gap: spacing.sm }}>
+                            {!isActive && showPodium && (
+                                <TouchableOpacity
+                                    style={[styles.endButton, { backgroundColor: colors.primary }]}
+                                    onPress={openDistributionModal}
+                                    disabled={isDistributing}
+                                >
+                                    {isDistributing ? (
+                                        <ActivityIndicator size="small" color={colors.white} />
+                                    ) : (
+                                        <>
+                                            <MaterialIcons name="send" size={20} color={colors.white} />
+                                            <Text style={styles.endButtonText}>
+                                                Enviar Material (Abaixo da Média)
+                                            </Text>
+                                        </>
+                                    )}
+                                </TouchableOpacity>
                             )}
-                        </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.endButton}
+                                onPress={handleEndQuiz}
+                                disabled={ending}
+                            >
+                                {ending ? (
+                                    <ActivityIndicator size="small" color={colors.white} />
+                                ) : (
+                                    <>
+                                        <MaterialIcons name={showPodium ? "close" : "stop"} size={20} color={colors.white} />
+                                        <Text style={styles.endButtonText}>
+                                            {showPodium ? 'Fechar' : 'Encerrar e Ver Pódio'}
+                                        </Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+                        </View>
                     )}
                 </View>
 
@@ -508,6 +628,108 @@ export default function QuizResultsScreen() {
                     </View>
                 )}
             </ScrollView>
+
+            {/* Distribution Modal */}
+            <Modal
+                visible={distModalVisible}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setDistModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>Enviar Material de Reforço</Text>
+                            <TouchableOpacity onPress={() => setDistModalVisible(false)}>
+                                <MaterialIcons name="close" size={24} color={colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.tabContainer}>
+                            <TouchableOpacity
+                                style={[styles.tabButton, distType === 'file' && styles.activeTab]}
+                                onPress={() => setDistType('file')}
+                            >
+                                <MaterialIcons name="upload-file" size={20} color={distType === 'file' ? colors.primary : colors.textSecondary} />
+                                <Text style={[styles.tabText, distType === 'file' && styles.activeTabText]}>Arquivo</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.tabButton, distType === 'ai' && styles.activeTab]}
+                                onPress={() => setDistType('ai')}
+                            >
+                                <MaterialIcons name="auto-awesome" size={20} color={distType === 'ai' ? colors.primary : colors.textSecondary} />
+                                <Text style={[styles.tabText, distType === 'ai' && styles.activeTabText]}>IA Resumo</Text>
+                            </TouchableOpacity>
+                        </View>
+
+                        <View style={styles.modalBody}>
+                            {distType === 'file' ? (
+                                <View style={styles.fileOptionContainer}>
+                                    <Text style={styles.bodyText}>
+                                        Selecione um arquivo PDF do seu dispositivo para enviar aos alunos com nota abaixo da média.
+                                    </Text>
+                                    <TouchableOpacity
+                                        style={styles.actionButton}
+                                        onPress={handleSendFile}
+                                        disabled={isDistributing}
+                                    >
+                                        {isDistributing ? <ActivityIndicator color="#fff" /> : <Text style={styles.actionButtonText}>Selecionar e Enviar Arquivo</Text>}
+                                    </TouchableOpacity>
+                                </View>
+                            ) : (
+                                <View style={styles.aiOptionContainer}>
+                                    {!aiSummary ? (
+                                        <View style={styles.aiEmptyState}>
+                                            <Text style={styles.bodyText}>
+                                                A IA pode gerar um resumo personalizado do assunto deste Quiz.
+                                            </Text>
+                                            <TouchableOpacity
+                                                style={styles.actionButton}
+                                                onPress={handleGenerateSummary}
+                                                disabled={isGeneratingAI}
+                                            >
+                                                {isGeneratingAI ? <ActivityIndicator color="#fff" /> : <Text style={styles.actionButtonText}>Gerar Resumo com IA</Text>}
+                                            </TouchableOpacity>
+                                        </View>
+                                    ) : (
+                                        <View style={styles.aiResultContainer}>
+                                            <TextInput
+                                                style={styles.summaryInput}
+                                                multiline
+                                                value={aiSummary}
+                                                onChangeText={setAiSummary}
+                                                placeholder="Resumo gerado..."
+                                            />
+                                            <View style={styles.aiActions}>
+                                                <TouchableOpacity
+                                                    style={styles.secondaryButton}
+                                                    onPress={handleGenerateSummary}
+                                                    disabled={isGeneratingAI}
+                                                >
+                                                    <Text style={styles.secondaryButtonText}>Regenerar</Text>
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={styles.deleteButton}
+                                                    onPress={() => setAiSummary('')}
+                                                >
+                                                    <MaterialIcons name="delete" size={20} color="#ef4444" />
+                                                </TouchableOpacity>
+                                                <TouchableOpacity
+                                                    style={styles.actionButtonSmall}
+                                                    onPress={handleSendAI}
+                                                    disabled={isDistributing}
+                                                >
+                                                    {isDistributing ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.actionButtonText}>Enviar</Text>}
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                    )}
+                                </View>
+                            )}
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -823,5 +1045,144 @@ const styles = StyleSheet.create({
     },
     badScore: {
         color: '#ef4444',
+    },
+    // Modal Styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        padding: spacing.md,
+    },
+    modalContent: {
+        backgroundColor: colors.white,
+        borderRadius: borderRadius.xl,
+        maxHeight: '80%',
+        overflow: 'hidden',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: spacing.lg,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.slate100,
+    },
+    modalTitle: {
+        fontSize: typography.fontSize.lg,
+        fontWeight: typography.fontWeight.bold,
+        color: colors.textPrimary,
+        fontFamily: typography.fontFamily.display,
+    },
+    tabContainer: {
+        flexDirection: 'row',
+        borderBottomWidth: 1,
+        borderBottomColor: colors.slate100,
+    },
+    tabButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: spacing.sm,
+        paddingVertical: spacing.md,
+        backgroundColor: colors.slate50,
+    },
+    activeTab: {
+        backgroundColor: colors.white,
+        borderBottomWidth: 2,
+        borderBottomColor: colors.primary,
+    },
+    tabText: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: typography.fontWeight.medium,
+        color: colors.textSecondary,
+    },
+    activeTabText: {
+        color: colors.primary,
+        fontWeight: typography.fontWeight.bold,
+    },
+    modalBody: {
+        padding: spacing.lg,
+    },
+    fileOptionContainer: {
+        alignItems: 'center',
+        gap: spacing.lg,
+        paddingVertical: spacing.xl,
+    },
+    bodyText: {
+        fontSize: typography.fontSize.base,
+        color: colors.textSecondary,
+        textAlign: 'center',
+        lineHeight: 24,
+    },
+    actionButton: {
+        backgroundColor: colors.primary,
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.xl,
+        borderRadius: borderRadius.lg,
+        width: '100%',
+        alignItems: 'center',
+    },
+    actionButtonText: {
+        color: colors.white,
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.bold,
+    },
+    aiOptionContainer: {
+        minHeight: 300,
+    },
+    aiEmptyState: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: spacing.xl,
+        paddingVertical: spacing.xl,
+    },
+    aiResultContainer: {
+        flex: 1,
+        gap: spacing.md,
+    },
+    summaryInput: {
+        flex: 1,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        borderRadius: borderRadius.lg,
+        padding: spacing.md,
+        textAlignVertical: 'top',
+        fontSize: typography.fontSize.base,
+        color: colors.textPrimary,
+        backgroundColor: colors.slate50,
+        minHeight: 200,
+    },
+    aiActions: {
+        flexDirection: 'row',
+        gap: spacing.md,
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+    },
+    secondaryButton: {
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.md,
+        borderRadius: borderRadius.lg,
+        backgroundColor: colors.slate100,
+    },
+    secondaryButtonText: {
+        color: colors.textSecondary,
+        fontSize: typography.fontSize.sm,
+        fontWeight: typography.fontWeight.medium,
+    },
+    deleteButton: {
+        padding: spacing.sm,
+        backgroundColor: '#fee2e2',
+        borderRadius: borderRadius.lg,
+    },
+    actionButtonSmall: {
+        backgroundColor: colors.primary,
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.xl,
+        borderRadius: borderRadius.lg,
+        alignItems: 'center',
+        justifyContent: 'center',
+        minWidth: 100,
     },
 });

@@ -185,3 +185,58 @@ def get_subject_activities(current_user, subject_id):
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+def get_student_materials(current_user):
+    """
+    Buscar todos os materiais do aluno logado (inclusive StudyMaterial distribuídos automaticamente)
+    """
+    from app.models.study_material import StudyMaterial
+    
+    if current_user.role != 'student':
+        return jsonify({'error': 'Apenas alunos podem acessar seus materiais'}), 403
+        
+    try:
+        # 1. Buscar materiais gerais das disciplinas matriculadas (Material)
+        enrollments = Enrollment.query.filter_by(student_id=current_user.id).all()
+        subject_ids = [e.subject_id for e in enrollments]
+        
+        general_materials = Material.query.filter(Material.subject_id.in_(subject_ids)).all() if subject_ids else []
+        
+        # 2. Buscar materiais distribuídos especificamente (StudyMaterial)
+        personal_materials = StudyMaterial.query.filter_by(student_id=current_user.id).order_by(StudyMaterial.created_at.desc()).all()
+        
+        # Combinar e formatar
+        all_materials = []
+        
+        # Adicionar materiais gerais
+        for m in general_materials:
+            m_dict = m.to_dict()
+            subject = Subject.query.get(m.subject_id)
+            m_dict['subject'] = subject.name if subject else 'Disciplina'
+            m_dict['source'] = 'class' # Material da turma
+            if m.uploaded_at:
+                m_dict['upload_date'] = m.uploaded_at.strftime('%d %b')
+            all_materials.append(m_dict)
+            
+        # Adicionar materiais pessoais
+        for m in personal_materials:
+            m_dict = m.to_dict()
+            subject = Subject.query.get(m.subject_id)
+            m_dict['subject'] = subject.name if subject else 'Disciplina'
+            m_dict['source'] = 'personal' # Material pessoal/reforço
+            if m.created_at:
+                m_dict['upload_date'] = m.created_at.strftime('%d %b')
+            all_materials.append(m_dict)
+            
+        # Ordenar por data (mais recente primeiro)
+        # Note: upload_date format '15 Nov' is hard to sort, so we trust database order or sort client side.
+        # But for merged lists, we might want to sort by ID or raw date if available.
+        # Simple sorting by ID desc as proxy for proper date sorting across tables
+        all_materials.sort(key=lambda x: x.get('id', 0), reverse=True)
+            
+        return jsonify(all_materials), 200
+        
+    except Exception as e:
+        print(f"Erro ao buscar materiais do aluno: {e}")
+        return jsonify({'error': str(e)}), 500
