@@ -39,6 +39,7 @@ import {
 // import { useAuth } from '@/context/AuthContext'; // Ajuste o caminho se necessário
 import { useRouter } from 'expo-router';
 import ConfirmationModal from '@/components/modals/ConfirmationModal';
+import InputModal from '@/components/modals/InputModal';
 
 /**
  * TranscriptionScreen - Tela de transcrição com sessões persistentes e atividades
@@ -113,6 +114,18 @@ export default function TranscriptionScreen() {
     });
 
     const closeConfirmModal = () => setConfirmModal(prev => ({ ...prev, visible: false }));
+
+    // Input Modal State
+    const [inputModal, setInputModal] = useState({
+        visible: false,
+        title: '',
+        message: '',
+        placeholder: '',
+        initialValue: '',
+        onConfirm: (text: string) => { },
+    });
+
+    const closeInputModal = () => setInputModal(prev => ({ ...prev, visible: false }));
 
     // Refs
     const recognitionRef = useRef<any>(null);
@@ -955,10 +968,25 @@ export default function TranscriptionScreen() {
 
     // Iniciar atividade para alunos
     const startActivity = async (activityId: number) => {
+        // Solicitar título antes de iniciar
+        setInputModal({
+            visible: true,
+            title: 'Título do Quiz',
+            message: 'Defina um título para este quiz para que os alunos possam identificá-lo.',
+            placeholder: 'Ex: Quiz sobre Equações',
+            initialValue: currentActivity?.title || '',
+            onConfirm: async (text) => {
+                closeInputModal();
+                performStartActivity(activityId, text);
+            }
+        });
+    };
+
+    const performStartActivity = async (activityId: number, title: string) => {
         console.log('[BROADCAST] Iniciando atividade para alunos...');
         console.log('[BROADCAST] Activity ID:', activityId);
         try {
-            const result = await broadcastActivity(activityId);
+            const result = await broadcastActivity(activityId, title);
             console.log('[BROADCAST] Resposta da API:', JSON.stringify(result, null, 2));
 
             if (result.success) {
@@ -992,8 +1020,23 @@ export default function TranscriptionScreen() {
     // Compartilhar resumo
     const handleShareSummary = async () => {
         if (!currentActivity) return;
+
+        setInputModal({
+            visible: true,
+            title: 'Título do Resumo',
+            message: 'Defina um título para este resumo.',
+            placeholder: 'Ex: Resumo da Aula 1',
+            initialValue: currentActivity?.title || '',
+            onConfirm: async (text) => {
+                closeInputModal();
+                performShareSummary(text);
+            }
+        });
+    };
+
+    const performShareSummary = async (title: string) => {
         try {
-            await shareSummary(currentActivity.id);
+            await shareSummary(currentActivity!.id, title);
             Alert.alert('Sucesso', 'Resumo compartilhado com os alunos!');
             setShowSummaryModal(false);
             // Retomar sessão
@@ -1534,6 +1577,17 @@ Pressione o botão do microfone para começar a falar."
                     </View>
                 </View>
             </Modal>
+
+            {/* Input Modal */}
+            <InputModal
+                visible={inputModal.visible}
+                title={inputModal.title}
+                message={inputModal.message}
+                placeholder={inputModal.placeholder}
+                initialValue={inputModal.initialValue}
+                onConfirm={inputModal.onConfirm}
+                onCancel={closeInputModal}
+            />
 
             {/* Footer */}
             <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
