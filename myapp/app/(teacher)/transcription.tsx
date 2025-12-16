@@ -79,6 +79,9 @@ export default function TranscriptionScreen() {
     const [showSummaryModal, setShowSummaryModal] = useState(false);
     const [displayMode, setDisplayMode] = useState<'none' | 'summary' | 'quiz'>('none');
 
+    // History / Checkpoints
+    const [showHistoryModal, setShowHistoryModal] = useState(false);
+
     // Refs
     const recognitionRef = useRef<any>(null);
     const isRecordingRef = useRef(false);
@@ -121,25 +124,32 @@ export default function TranscriptionScreen() {
 
                 // Restaurar atividades (Summary/Quiz)
                 if (result.session.activities && result.session.activities.length > 0) {
-                    // Encontrar o último resumo e quiz gerados
-                    const summaryActivity = result.session.activities.find((a) => a.activity_type === 'summary' && a.ai_generated_content);
-                    const quizActivity = result.session.activities.find((a) => a.activity_type === 'quiz' && a.content);
+                    // Filtrar apenas atividades não encerradas
+                    const activeActivities = result.session.activities.filter((a: any) => a.status !== 'ended');
 
-                    if (summaryActivity) {
-                        setGeneratedSummary(summaryActivity.ai_generated_content || null);
-                        // Abrir automaticamente se houver resumo
-                        setDisplayMode('summary');
-                        // Restaurar atividade atual se for resumo
-                        if (!quizActivity) {
-                            setCurrentActivity(summaryActivity);
-                        }
+                    // Ordenar por ID decrescente (mais recente primeiro)
+                    activeActivities.sort((a: any, b: any) => b.id - a.id);
+
+                    const latestSummary = activeActivities.find((a: any) => a.activity_type === 'summary');
+                    const latestQuiz = activeActivities.find((a: any) => a.activity_type === 'quiz');
+
+                    // Restaurar estados
+                    if (latestSummary) {
+                        setGeneratedSummary(latestSummary.ai_generated_content || null);
+                    }
+                    if (latestQuiz) {
+                        setGeneratedQuiz(latestQuiz.content || null);
                     }
 
-                    if (quizActivity) {
-                        setGeneratedQuiz(quizActivity.content || null);
-                        // Se houver quiz também/ou só quiz, muda para quiz
-                        setDisplayMode('quiz');
-                        setCurrentActivity(quizActivity);
+                    // Definir qual mostrar (o mais recente)
+                    const latestActivity = activeActivities[0];
+                    if (latestActivity) {
+                        setCurrentActivity(latestActivity);
+                        if (latestActivity.activity_type === 'summary') {
+                            setDisplayMode('summary');
+                        } else if (latestActivity.activity_type === 'quiz') {
+                            setDisplayMode('quiz');
+                        }
                     }
                 }
             }
@@ -149,6 +159,20 @@ export default function TranscriptionScreen() {
         } finally {
             setIsLoading(false);
         }
+    };
+
+    // Formatar data relativa
+    const formatTimeAgo = (dateString: string) => {
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+
+        if (diffMins < 1) return 'Agora mesmo';
+        if (diffMins < 60) return `${diffMins} min atrás`;
+        const diffHours = Math.floor(diffMins / 60);
+        if (diffHours < 24) return `${diffHours}h atrás`;
+        return date.toLocaleDateString();
     };
 
     // Auto-save debounced (5 segundos)
@@ -204,72 +228,101 @@ export default function TranscriptionScreen() {
         };
     }, [isRecording]);
 
+    // Variável global para rastrear a instância ativa (fora do componente)
+    let globalRecognition: any = null;
+
     // Inicializar speech recognition
     useEffect(() => {
-        if (Platform.OS === 'web') {
-            // @ts-ignore
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (SpeechRecognition) {
-                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-                const recognition = new SpeechRecognition();
-                recognition.continuous = !isMobile;
-                recognition.interimResults = true;
-                recognition.lang = 'pt-BR';
+        let mounted = true;
 
-                recognition.onresult = (event: any) => {
-                    let currentInterim = '';
-                    for (let i = 0; i < event.results.length; i++) {
-                        const result = event.results[i];
-                        const transcript = result[0].transcript.trim();
-
-                        if (result.isFinal && transcript) {
-                            if (!processedResultsRef.current.has(i) && transcript !== lastFinalTextRef.current) {
-                                processedResultsRef.current.add(i);
-                                lastFinalTextRef.current = transcript;
-                                const separator = savedTextRef.current ? ' ' : '';
-                                savedTextRef.current = savedTextRef.current + separator + transcript;
-                                setTranscribedText(savedTextRef.current);
-                                triggerAutoSave(savedTextRef.current);
-                            }
-                        } else if (!result.isFinal) {
-                            currentInterim = transcript;
-                        }
-                    }
-                    setInterimText(currentInterim);
-                };
-
-                recognition.onerror = (event: any) => {
-                    console.error('Speech error:', event.error);
-                    if (event.error === 'not-allowed') {
-                        Alert.alert('Permissão Negada', 'Permita o acesso ao microfone.');
-                        setIsRecording(false);
-                        isRecordingRef.current = false;
-                    }
-                };
-
-                recognition.onend = () => {
-                    if (isRecordingRef.current) {
-                        processedResultsRef.current.clear();
-                        setTimeout(() => {
-                            try {
-                                recognition.start();
-                            } catch (e) {
-                                console.log('Não foi possível reiniciar');
-                            }
-                        }, 100);
-                    }
-                };
-
-                recognitionRef.current = recognition;
+        const cleanup = () => {
+            if (globalRecognition) {
+                try {
+                    console.log('Parando reconhecimento anterior...');
+                    globalRecognition.onend = null; // Remover listener para evitar loop
+                    globalRecognition.stop();
+                    globalRecognition.abort();
+                } catch (e) { }
+                globalRecognition = null;
             }
-        }
+        };
+
+        const initRecognition = () => {
+            if (Platform.OS === 'web') {
+                // @ts-ignore
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                if (SpeechRecognition) {
+                    // Limpar instância anterior se existir
+                    cleanup();
+
+                    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                    const recognition = new SpeechRecognition();
+                    recognition.continuous = !isMobile;
+                    recognition.interimResults = true;
+                    recognition.lang = 'pt-BR';
+
+                    recognition.onresult = (event: any) => {
+                        let currentInterim = '';
+                        for (let i = 0; i < event.results.length; i++) {
+                            const result = event.results[i];
+                            const transcript = result[0].transcript.trim();
+
+                            if (result.isFinal && transcript) {
+                                if (!processedResultsRef.current.has(i) && transcript !== lastFinalTextRef.current) {
+                                    processedResultsRef.current.add(i);
+                                    lastFinalTextRef.current = transcript;
+                                    const separator = savedTextRef.current ? ' ' : '';
+                                    savedTextRef.current = savedTextRef.current + separator + transcript;
+                                    setTranscribedText(savedTextRef.current);
+                                    triggerAutoSave(savedTextRef.current);
+                                }
+                            } else if (!result.isFinal) {
+                                currentInterim = transcript;
+                            }
+                        }
+                        setInterimText(currentInterim);
+                    };
+
+                    recognition.onerror = (event: any) => {
+                        console.error('Speech error:', event.error);
+                        if (event.error === 'not-allowed') {
+                            Alert.alert('Permissão Negada', 'Permita o acesso ao microfone.');
+                            setIsRecording(false);
+                            isRecordingRef.current = false;
+                        } else if (event.error === 'aborted') {
+                            // Ignorar erro de aborto manual
+                        }
+                    };
+
+                    recognition.onend = () => {
+                        if (isRecordingRef.current && mounted) {
+                            processedResultsRef.current.clear();
+                            setTimeout(() => {
+                                try {
+                                    if (mounted && isRecordingRef.current) {
+                                        recognition.start();
+                                    }
+                                } catch (e) {
+                                    console.log('Não foi possível reiniciar');
+                                }
+                            }, 100);
+                        }
+                    };
+
+                    recognitionRef.current = recognition;
+                    globalRecognition = recognition;
+                }
+            }
+        };
+
+        // Pequeno delay para garantir que o cleanup anterior terminou
+        const timeout = setTimeout(initRecognition, 200);
 
         return () => {
-            if (recognitionRef.current) {
-                try {
-                    recognitionRef.current.stop();
-                } catch (e) { }
-            }
+            mounted = false;
+            clearTimeout(timeout);
+            isRecordingRef.current = false;
+            cleanup();
         };
     }, [triggerAutoSave]);
 
@@ -690,6 +743,150 @@ export default function TranscriptionScreen() {
     };
 
 
+    const handleDeleteSummary = () => {
+        console.log('Botão excluir pressionado');
+
+        const deleteAction = async () => {
+            if (currentActivity) {
+                try {
+                    setGeneratedSummary(null);
+                    setIsEditingSummary(false);
+                    await updateActivity(currentActivity.id, {
+                        ai_generated_content: '',
+                        content: { summary_text: '' },
+                        status: 'ended'
+                    });
+                    setCurrentActivity(null);
+                } catch (e) {
+                    console.error('Erro', e);
+                }
+            }
+        };
+
+        if (Platform.OS === 'web') {
+            if (window.confirm('Excluir resumo?')) deleteAction();
+            return;
+        }
+
+        Alert.alert(
+            'Excluir Resumo',
+            'Tem certeza que deseja excluir o resumo gerado? Esta ação não pode ser desfeita.',
+            [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                    text: 'Excluir',
+                    style: 'destructive',
+                    onPress: async () => {
+                        if (currentActivity) {
+                            try {
+                                // Limpar conteúdo e marcar como encerrada
+                                setGeneratedSummary(null);
+                                setIsEditingSummary(false);
+
+                                // Opcional: Atualizar no backend para garantir que não volta
+                                await updateActivity(currentActivity.id, {
+                                    ai_generated_content: '',
+                                    content: { summary_text: '' },
+                                    status: 'ended' // Encerrar atividade
+                                });
+
+                                setCurrentActivity(null); // Limpar atividade atual
+                                console.log('Resumo excluído');
+                            } catch (e) {
+                                console.error('Erro ao excluir resumo:', e);
+                            }
+                        }
+                    }
+                }
+            ]
+        );
+    };
+
+
+
+
+
+    const handleDeleteQuiz = () => {
+        console.log('Botão excluir quiz pressionado');
+
+        const deleteAction = async () => {
+            if (currentActivity) {
+                try {
+                    setGeneratedQuiz(null);
+                    // setIsEditingQuiz(false); // Não existe estado de edição para quiz ainda, mas se existisse...
+
+                    await updateActivity(currentActivity.id, {
+                        ai_generated_content: '', // Limpar JSON
+                        content: null,
+                        status: 'ended'
+                    });
+                    setCurrentActivity(null);
+                    console.log('Quiz excluído');
+                } catch (e) {
+                    console.error('Erro ao excluir quiz:', e);
+                }
+            }
+        };
+
+        if (Platform.OS === 'web') {
+            if (window.confirm('Excluir quiz?')) deleteAction();
+            return;
+        }
+
+        Alert.alert(
+            'Excluir Quiz',
+            'Tem certeza que deseja excluir o quiz gerado?',
+            [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                    text: 'Excluir',
+                    style: 'destructive',
+                    onPress: deleteAction
+                }
+            ]
+        );
+    };
+
+    // Restaurar Checkpoint
+    const handleRestoreCheckpoint = (checkpoint: any) => {
+        console.log('Restaurando checkpoint:', checkpoint.id);
+
+        const restore = async () => {
+            // Restaurar texto localmente
+            setTranscribedText(checkpoint.transcript_at_checkpoint);
+            savedTextRef.current = checkpoint.transcript_at_checkpoint;
+
+            // Atualizar no backend para persistir a restauração
+            try {
+                await updateTranscription(session!.id, checkpoint.transcript_at_checkpoint);
+                console.log('Versão restaurada com sucesso');
+            } catch (e) {
+                console.error('Erro ao salvar versão restaurada:', e);
+            }
+
+            setShowHistoryModal(false);
+        };
+
+        if (Platform.OS === 'web') {
+            if (window.confirm('Deseja restaurar esta versão da transcrição? O texto atual será substituído.')) {
+                restore();
+            }
+        } else {
+            Alert.alert(
+                'Restaurar Versão',
+                'Deseja restaurar esta versão da transcrição? O texto atual será substituído.',
+                [
+                    { text: 'Cancelar', style: 'cancel' },
+                    {
+                        text: 'Restaurar',
+                        style: 'destructive',
+                        onPress: restore
+                    }
+                ]
+            );
+        }
+    };
+
     // Criar Pergunta Aberta
     const handleCreateOpenQuestion = async (type: 'doubts' | 'feedback') => {
         if (!session) return;
@@ -893,18 +1090,28 @@ export default function TranscriptionScreen() {
                                             <MaterialIcons name="edit" size={16} color={colors.secondary} />
                                             <Text style={styles.editModeButtonText}>Editar Resumo</Text>
                                         </TouchableOpacity>
-                                        <TouchableOpacity
-                                            style={styles.sendSummaryButton}
-                                            onPress={handleShareSummary}
-                                        >
-                                            <LinearGradient
-                                                colors={['#22c55e', '#16a34a']}
-                                                style={styles.sendSummaryButtonGradient}
+
+                                        <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
+                                            <TouchableOpacity
+                                                style={[styles.deleteButton, { width: 48, height: 48, paddingHorizontal: 0, paddingVertical: 0 }]}
+                                                onPress={handleDeleteSummary}
                                             >
-                                                <MaterialIcons name="send" size={20} color={colors.white} />
-                                                <Text style={styles.sendSummaryButtonText}>Enviar para Alunos</Text>
-                                            </LinearGradient>
-                                        </TouchableOpacity>
+                                                <MaterialIcons name="delete" size={24} color="#ef4444" />
+                                            </TouchableOpacity>
+
+                                            <TouchableOpacity
+                                                style={[styles.sendSummaryButton, { flex: 1, marginTop: 0 }]}
+                                                onPress={handleShareSummary}
+                                            >
+                                                <LinearGradient
+                                                    colors={['#22c55e', '#16a34a']}
+                                                    style={styles.sendSummaryButtonGradient}
+                                                >
+                                                    <MaterialIcons name="send" size={20} color={colors.white} />
+                                                    <Text style={styles.sendSummaryButtonText}>Enviar para Alunos</Text>
+                                                </LinearGradient>
+                                            </TouchableOpacity>
+                                        </View>
                                     </>
                                 )}
                             </View>
@@ -920,7 +1127,17 @@ export default function TranscriptionScreen() {
                                         const questions = content.questions || [];
 
                                         if (!questions.length) {
-                                            return <Text style={styles.generatedText}>{typeof generatedQuiz === 'string' ? generatedQuiz : JSON.stringify(generatedQuiz)}</Text>;
+                                            return (
+                                                <View style={styles.emptyState}>
+                                                    <MaterialIcons name="error-outline" size={48} color={colors.slate400} />
+                                                    <Text style={styles.emptyStateText}>
+                                                        Não foi possível gerar questões. O texto pode ser muito curto ou não conter informações suficientes.
+                                                    </Text>
+                                                    <Text style={[styles.emptyStateText, { marginTop: 8, fontSize: 12 }]}>
+                                                        Tente ditar mais conteúdo ou falar sobre tópicos específicos.
+                                                    </Text>
+                                                </View>
+                                            );
                                         }
 
                                         return (
@@ -1053,13 +1270,22 @@ export default function TranscriptionScreen() {
                                 })()}
 
                                 {currentActivity && (
-                                    <TouchableOpacity
-                                        style={styles.sendButton}
-                                        onPress={() => startActivity(currentActivity.id)}
-                                    >
-                                        <MaterialIcons name="send" size={18} color={colors.white} />
-                                        <Text style={styles.sendButtonText}>Enviar Quiz para Alunos</Text>
-                                    </TouchableOpacity>
+                                    <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
+                                        <TouchableOpacity
+                                            style={[styles.deleteButton, { width: 48, height: 48, paddingHorizontal: 0, paddingVertical: 0 }]}
+                                            onPress={handleDeleteQuiz}
+                                        >
+                                            <MaterialIcons name="delete" size={24} color="#ef4444" />
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            style={[styles.sendButton, { flex: 1, marginTop: 0 }]}
+                                            onPress={() => startActivity(currentActivity.id)}
+                                        >
+                                            <MaterialIcons name="send" size={18} color={colors.white} />
+                                            <Text style={styles.sendButtonText}>Enviar Quiz para Alunos</Text>
+                                        </TouchableOpacity>
+                                    </View>
                                 )}
                             </View>
                         ) : (
@@ -1106,6 +1332,60 @@ Pressione o botão do microfone para começar a falar."
                     </View>
                 </View>
             </View>
+
+            {/* Modal de Histórico */}
+            <Modal
+                visible={showHistoryModal}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setShowHistoryModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContent}>
+                        <View style={styles.editModalHeader}>
+                            <Text style={styles.modalTitle}>Histórico de Versões</Text>
+                            <TouchableOpacity onPress={() => setShowHistoryModal(false)}>
+                                <MaterialIcons name="close" size={24} color={colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView style={styles.rankingScroll}>
+                            {session?.checkpoints && session.checkpoints.length > 0 ? (
+                                session.checkpoints
+                                    .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                                    .map((checkpoint: any, index: number) => (
+                                        <TouchableOpacity
+                                            key={checkpoint.id}
+                                            style={styles.rankingItem}
+                                            onPress={() => handleRestoreCheckpoint(checkpoint)}
+                                        >
+                                            <View style={styles.rankingPosition}>
+                                                <MaterialIcons name="restore" size={24} color={colors.primary} />
+                                            </View>
+                                            <View style={styles.rankingInfo}>
+                                                <Text style={styles.rankingName}>
+                                                    Versão {session.checkpoints!.length - index}
+                                                </Text>
+                                                <Text style={styles.rankingScoreOld}>
+                                                    {formatTimeAgo(checkpoint.created_at)} • {checkpoint.word_count} palavras
+                                                </Text>
+                                                <Text style={styles.statusWaiting}>
+                                                    Gerado por: {checkpoint.reason === 'quiz' ? 'Quiz' : checkpoint.reason === 'summary' ? 'Resumo' : 'Manual'}
+                                                </Text>
+                                            </View>
+                                            <MaterialIcons name="chevron-right" size={24} color={colors.slate300} />
+                                        </TouchableOpacity>
+                                    ))
+                            ) : (
+                                <View style={styles.emptyStateRanking}>
+                                    <MaterialIcons name="history" size={48} color={colors.slate300} />
+                                    <Text style={styles.emptyText}>Nenhuma versão anterior salva.</Text>
+                                </View>
+                            )}
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
 
             {/* Modal de Edição de Questão */}
             <Modal
@@ -1231,6 +1511,22 @@ Pressione o botão do microfone para começar a falar."
                 </View>
 
                 <View style={styles.footerButtons}>
+                    {/* Botão de Histórico */}
+                    <TouchableOpacity
+                        style={styles.historyButton}
+                        onPress={() => {
+                            console.log('Abrindo histórico. Checkpoints:', session?.checkpoints?.length);
+                            setShowHistoryModal(true);
+                        }}
+                    >
+                        <LinearGradient
+                            colors={['#64748b', '#475569']}
+                            style={styles.historyButtonGradient}
+                        >
+                            <MaterialIcons name="history" size={24} color={colors.white} />
+                            <Text style={styles.buttonLabel}>Histórico</Text>
+                        </LinearGradient>
+                    </TouchableOpacity>
                     {/* Botão de Resumo */}
                     <TouchableOpacity
                         style={styles.summaryButton}
@@ -1622,6 +1918,23 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 2,
         shadowColor: '#f59e0b',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        elevation: 4,
+    },
+    historyButton: {
+        zIndex: 100,
+        elevation: 10,
+    },
+    historyButtonGradient: {
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 2,
+        shadowColor: colors.slate400,
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.3,
         shadowRadius: 4,
@@ -2497,6 +2810,17 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
+    deleteButton: {
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.lg,
+        borderRadius: borderRadius.default,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+        borderWidth: 1,
+        borderColor: '#ef4444',
+        zIndex: 100,
+    },
 
     editModeButton: {
         flexDirection: 'row',
@@ -2515,4 +2839,5 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         fontSize: typography.fontSize.sm,
     },
+
 });
