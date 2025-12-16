@@ -70,7 +70,7 @@ export default function ActivitiesScreen() {
             if (pageNumber === 1) setLoading(true);
             else setLoadingMore(true);
 
-            const res = await getStudentHistory(subjectId);
+            const res = await getStudentHistory(subjectId, pageNumber, 8);
             if (res.success) {
                 if (pageNumber === 1) {
                     setHistory(res.history);

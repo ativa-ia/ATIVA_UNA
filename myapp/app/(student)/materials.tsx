@@ -41,7 +41,6 @@ export default function MaterialsScreen() {
         { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
         { id: 'materials', label: 'Materiais', iconName: 'folder-open' },
         { id: 'calendar', label: 'Calendário', iconName: 'calendar-today' },
-        { id: 'grades', label: 'Notas', iconName: 'school' },
     ];
 
     const handleNavPress = (id: string) => {
@@ -179,7 +178,7 @@ export default function MaterialsScreen() {
                         <Text style={styles.loadingText}>Carregando materiais...</Text>
                     </View>
                 ) : (
-                    <>
+                    <View style={{ flex: 1 }}>
                         {/* Subject Filter */}
                         <View style={{ height: 60 }}>
                             <ScrollView
@@ -242,7 +241,7 @@ export default function MaterialsScreen() {
                                 ))
                             )}
                         </ScrollView>
-                    </>
+                    </View>
                 )}
 
                 {/* Bottom Navigation */}
