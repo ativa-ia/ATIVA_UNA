@@ -133,18 +133,19 @@ export interface SubjectDetails extends Subject {
     pending_activities?: number;
 }
 
-export interface Material {
-    id: number;
-    subject_id: number;
-    subject?: string;
-    title: string;
-    type: 'pdf' | 'video' | 'link';
-    url?: string;
-    size?: string;
-    uploaded_by: number;
-    uploaded_at?: string;
-    upload_date?: string;
-}
+import { Material } from '@/types';
+
+// ... (other code)
+
+// Material defined in @/types/index.ts
+// export interface Material {
+//     id: string;
+//     title: string;
+//     subject: string;
+//     type: 'pdf' | 'video' | 'link' | 'document';
+//     uploadDate: string;
+//     size?: string;
+// }
 
 // Buscar disciplinas do usuário logado
 export const getSubjects = async (): Promise<Subject[]> => {
@@ -194,7 +195,18 @@ export const getSubjectMaterials = async (subjectId: number): Promise<Material[]
         },
     });
 
-    return response.json();
+    const data = await response.json();
+
+    // Map API response to Frontend Model
+    return data.map((item: any) => ({
+        id: item.id.toString(),
+        title: item.title,
+        subject: item.subject || 'Disciplina', // Should retrieve from context if missing
+        type: item.type || 'document',
+        uploadDate: item.upload_date || item.uploaded_at || new Date().toISOString(),
+        size: item.size || undefined,
+        url: item.url
+    }));
 };
 
 // ========== TEACHER API ==========
@@ -279,7 +291,8 @@ export const changePassword = async (data: ChangePasswordData): Promise<AuthResp
 // ========== AI CONTEXT API ==========
 
 // Upload via Supabase Storage (Bypassing Vercel Limit)
-export const uploadContextFile = async (subjectId: number, file: any) => {
+// Upload via Supabase Storage (Bypassing Vercel Limit)
+export const uploadContextFile = async (subjectId: number, file: any, options?: { sessionId?: number }) => {
     try {
         const token = await AsyncStorage.getItem('authToken');
 
@@ -324,6 +337,7 @@ export const uploadContextFile = async (subjectId: number, file: any) => {
             method: 'POST',
             body: JSON.stringify({
                 subject_id: subjectId,
+                session_id: options?.sessionId, // Pass Session ID explicitly
                 file_url: fileUrl,
                 file_path: filePath,
                 file_type: file.mimeType || 'application/pdf',
@@ -369,10 +383,15 @@ export const generateSuggestions = async (subjectId: number) => {
     }
 };
 
-export const getContextFiles = async (subjectId: number) => {
+export const getContextFiles = async (subjectId: number, sessionId?: number) => {
     const token = await AsyncStorage.getItem('authToken');
     try {
-        const response = await fetch(`${API_URL}/ai/context-files/${subjectId}`, {
+        const url = new URL(`${API_URL}/ai/context-files/${subjectId}`);
+        if (sessionId) {
+            url.searchParams.append('session_id', sessionId.toString());
+        }
+
+        const response = await fetch(url.toString(), {
             headers: {
                 'Authorization': `Bearer ${token}`,
             },
@@ -859,28 +878,32 @@ export const createOpenQuestion = async (sessionId: number, question: 'doubts' |
 };
 
 // Iniciar atividade para alunos
-export const broadcastActivity = async (activityId: number): Promise<{ success: boolean; activity: LiveActivity; enrolled_students?: number }> => {
+export const broadcastActivity = async (activityId: number, title?: string): Promise<{ success: boolean; activity: LiveActivity; enrolled_students?: number }> => {
     const token = await AsyncStorage.getItem('authToken');
 
     const response = await fetch(`${API_URL}/transcription/activities/${activityId}/broadcast`, {
         method: 'PUT',
         headers: {
+            'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
         },
+        body: JSON.stringify({ title })
     });
 
     return response.json();
 };
 
 // Compartilhar resumo com alunos
-export const shareSummary = async (activityId: number): Promise<{ success: boolean; activity: LiveActivity }> => {
+export const shareSummary = async (activityId: number, title?: string): Promise<{ success: boolean; activity: LiveActivity }> => {
     const token = await AsyncStorage.getItem('authToken');
 
     const response = await fetch(`${API_URL}/transcription/activities/${activityId}/share`, {
         method: 'PUT',
         headers: {
+            'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
         },
+        body: JSON.stringify({ title })
     });
 
     return response.json();
@@ -1096,89 +1119,90 @@ export const convertContent = async (content: string, type: 'quiz' | 'summary') 
     }
 };
 
-// ==========================================
-// SUPORTE PERSONALIZADO
-// ==========================================
-
-export interface StudentSegment {
-    id: number;
-    name: string;
-    percentage: number;
-    score: number;
-    total: number;
-    performance_level: 'critical' | 'attention' | 'good' | 'excellent';
-    weak_topics: Array<{
-        question_id: number;
-        question: string;
-    }>;
-}
-
-export interface SegmentationResponse {
-    success: boolean;
-    segments: {
-        critical: number[];
-        attention: number[];
-        good: number[];
-        excellent: number[];
-    };
-    students: StudentSegment[];
-    summary: {
-        critical_count: number;
-        attention_count: number;
-        good_count: number;
-        excellent_count: number;
-        total: number;
-    };
-}
-
-export interface SupportContent {
-    title: string;
-    questions: Array<{
-        question: string;
-        options: string[];
-        correct: number;
-        explanation?: string;
-    }>;
-}
-
-export const segmentStudents = async (quizId: number): Promise<SegmentationResponse> => {
+// Professor: Listar atividades ativas da disciplina
+export const getActiveActivitiesList = async (subjectId: number): Promise<{ success: boolean; activities: LiveActivity[] }> => {
     const token = await AsyncStorage.getItem('authToken');
-    const response = await fetch(`${API_URL}/quiz/${quizId}/segment-students`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+    const response = await fetch(`${API_URL}/transcription/subjects/${subjectId}/active_list`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
     });
     return response.json();
 };
 
-export const generateSupportContent = async (
-    quizId: number,
-    studentIds: number[]
-): Promise<{ success: boolean; content?: SupportContent; error?: string }> => {
+// Professor:// Distribuir material de reforço (Professor)
+export const distributeActivityMaterial = async (activityId: number, file: any, title: string, textContent?: string): Promise<{ success: boolean; message?: string; count?: number; average?: number; error?: string }> => {
     const token = await AsyncStorage.getItem('authToken');
-    const response = await fetch(`${API_URL}/quiz/${quizId}/generate-support-content`, {
+
+    const formData = new FormData();
+    formData.append('title', title);
+
+    if (file) {
+        if (Platform.OS === 'web') {
+            // Expo Document Picker on Web returns the File object in the 'file' property of the asset
+            if (file.file) {
+                formData.append('file', file.file);
+            } else {
+                formData.append('file', file);
+            }
+        } else {
+            formData.append('file', {
+                uri: file.uri,
+                name: file.name,
+                type: file.mimeType || 'application/pdf'
+            } as any);
+        }
+    } else if (textContent) {
+        formData.append('text_content', textContent);
+    }
+
+    const response = await fetch(`${API_URL}/transcription/activities/${activityId}/distribute_material`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${token}`,
+            // 'Content-Type': 'multipart/form-data', // Do NOT set this manually with FormData
+        },
+        body: formData,
+    });
+
+    return response.json();
+};
+
+// Gerar resumo de IA para reforço
+export const generateActivitySummary = async (activityId: number): Promise<{ success: boolean; summary?: string; error?: string }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/activities/${activityId}/ai_summary`, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ student_ids: studentIds, content_type: 'quiz' }),
     });
+
     return response.json();
 };
 
-export const sendSupport = async (
-    quizId: number,
-    studentIds: number[],
-    content: SupportContent,
-    message: string = 'Material de reforço para ajudar no seu aprendizado!'
-): Promise<{ success: boolean; activity?: any; error?: string }> => {
+// Obter materiais do aluno (Aluno)
+export const getStudentMaterials = async (): Promise<Material[]> => {
     const token = await AsyncStorage.getItem('authToken');
-    const response = await fetch(`${API_URL}/quiz/${quizId}/send-support`, {
-        method: 'POST',
+
+    const response = await fetch(`${API_URL}/subjects/student/materials`, {
         headers: {
             'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ student_ids: studentIds, content, message }),
     });
-    return response.json();
+
+    const data = await response.json();
+
+    // Map API response (snake_case) to Frontend Model (camelCase)
+    return data.map((item: any) => ({
+        id: item.id.toString(),
+        title: item.title,
+        subject: item.subject || 'Geral',
+        type: item.type || 'document',
+        uploadDate: item.upload_date || item.created_at || new Date().toISOString(),
+        size: item.file_size || item.size || undefined,
+        url: item.content_url || item.url
+    }));
 };

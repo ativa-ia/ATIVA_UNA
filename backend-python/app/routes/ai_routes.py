@@ -3,8 +3,10 @@ Rotas da API de IA
 """
 from flask import Blueprint, request, jsonify, Response, stream_with_context
 from app.middleware.auth_middleware import token_required
-from app.services.ai_service import chat_with_gemini, chat_stream, create_or_get_session
+from app.services.ai_service import chat_with_ai, chat_stream, create_or_get_session, generate_content_with_prompt
 from app.models.ai_session import AISession, AIMessage
+from datetime import datetime
+from app import db
 
 ai_bp = Blueprint('ai', __name__)
 
@@ -57,7 +59,7 @@ def chat(current_user):
         )
     else:
         # Resposta normal
-        response = chat_with_gemini(current_user.id, subject_id, message)
+        response = chat_with_ai(current_user.id, subject_id, message)
         return jsonify({
             'success': True,
             'response': response
@@ -97,6 +99,130 @@ def get_messages(current_user, session_id):
     })
 
 
+@ai_bp.route('/sessions/<int:subject_id>/all', methods=['GET'])
+@token_required
+def list_sessions(current_user, subject_id):
+    """Lista todas as sessões de chat da disciplina"""
+    sessions = AISession.query.filter_by(
+        teacher_id=current_user.id,
+        subject_id=subject_id
+    ).order_by(AISession.started_at.desc()).all()
+    
+    return jsonify({
+        'success': True,
+        'sessions': [s.to_dict() for s in sessions]
+    })
+
+
+@ai_bp.route('/session/new', methods=['POST'])
+@token_required
+def create_new_session(current_user):
+    """
+    Cria uma NOVA sessão de chat (arquiva a anterior se houver)
+    Body: { "subject_id": int }
+    """
+    data = request.get_json()
+    subject_id = data.get('subject_id')
+    
+    if not subject_id:
+        return jsonify({'success': False, 'error': 'ID da disciplina necessário'}), 400
+
+    from datetime import datetime
+    
+    # 1. Encontrar sessão ativa anterior e encerrar (opcional, mas bom pra organização)
+    active_session = AISession.query.filter_by(
+        teacher_id=current_user.id,
+        subject_id=subject_id,
+        status='active'
+    ).first()
+    
+    if active_session:
+        active_session.status = 'ended'
+        active_session.ended_at = datetime.utcnow()
+    
+    # 2. Criar nova sessão
+    new_session = AISession(
+        teacher_id=current_user.id,
+        subject_id=subject_id,
+        status='active'
+    )
+    db.session.add(new_session)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'session': new_session.to_dict()
+    })
+
+
+@ai_bp.route('/session/<int:session_id>/activate', methods=['POST'])
+@token_required
+def activate_session(current_user, session_id):
+    """
+    Ativa uma sessão específica e desativa (arquiva) as outras da mesma disciplina.
+    Isso permite que o usuário retome uma conversa antiga como a principal.
+    """
+    session = AISession.query.get(session_id)
+    
+    if not session:
+        return jsonify({'success': False, 'error': 'Sessão não encontrada'}), 404
+        
+    if session.teacher_id != current_user.id:
+        return jsonify({'success': False, 'error': 'Não autorizado'}), 403
+
+    # 1. Desativar qualquer outra sessão ativa desta disciplina
+    active_sessions = AISession.query.filter_by(
+        teacher_id=current_user.id,
+        subject_id=session.subject_id,
+        status='active'
+    ).all()
+    
+    for s in active_sessions:
+        if s.id != session.id:
+            s.status = 'ended'
+            s.ended_at = datetime.utcnow()
+            
+    # 2. Ativar a sessão alvo
+    session.status = 'active'
+    session.ended_at = None # Remove data de fim pois está ativa novamente
+    
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'session': session.to_dict()
+    })
+
+
+@ai_bp.route('/session/<int:session_id>', methods=['DELETE'])
+@token_required
+def delete_session(current_user, session_id):
+    """Exclui uma sessão de chat e todo seu conteúdo (mensagens e arquivos)"""
+    session = AISession.query.get(session_id)
+    
+    if not session:
+        return jsonify({'success': False, 'error': 'Sessão não encontrada'}), 404
+        
+    if session.teacher_id != current_user.id:
+        return jsonify({'success': False, 'error': 'Não autorizado'}), 403
+        
+    # Exclusão manual dos relacionamentos (caso cascade não resolva tudo ou para segurança extra)
+    # Arquivos de Contexto
+    from app.models.ai_session import AIContextFile
+    AIContextFile.query.filter_by(session_id=session.id).delete()
+    
+    # Mensagens (já tem cascade no model, mas garantindo)
+    AIMessage.query.filter_by(session_id=session.id).delete()
+    
+    db.session.delete(session)
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Sessão excluída com sucesso'
+    })
+
+
 @ai_bp.route('/session/<int:session_id>/end', methods=['POST'])
 @token_required
 def end_session(current_user, session_id):
@@ -130,13 +256,11 @@ def process_content(current_user):
     
     Body:
     {
-        "content": "string",      # Conteúdo ditado pelo professor
+        "content": "string",
         "action": "string",       # 'quiz', 'summary', 'discussion'
         "subject_id": int
     }
     """
-    import google.generativeai as genai
-    import os
     import json
     
     data = request.get_json()
@@ -154,103 +278,99 @@ def process_content(current_user):
     if action not in ['quiz', 'summary', 'discussion']:
         return jsonify({'success': False, 'error': 'Ação inválida'}), 400
     
-    # Configurar Gemini
-    GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-    if not GEMINI_API_KEY:
-        return jsonify({'success': False, 'error': 'GEMINI_API_KEY não configurada'}), 500
-    
-    genai.configure(api_key=GEMINI_API_KEY)
-    
     prompts = {
-        'quiz': f"""Você é um professor criando um quiz educacional.
-
-Com base no seguinte conteúdo:
----
-{content}
----
-
+        'quiz': {
+            'system': """Você é um professor criando um quiz educacional.
 Gere EXATAMENTE 10 perguntas de múltipla escolha em formato JSON.
 Cada pergunta deve ter 4 alternativas (A, B, C, D).
-
 Responda APENAS com o JSON, sem texto adicional:
-{{
+{
   "questions": [
-    {{
+    {
       "question": "Texto da pergunta?",
       "options": ["Alternativa A", "Alternativa B", "Alternativa C", "Alternativa D"],
       "correct": 0
-    }}
+    }
   ]
-}}
-
+}
 IMPORTANTE: "correct" é o índice da resposta correta (0=A, 1=B, 2=C, 3=D)""",
-
-        'summary': f"""Você é um professor criando material didático.
-
-Com base no seguinte conteúdo:
+            'json_mode': True,
+            'template': f"""Com base no seguinte conteúdo:
 ---
 {content}
----
+---"""
+        },
 
+        'summary': {
+            'system': """Você é um professor criando material didático.
 Crie um resumo didático e bem estruturado com:
 1. Título do tema
 2. Pontos principais (em tópicos)
 3. Conceitos-chave para memorizar
 4. Conclusão
-
 Seja claro e objetivo. Use linguagem acessível para estudantes.""",
-
-        'discussion': f"""Você é um professor preparando uma discussão em sala.
-
-Com base no seguinte conteúdo:
+            'json_mode': False,
+            'template': f"""Com base no seguinte conteúdo:
 ---
 {content}
----
+---"""
+        },
 
+        'discussion': {
+            'system': """Você é um professor preparando uma discussão em sala.
 Gere EXATAMENTE 5 perguntas para discussão em grupo.
 As perguntas devem estimular pensamento crítico e debate.
-
 Responda em formato JSON:
-{{
+{
   "questions": [
-    {{
+    {
       "question": "Pergunta para discussão?",
       "objective": "O que a pergunta busca desenvolver nos alunos"
-    }}
+    }
   ]
-}}"""
+}""",
+            'json_mode': True,
+            'template': f"""Com base no seguinte conteúdo:
+---
+{content}
+---"""
+        }
     }
     
     try:
-        model = genai.GenerativeModel('gemini-2.5-flash')
-        response = model.generate_content(prompts[action])
-        result_text = response.text
+        config = prompts[action]
+        result_text = generate_content_with_prompt(
+            system_instruction=config['system'],
+            prompt=config['template'],
+            json_mode=config['json_mode']
+        )
         
         # Para quiz e discussion, tentar parsear como JSON
         if action in ['quiz', 'discussion']:
-            # Limpar resposta de possíveis marcadores markdown
-            clean_text = result_text.strip()
-            if clean_text.startswith('```json'):
-                clean_text = clean_text[7:]
-            if clean_text.startswith('```'):
-                clean_text = clean_text[3:]
-            if clean_text.endswith('```'):
-                clean_text = clean_text[:-3]
-            
             try:
-                parsed = json.loads(clean_text.strip())
+                parsed = json.loads(result_text.strip())
                 return jsonify({
                     'success': True,
                     'action': action,
                     'result': parsed
                 })
             except json.JSONDecodeError:
-                # Se não conseguir parsear, retorna texto bruto
-                return jsonify({
-                    'success': True,
-                    'action': action,
-                    'result': {'raw': result_text}
-                })
+                # Se não conseguir parsear, tenta limpar markdown ou retorna erro
+                try: 
+                    # Last ditch effort for common markdown wrapping
+                    cleaned = result_text.replace('```json', '').replace('```', '').strip()
+                    parsed = json.loads(cleaned)
+                    return jsonify({
+                        'success': True,
+                        'action': action,
+                        'result': parsed
+                    })
+                except:
+                    return jsonify({
+                        'success': True,
+                        'action': action,
+                        'result': {'raw': result_text}
+                    })
         else:
             # Para summary, retorna texto
             return jsonify({
@@ -286,8 +406,10 @@ def upload_context(current_user):
     # 1. Check if JSON (URL from Supabase)
     if request.is_json:
         data = request.get_json()
+        print(f"DEBUG UPLOAD: Received data: {data}")
         file_url = data.get('file_url')
         subject_id = data.get('subject_id')
+        session_id = data.get('session_id')
         filename = data.get('filename', 'downloaded_file.pdf')
         
         if not file_url:
@@ -305,6 +427,7 @@ def upload_context(current_user):
     elif 'file' in request.files:
         file = request.files['file']
         subject_id = request.form.get('subject_id')
+        session_id = request.form.get('session_id')
         filename = file.filename
         
         if not file or filename == '':
@@ -316,8 +439,8 @@ def upload_context(current_user):
         return jsonify({'success': False, 'error': 'Requisição inválida (esperado arquivo ou url)'}), 400
     
     
-    if not subject_id:
-        return jsonify({'success': False, 'error': 'ID da disciplina não fornecido'}), 400
+    if not subject_id or not session_id:
+        return jsonify({'success': False, 'error': 'ID da disciplina e ID da sessão necessários'}), 400
         
     try:
         content = ""
@@ -356,9 +479,10 @@ def upload_context(current_user):
         if not content.strip():
             return jsonify({'success': False, 'error': 'Não foi possível extrair texto do arquivo'}), 400
             
-        # Salvar no banco
+        # Salvar no banco vinculado à SESSÃO
         context_file = AIContextFile(
             subject_id=subject_id,
+            session_id=session_id, # Linkar à sessão específica
             filename=filename,
             content=content,
             file_type=file_type
@@ -383,10 +507,20 @@ def upload_context(current_user):
 @ai_bp.route('/context-files/<int:subject_id>', methods=['GET'])
 @token_required
 def get_context_files(current_user, subject_id):
-    """Lista arquivos de contexto da disciplina"""
+    """
+    Lista arquivos de contexto (da sessão atual ou todos se não tiver session_id na query)
+    Query param: session_id (opcional)
+    """
     from app.models.ai_session import AIContextFile
     
-    files = AIContextFile.query.filter_by(subject_id=subject_id).order_by(AIContextFile.created_at.desc()).all()
+    session_id = request.args.get('session_id')
+    
+    query = AIContextFile.query.filter_by(subject_id=subject_id)
+    
+    if session_id:
+        query = query.filter_by(session_id=session_id)
+        
+    files = query.order_by(AIContextFile.created_at.desc()).all()
     
     return jsonify({
         'success': True,

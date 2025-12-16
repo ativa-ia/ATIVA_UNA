@@ -8,6 +8,7 @@ import {
     TextInput,
     ActivityIndicator,
     Alert,
+    Platform,
 } from 'react-native';
 import Markdown from 'react-native-markdown-display';
 import { StatusBar } from 'expo-status-bar';
@@ -18,6 +19,7 @@ import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { LiveActivity, submitActivityResponse, isActivitySubmitted, submitQuizProgress } from '@/services/api';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import ConfirmationModal from '@/components/modals/ConfirmationModal';
 
 /**
  * LiveActivityScreen - Tela para aluno responder atividades ao vivo
@@ -27,8 +29,18 @@ export default function LiveActivityScreen() {
     const insets = useSafeAreaInsets();
     const params = useLocalSearchParams();
 
-    // Parse activity data safely
-    const activity = params.activity ? JSON.parse(params.activity as string) : null;
+    // Parse activity data safely and memoize to prevent re-ref-gen
+    const activity = React.useMemo(() => {
+        const act = params.activity ? JSON.parse(params.activity as string) : null;
+        // Force IDs to be indices to ensure alignment with backend logic
+        if (act && act.content && act.content.questions) {
+            act.content.questions = act.content.questions.map((q: any, i: number) => ({
+                ...q,
+                id: i
+            }));
+        }
+        return act;
+    }, [params.activity]);
 
     const [currentQuestion, setCurrentQuestion] = useState(0);
     const [answers, setAnswers] = useState<Record<string, number>>({});
@@ -38,13 +50,39 @@ export default function LiveActivityScreen() {
     const [result, setResult] = useState<any>(null);
     const [timeRemaining, setTimeRemaining] = useState<number>(activity?.time_remaining || 300);
 
-    // Verificação inicial de segurança
+    // Confirmation Modal State (Retrying Injection)
+    const [confirmModal, setConfirmModal] = useState({
+        visible: false,
+        title: '',
+        message: '',
+        onConfirm: () => { },
+        confirmText: 'Confirmar',
+        isDestructive: false
+    });
+
+    const closeConfirmModal = () => setConfirmModal(prev => ({ ...prev, visible: false }));
+
+
+
+    // Verificação inicial de segurança e status
     useEffect(() => {
-        if (activity && isActivitySubmitted(activity.id)) {
-            // Se já foi enviado localmente, forçar estado de enviado
+        // Se a atividade não existe, não faz nada (a tela de erro já trata)
+        if (!activity) return;
+
+        // Verificar se atividade já encerrou (status 'ended' ou tempo acabou)
+        const isEnded = activity.status === 'ended' || (activity.ends_at && new Date(activity.ends_at) < new Date());
+
+        if (isEnded && !isActivitySubmitted(activity.id)) {
+            Alert.alert(
+                "Atividade Encerrada",
+                "O tempo para esta atividade acabou ou o professor encerrou a sessão.",
+                [{ text: "Sair", onPress: () => router.back() }]
+            );
+            return;
+        }
+
+        if (isActivitySubmitted(activity.id)) {
             setIsSubmitted(true);
-            // Poderíamos buscar o resultado aqui se necessário, 
-            // mas por enquanto apenas bloqueia o reenvio e mostra concluído
         }
     }, [activity]);
 
@@ -78,15 +116,13 @@ export default function LiveActivityScreen() {
 
     const handleSelectAnswer = (questionIndex: number, optionIndex: number) => {
         if (isSubmitted) return;
-        console.log(`✅ Answer selected: Q${questionIndex} = ${optionIndex}`);
-        setAnswers(prev => {
-            const updated = {
-                ...prev,
-                [questionIndex.toString()]: optionIndex
-            };
-            console.log('📝 Current answers state:', updated);
-            return updated;
-        });
+
+        console.log(`User Selected -> Q:${questionIndex}, Option:${optionIndex}`);
+
+        setAnswers(prev => ({
+            ...prev,
+            [questionIndex.toString()]: optionIndex
+        }));
     };
 
     const handleNextQuestion = async () => {
@@ -103,7 +139,7 @@ export default function LiveActivityScreen() {
                 time_taken: timeTaken
             }).then(res => {
                 console.log('Progress synced:', res);
-            });
+            }).catch(err => console.log('Sync error:', err));
         }
 
         if (currentQuestion < questions.length - 1) {
@@ -123,17 +159,40 @@ export default function LiveActivityScreen() {
         if (activity.activity_type === 'quiz') {
             const questions = activity.content?.questions || [];
             const answeredCount = Object.keys(answers).length;
-            const totalQuestions = questions.length;
 
-            console.log(`🔍 Validation: ${answeredCount}/${totalQuestions} questions answered`);
+            // Sync progress for the last question before submitting (User Request)
+            const totalTime = activity.time_limit || 300;
+            const timeTaken = totalTime - timeRemaining;
 
-            // Require ALL questions to be answered (100%)
-            if (!autoSubmit && answeredCount < totalQuestions) {
+            // Fire and forget sync to update teacher dashboard immediately
+            submitQuizProgress(activity.id, {
+                answers: answers,
+                time_taken: timeTaken
+            }).catch(err => console.log('Final sync error:', err));
+
+            // Enforce answering ALL questions for better accuracy unless auto-submit (timeout)
+            if (!autoSubmit && answeredCount < questions.length) {
                 Alert.alert(
-                    'Responda Todas as Perguntas',
-                    `Você precisa responder todas as ${totalQuestions} perguntas antes de enviar.\n\nRespondidas: ${answeredCount}/${totalQuestions}`,
+                    '⚠️ Questões em Branco',
+                    `Você respondeu ${answeredCount} de ${questions.length} perguntas.\n\nPor favor, responda todas antes de enviar.`,
                     [{ text: 'OK' }]
                 );
+                return;
+            }
+
+            // Confirmation Dialog with Summary (Custom Modal)
+            if (!autoSubmit) {
+                setConfirmModal({
+                    visible: true,
+                    title: 'Confirmar Envio',
+                    message: `Você está prestes a enviar ${answeredCount} respostas.\n\nDeseja continuar?`,
+                    confirmText: 'Enviar',
+                    onConfirm: async () => {
+                        closeConfirmModal();
+                        await submitAnswers();
+                    },
+                    isDestructive: false
+                });
                 return;
             }
         } else if (activity.activity_type === 'open_question') {
@@ -146,12 +205,27 @@ export default function LiveActivityScreen() {
         await submitAnswers();
     };
 
+    // Keep a ref of answers to ensure submission function always has latest state
+    const answersRef = useRef(answers);
+    useEffect(() => {
+        answersRef.current = answers;
+    }, [answers]);
 
     const submitAnswers = async () => {
         if (!activity) return;
 
         setIsSubmitting(true);
         if (timerRef.current) clearInterval(timerRef.current);
+
+        // Calculate time taken
+        const totalTime = activity.time_limit || 300;
+        const timeTaken = totalTime - timeRemaining; // Ensure consistent calculation
+
+        // Use Ref to guarantee latest answers
+        const currentAnswers = answersRef.current;
+
+        // DEBUG: Log submitting payload
+        console.log('Submitting answers:', JSON.stringify(currentAnswers));
 
         try {
             // Use functional update to get the absolute latest state
@@ -164,7 +238,7 @@ export default function LiveActivityScreen() {
             });
 
             const data = activity.activity_type === 'quiz'
-                ? { answers: finalAnswers }
+                ? { answers: currentAnswers, time_taken: timeTaken }
                 : activity.activity_type === 'summary'
                     ? { read: true }
                     : { text: textAnswer };
@@ -313,7 +387,15 @@ export default function LiveActivityScreen() {
                         ]}>
                             {formatTime(timeRemaining)}
                         </Text>
+
                     </View>
+                    <TouchableOpacity
+                        onPress={() => router.back()}
+                        style={{ marginLeft: spacing.sm, padding: 4 }}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                        <MaterialIcons name="close" size={24} color={colors.textSecondary} />
+                    </TouchableOpacity>
                 </View>
 
                 {/* Progress */}
@@ -403,7 +485,16 @@ export default function LiveActivityScreen() {
                         </TouchableOpacity>
                     )}
                 </View>
-            </View>
+                <ConfirmationModal
+                    visible={confirmModal.visible}
+                    title={confirmModal.title}
+                    message={confirmModal.message}
+                    confirmText={confirmModal.confirmText}
+                    isDestructive={confirmModal.isDestructive}
+                    onConfirm={confirmModal.onConfirm}
+                    onCancel={closeConfirmModal}
+                />
+            </View >
         );
     }
 
@@ -421,6 +512,13 @@ export default function LiveActivityScreen() {
                         <Text style={styles.activityTitle}>{activity.title}</Text>
                         <Text style={styles.questionCounter}>Resumo da Aula</Text>
                     </View>
+                    <TouchableOpacity
+                        onPress={() => router.back()}
+                        style={{ padding: 4 }}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                        <MaterialIcons name="close" size={24} color={colors.textSecondary} />
+                    </TouchableOpacity>
                 </View>
 
                 <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>

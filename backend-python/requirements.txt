@@ -14,3 +14,4 @@ flask-socketio==5.3.6
 
 reportlab>=4.0.0
 requests
+openai>=1.0.0

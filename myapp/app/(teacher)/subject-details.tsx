@@ -7,14 +7,17 @@ import {
     TouchableOpacity,
     Image,
     Platform,
+    Alert,
+    ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
+import { LiveActivity, getActiveActivitiesList } from '@/services/api';
 
 /**
  * TeacherSubjectDetailsScreen - Detalhes da Disciplina (Professor)
@@ -32,6 +35,25 @@ export default function TeacherSubjectDetailsScreen() {
     useEffect(() => {
         setIsWeb(Platform.OS === 'web');
     }, []);
+
+    // Active Activities Count (badge)
+    const [activeCount, setActiveCount] = useState(0);
+
+    useFocusEffect(
+        React.useCallback(() => {
+            const loadCount = async () => {
+                if (subjectId) {
+                    try {
+                        const result = await getActiveActivitiesList(parseInt(subjectId));
+                        if (result.success && result.activities) {
+                            setActiveCount(result.activities.length);
+                        }
+                    } catch (e) { console.log(e); }
+                }
+            };
+            loadCount();
+        }, [subjectId])
+    );
 
     // Mock data - será substituído por dados reais do backend
     const subjectData = {
@@ -80,6 +102,26 @@ export default function TeacherSubjectDetailsScreen() {
                             </Text>
                         </View>
                     </View>
+
+                    {/* Active Activities Button (New) */}
+                    {activeCount > 0 && (
+                        <TouchableOpacity
+                            style={styles.activeActivitiesButton}
+                            onPress={() => router.push({
+                                pathname: '/(teacher)/active-activities',
+                                params: { subjectId: subjectId, subjectName: subjectName }
+                            })}
+                        >
+                            <View style={styles.activeActivitiesContent}>
+                                <MaterialIcons name="bolt" size={24} color={colors.white} />
+                                <View style={{ flex: 1 }}>
+                                    <Text style={styles.activeActivitiesTitle}>Atividades em Andamento</Text>
+                                    <Text style={styles.activeActivitiesSubtitle}>{activeCount} atividades ativas agora</Text>
+                                </View>
+                                <MaterialIcons name="arrow-forward-ios" size={16} color="rgba(255,255,255,0.8)" />
+                            </View>
+                        </TouchableOpacity>
+                    )}
 
 
 
@@ -424,5 +466,31 @@ const styles = StyleSheet.create({
         fontWeight: typography.fontWeight.bold,
         fontFamily: typography.fontFamily.display,
         color: colors.white,
+    },
+    activeActivitiesButton: {
+        marginHorizontal: spacing.base,
+        marginBottom: spacing.md,
+        backgroundColor: colors.secondary, // Amber/Orange usually for "live"
+        borderRadius: borderRadius.lg,
+        padding: spacing.md,
+        elevation: 4,
+        shadowColor: colors.secondary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+    },
+    activeActivitiesContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.md,
+    },
+    activeActivitiesTitle: {
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.bold,
+        color: colors.white,
+    },
+    activeActivitiesSubtitle: {
+        fontSize: typography.fontSize.sm,
+        color: 'rgba(255,255,255,0.9)',
     },
 });
