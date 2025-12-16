@@ -46,7 +46,7 @@ def create_session(current_user):
         TranscriptionSession.subject_id == subject_id,
         TranscriptionSession.teacher_id == current_user.id,
         TranscriptionSession.status.in_(['active', 'paused'])
-    ).first()
+    ).order_by(TranscriptionSession.id.desc()).first()
     
     if existing:
         # Se estiver pausada, retomamos automaticamente ao entrar na tela

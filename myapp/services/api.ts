@@ -280,7 +280,8 @@ export const changePassword = async (data: ChangePasswordData): Promise<AuthResp
 // ========== AI CONTEXT API ==========
 
 // Upload via Supabase Storage (Bypassing Vercel Limit)
-export const uploadContextFile = async (subjectId: number, file: any) => {
+// Upload via Supabase Storage (Bypassing Vercel Limit)
+export const uploadContextFile = async (subjectId: number, file: any, options?: { sessionId?: number }) => {
     try {
         const token = await AsyncStorage.getItem('authToken');
 
@@ -325,6 +326,7 @@ export const uploadContextFile = async (subjectId: number, file: any) => {
             method: 'POST',
             body: JSON.stringify({
                 subject_id: subjectId,
+                session_id: options?.sessionId, // Pass Session ID explicitly
                 file_url: fileUrl,
                 file_path: filePath,
                 file_type: file.mimeType || 'application/pdf',
@@ -370,10 +372,15 @@ export const generateSuggestions = async (subjectId: number) => {
     }
 };
 
-export const getContextFiles = async (subjectId: number) => {
+export const getContextFiles = async (subjectId: number, sessionId?: number) => {
     const token = await AsyncStorage.getItem('authToken');
     try {
-        const response = await fetch(`${API_URL}/ai/context-files/${subjectId}`, {
+        const url = new URL(`${API_URL}/ai/context-files/${subjectId}`);
+        if (sessionId) {
+            url.searchParams.append('session_id', sessionId.toString());
+        }
+
+        const response = await fetch(url.toString(), {
             headers: {
                 'Authorization': `Bearer ${token}`,
             },

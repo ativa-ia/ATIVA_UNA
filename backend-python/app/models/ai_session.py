@@ -57,8 +57,8 @@ class AIContextFile(db.Model):
     __tablename__ = 'ai_context_files'
 
     id = db.Column(db.Integer, primary_key=True)
-    session_id = db.Column(db.Integer, db.ForeignKey('ai_sessions.id'), nullable=True) # Pode ser ligado a sessão ou disciplina (vamos ligar a session por enquanto ou subject?)
-    # Melhor ligar ao subject para persistir entre sessões
+    session_id = db.Column(db.Integer, db.ForeignKey('ai_sessions.id'), nullable=False)
+    # subject_id mantido para referência rápida, mas o vinculo forte é com a sessão
     subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False)
     filename = db.Column(db.String(255), nullable=False)
     content = db.Column(db.Text, nullable=False) # Texto extraído do PDF

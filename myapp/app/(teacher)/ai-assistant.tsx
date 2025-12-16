@@ -23,11 +23,13 @@ import { sendAIMessage } from '@/services/ai';
 
 import { processContent, createQuiz, broadcastQuiz, Quiz } from '@/services/quiz';
 import { uploadContextFile, getContextFiles, deleteContextFile, generateSuggestions } from '@/services/api';
-import { getChatHistory, saveChatMessage, clearChatHistory } from '@/services/chat';
+import { getAISession, getAIMessages, createAISession, listAISessions, activateAISession, deleteAISession } from '@/services/ai';
+import { clearChatHistory } from '@/services/chat';
 import * as DocumentPicker from 'expo-document-picker';
 import Markdown from 'react-native-markdown-display';
 import ContentEditorModal from '@/components/modals/ContentEditorModal';
 import { shareContent } from '@/services/api';
+import ConfirmationModal from '@/components/modals/ConfirmationModal';
 
 interface Message {
     id: string;
@@ -65,58 +67,211 @@ export default function AIAssistantScreen() {
     const [inputText, setInputText] = useState('');
     const [isChatLoading, setIsChatLoading] = useState(false); // Changed default to false since we are not loading history
 
-    /*
-    // Desabilitado: Chat agora é temporário (sessão única)
+    // State for Session Management
+    const [sessionId, setSessionId] = useState<number | null>(null);
+    const [showHistoryModal, setShowHistoryModal] = useState(false);
+    const [historySessions, setHistorySessions] = useState<any[]>([]);
+
+    // Carregar histórico (persistência)
     useEffect(() => {
-        const loadHistory = async () => {
+        let isMounted = true;
+        const initSession = async () => {
             try {
-                const result = await getChatHistory(subjectId);
-                if (result.success && result.messages && result.messages.length > 0) {
-                    const loadedMessages: Message[] = result.messages.map((m) => ({
-                        id: m.id.toString(),
-                        text: m.content,
-                        isUser: m.is_user,
-                        timestamp: new Date(m.created_at),
-                    }));
-                    setMessages(loadedMessages);
+                // 1. Obter/Criar sessão
+                const sessionResult = await getAISession(subjectId);
+                if (sessionResult.success && sessionResult.session) {
+                    const sessionId = sessionResult.session.id;
+                    setSessionId(sessionId);
+                    loadSessionData(sessionId);
+                    return;
+
+                    // 2. Buscar mensagens
+                    const msgsResult = await getAIMessages(sessionId);
+
+                    if (isMounted && msgsResult.success && msgsResult.messages.length > 0) {
+                        const loadedMessages: Message[] = msgsResult.messages.map((m) => ({
+                            id: m.id.toString(),
+                            text: m.content,
+                            isUser: m.role === 'user',
+                            timestamp: new Date(m.created_at),
+                        }));
+                        // Manter mensagem de boas-vindas ou substituir? Geralmente colamos o histórico DEPOIS dela ou substituímos.
+                        // Se tiver histórico, melhor mostrar o histórico.
+                        setMessages([welcomeMessage, ...loadedMessages]);
+                        // Scroll to bottom
+                        setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: false }), 100);
+                    }
                 }
             } catch (error) {
                 console.log('Erro ao carregar histórico:', error);
             } finally {
-                setIsChatLoading(false);
+                if (isMounted) setIsChatLoading(false);
             }
         };
-        loadHistory();
-    }, [subjectId]);
-    */
 
-    // Limpar chat
-    const handleClearChat = () => {
-        Alert.alert(
-            'Limpar Conversa',
-            'Tem certeza que deseja limpar a tela?',
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                    text: 'Limpar', style: 'destructive', onPress: async () => {
-                        await clearChatHistory(subjectId);
-                        setMessages([welcomeMessage]);
-                    }
-                }
-            ]
-        );
+        initSession();
+        return () => { isMounted = false; };
+    }, [subjectId]);
+
+    const loadSessionData = async (targetSessionId: number) => {
+        setIsChatLoading(true);
+        try {
+            // 2. Buscar mensagens da sessão
+            const msgsResult = await getAIMessages(targetSessionId);
+
+            if (msgsResult.success && msgsResult.messages.length > 0) {
+                const loadedMessages: Message[] = msgsResult.messages.map((m) => ({
+                    id: m.id.toString(),
+                    text: m.content,
+                    isUser: m.role === 'user',
+                    timestamp: new Date(m.created_at),
+                }));
+                setMessages([welcomeMessage, ...loadedMessages]);
+                setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: false }), 100);
+            } else {
+                setMessages([welcomeMessage]);
+            }
+
+            // 3. Carregar arquivos da sessão
+            loadContextFiles(targetSessionId);
+
+        } catch (error) {
+            console.log('Erro ao carregar dados da sessão:', error);
+        } finally {
+            setIsChatLoading(false);
+        }
     };
 
-    // Context Files State
-    const [contextFiles, setContextFiles] = useState<any[]>([]);
-    const [isUploading, setIsUploading] = useState(false);
-    const [showContextSidebar, setShowContextSidebar] = useState(false);
+    // Load Context Files (By Session)
+    const loadContextFiles = async (targetSessionId?: number) => {
+        const sid = targetSessionId || sessionId;
+        if (!sid) return;
+
+        const result = await getContextFiles(subjectId, sid);
+        if (result.success) {
+            setContextFiles(result.files);
+        } else {
+            setContextFiles([]);
+        }
+    };
 
     // Share Content State
     const [modalVisible, setModalVisible] = useState(false);
     const [modalContent, setModalContent] = useState<string | object>('');
     const [modalType, setModalType] = useState<'quiz' | 'summary'>('summary');
     const [showSuggestionInfo, setShowSuggestionInfo] = useState(false);
+
+    // Confirmation Modal State
+    const [confirmModal, setConfirmModal] = useState({
+        visible: false,
+        title: '',
+        message: '',
+        onConfirm: () => { },
+        confirmText: 'Confirmar',
+        isDestructive: false
+    });
+
+    const closeConfirmModal = () => setConfirmModal(prev => ({ ...prev, visible: false }));
+
+    const handleNewChat = () => {
+        setConfirmModal({
+            visible: true,
+            title: 'Novo Chat',
+            message: 'Deseja iniciar uma nova conversa? A atual será arquivada no histórico.',
+            confirmText: 'Novo Chat',
+            isDestructive: false,
+            onConfirm: async () => {
+                closeConfirmModal();
+                setIsChatLoading(true);
+                try {
+                    const result = await createAISession(subjectId);
+                    if (result.success && result.session) {
+                        setSessionId(result.session.id);
+                        setMessages([welcomeMessage]);
+                        setContextFiles([]);
+                    }
+                } catch (e) {
+                    Alert.alert('Erro', 'Não foi possível criar novo chat.');
+                } finally {
+                    setIsChatLoading(false);
+                }
+            }
+        });
+    };
+
+    const handleOpenHistory = async () => {
+        setIsChatLoading(true);
+        try {
+            const result = await listAISessions(subjectId);
+            if (result.success) {
+                setHistorySessions(result.sessions);
+                setShowHistoryModal(true);
+            }
+        } catch (e) {
+            Alert.alert('Erro', 'Não foi possível carregar o histórico.');
+        } finally {
+            setIsChatLoading(false);
+        }
+    };
+
+    const handleRestoreSession = async (session: any) => {
+        setShowHistoryModal(false);
+        if (session.id === sessionId) return;
+
+        setSessionId(session.id);
+
+        // Ativar a sessão no backend para persistência
+        await activateAISession(session.id);
+
+        loadSessionData(session.id);
+    };
+
+    const handleDeleteSession = (session: any) => {
+        // Close history modal if needed, or keep it open? 
+        // Logic: Delete confirm modal over history modal.
+
+        setConfirmModal({
+            visible: true,
+            title: 'Apagar Conversa',
+            message: `Tem certeza que deseja apagar a conversa de ${new Date(session.started_at).toLocaleDateString()}?`,
+            confirmText: 'Apagar',
+            isDestructive: true,
+            onConfirm: async () => {
+                closeConfirmModal();
+                await deleteAISession(session.id);
+                // Atualizar lista
+                const list = await listAISessions(subjectId);
+                if (list.success) setHistorySessions(list.sessions);
+                // Se apagou a ativa, limpar tela
+                if (session.id === sessionId) {
+                    setIsChatLoading(true);
+                    try {
+                        // Se apagou a ativa, cria uma nova imediatamente para não ficar no limbo
+                        const result = await createAISession(subjectId);
+                        if (result.success && result.session) {
+                            setSessionId(result.session.id);
+                            setMessages([welcomeMessage]);
+                            setContextFiles([]);
+                        } else {
+                            // Fallback
+                            setSessionId(null);
+                            setMessages([welcomeMessage]);
+                            setContextFiles([]);
+                        }
+                    } catch (e) {
+                        setSessionId(null);
+                    } finally {
+                        setIsChatLoading(false);
+                    }
+                }
+            }
+        });
+    };
+
+    // Context Files State
+    const [contextFiles, setContextFiles] = useState<any[]>([]);
+    const [isUploading, setIsUploading] = useState(false);
+    const [showContextSidebar, setShowContextSidebar] = useState(false);
 
     const handleOpenShare = (text: string) => {
         // Simple heuristic to detect JSON/Quiz
@@ -178,17 +333,7 @@ export default function AIAssistantScreen() {
         }
     };
 
-    // Load Context Files
-    useEffect(() => {
-        loadContextFiles();
-    }, [subjectId]);
 
-    const loadContextFiles = async () => {
-        const result = await getContextFiles(subjectId);
-        if (result.success) {
-            setContextFiles(result.files);
-        }
-    };
 
     // Estado de Ações Rápidas (começa com as padrão)
     const [activeQuickActions, setActiveQuickActions] = useState<QuickAction[]>([
@@ -307,7 +452,8 @@ export default function AIAssistantScreen() {
             // 4MB limit removed - using Supabase Storage now
 
             setIsUploading(true);
-            const uploadResult = await uploadContextFile(subjectId, file);
+            console.log('DEBUG FRONTEND UPLOAD:', { subjectId, sessionId });
+            const uploadResult = await uploadContextFile(subjectId, file, { sessionId: sessionId || undefined });
 
             if (uploadResult.success) {
                 Alert.alert('Sucesso', 'Arquivo adicionado ao contexto da IA!');
@@ -371,10 +517,17 @@ export default function AIAssistantScreen() {
                     </View>
                     <TouchableOpacity
                         style={[styles.clearButton, { marginRight: 8 }]}
-                        onPress={handleClearChat}
+                        onPress={handleOpenHistory}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
-                        <MaterialIcons name="delete-outline" size={22} color="rgba(255,255,255,0.7)" />
+                        <MaterialIcons name="history" size={24} color={colors.white} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.clearButton, { marginRight: 8 }]}
+                        onPress={handleNewChat}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                        <MaterialIcons name="add-circle-outline" size={24} color={colors.white} />
                     </TouchableOpacity>
                     <TouchableOpacity
                         style={styles.clearButton}
@@ -642,6 +795,8 @@ export default function AIAssistantScreen() {
                 type={modalType}
             />
 
+
+
             {/* Modal de Informação da Sugestão */}
             <Modal
                 visible={showSuggestionInfo}
@@ -671,6 +826,81 @@ export default function AIAssistantScreen() {
                 </View>
             </Modal>
 
+            {/* History Modal */}
+            <Modal
+                visible={showHistoryModal}
+                transparent
+                animationType="slide"
+                onRequestClose={() => setShowHistoryModal(false)}
+            >
+                <View style={styles.sidebarOverlay}>
+                    <TouchableOpacity
+                        style={{ flex: 1 }}
+                        onPress={() => setShowHistoryModal(false)}
+                    />
+                    <View style={styles.sidebarContainer}>
+                        <View style={styles.sidebarHeader}>
+                            <Text style={styles.sidebarTitle}>Histórico de Conversas</Text>
+                            <TouchableOpacity
+                                style={styles.closeButton}
+                                onPress={() => setShowHistoryModal(false)}
+                            >
+                                <MaterialIcons name="close" size={24} color={colors.slate400} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView style={styles.fileList}>
+                            {historySessions.length === 0 ? (
+                                <View style={styles.emptyState}>
+                                    <MaterialIcons name="history" size={48} color={colors.slate800} />
+                                    <Text style={styles.emptyStateText}>Nenhuma conversa anterior.</Text>
+                                </View>
+                            ) : (
+                                historySessions.map((session: any) => (
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+                                        <TouchableOpacity
+                                            key={session.id}
+                                            style={[styles.fileItem, { flex: 1, marginRight: 8 }, session.id === sessionId && { borderColor: colors.primary, backgroundColor: colors.primary + '10' }]}
+                                            onPress={() => handleRestoreSession(session)}
+                                        >
+                                            <View style={styles.fileIcon}>
+                                                <MaterialIcons name="chat" size={20} color={session.id === sessionId ? colors.primary : colors.slate500} />
+                                            </View>
+                                            <View style={styles.fileInfo}>
+                                                <Text style={styles.fileName}>Conversa #{session.id}</Text>
+                                                <Text style={styles.fileDate}>
+                                                    {new Date(session.started_at).toLocaleDateString()} {new Date(session.started_at).toLocaleTimeString().slice(0, 5)}
+                                                </Text>
+                                            </View>
+                                            {session.status === 'active' && (
+                                                <View style={{ backgroundColor: colors.secondary + '20', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 }}>
+                                                    <Text style={{ color: colors.secondary, fontSize: 10, fontWeight: 'bold' }}>ATIVA</Text>
+                                                </View>
+                                            )}
+                                        </TouchableOpacity>
+                                        <TouchableOpacity
+                                            onPress={() => handleDeleteSession(session)}
+                                            style={{ padding: 8 }}
+                                        >
+                                            <MaterialIcons name="delete-outline" size={24} color={colors.danger} />
+                                        </TouchableOpacity>
+                                    </View>
+                                ))
+                            )}
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+
+            <ConfirmationModal
+                visible={confirmModal.visible}
+                title={confirmModal.title}
+                message={confirmModal.message}
+                confirmText={confirmModal.confirmText}
+                isDestructive={confirmModal.isDestructive}
+                onConfirm={confirmModal.onConfirm}
+                onCancel={closeConfirmModal}
+            />
         </View >
     );
 }

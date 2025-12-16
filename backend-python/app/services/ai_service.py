@@ -251,7 +251,7 @@ def _prepare_ai_context(teacher_id: int, subject_id: int):
     
     # Buscar contexto de arquivos
     from app.models.ai_session import AIContextFile, AIMessage
-    context_files = AIContextFile.query.filter_by(subject_id=subject_id).all()
+    context_files = AIContextFile.query.filter_by(session_id=session.id).all()
     
     system_initial_instruction = """Você é um assistente educacional útil, direto e organizado.
 Responda de forma clara, legível e visualmente limpa.
