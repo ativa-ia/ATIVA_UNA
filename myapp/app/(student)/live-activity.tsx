@@ -228,11 +228,25 @@ export default function LiveActivityScreen() {
         console.log('Submitting answers:', JSON.stringify(currentAnswers));
 
         try {
+            // Use functional update to get the absolute latest state
+            let finalAnswers = answers;
+
+            // Ensure we have the current question's answer if it exists
+            setAnswers(currentAnswers => {
+                finalAnswers = currentAnswers;
+                return currentAnswers;
+            });
+
             const data = activity.activity_type === 'quiz'
                 ? { answers: currentAnswers, time_taken: timeTaken }
                 : activity.activity_type === 'summary'
                     ? { read: true }
                     : { text: textAnswer };
+
+            console.log('📤 Submitting quiz answers:', JSON.stringify(finalAnswers, null, 2));
+            console.log('📊 Total questions:', activity.content?.questions?.length);
+            console.log('📝 Answered questions:', Object.keys(finalAnswers).length);
+            console.log('🔢 Current question index:', currentQuestion);
 
             const response = await submitActivityResponse(activity.id, data);
 

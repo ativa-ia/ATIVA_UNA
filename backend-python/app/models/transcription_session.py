@@ -128,9 +128,15 @@ class LiveActivity(db.Model):
     ends_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
+    # Campos para suporte personalizado
+    target_students = db.Column(db.JSON, nullable=True)  # Lista de IDs ou null para todos
+    is_support_content = db.Column(db.Boolean, default=False)  # Se é conteúdo de reforço
+    parent_activity_id = db.Column(db.Integer, db.ForeignKey('live_activities.id'), nullable=True)
+    
     # Relationships
     checkpoint = db.relationship('TranscriptionCheckpoint', backref='activities')
     responses = db.relationship('LiveActivityResponse', backref='activity', lazy=True, cascade='all, delete-orphan')
+    parent_activity = db.relationship('LiveActivity', remote_side='LiveActivity.id', backref='support_activities')
     
     def broadcast(self):
         """Inicia a atividade para os alunos"""
@@ -224,6 +230,11 @@ class LiveActivityResponse(db.Model):
         questions = activity.content.get('questions', [])
         answers = self.response_data.get('answers', {})
         
+        print(f"🔍 DEBUG calculate_quiz_score:")
+        print(f"  Total questions: {len(questions)}")
+        print(f"  Answers received: {answers}")
+        print(f"  Answer keys: {list(answers.keys())}")
+        
         correct_count = 0
         total_questions = len(questions)
         
@@ -245,6 +256,8 @@ class LiveActivityResponse(db.Model):
                         correct_count += 1
                 except (ValueError, TypeError):
                     pass
+        
+        print(f"  ✅ Final score: {correct_count}/{total_questions}")
         
         self.score = correct_count
         self.total = total_questions

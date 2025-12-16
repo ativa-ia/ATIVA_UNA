@@ -124,7 +124,6 @@ export interface Subject {
     credits?: number;
     image_url?: string;
     imageUrl?: string; // Alias para compatibilidade
-    professor?: string;
 }
 
 export interface SubjectDetails extends Subject {
@@ -701,19 +700,6 @@ export interface LiveActivity {
     response_count: number;
 }
 
-// Obter detalhes de uma atividade (incluindo conteúdo)
-export const getActivityDetails = async (activityId: number): Promise<{ success: boolean; activity?: LiveActivity; error?: string }> => {
-    const token = await AsyncStorage.getItem('authToken');
-
-    const response = await fetch(`${API_URL}/transcription/activities/${activityId}/details`, {
-        headers: {
-            'Authorization': `Bearer ${token}`,
-        },
-    });
-
-    return response.json();
-};
-
 export interface LiveActivityResponse {
     id: number;
     activity_id: number;
@@ -1040,9 +1026,9 @@ export const submitActivityResponse = async (activityId: number, data: any): Pro
     }
 };
 
-export const getStudentHistory = async (subjectId: number, page: number = 1, limit: number = 10) => {
+export const getStudentHistory = async (subjectId: number) => {
     const token = await AsyncStorage.getItem('authToken');
-    const response = await fetch(`${API_URL}/transcription/subjects/${subjectId}/history?page=${page}&per_page=${limit}`, {
+    const response = await fetch(`${API_URL}/transcription/subjects/${subjectId}/history`, {
         headers: {
             'Authorization': `Bearer ${token}`,
         },
