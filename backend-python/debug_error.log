@@ -123,3 +123,24 @@ Traceback (most recent call last):
   File "C:\Users\Admin\AppData\Local\Programs\Python\Python312\Lib\site-packages\sqlalchemy\orm\decl_base.py", line 2179, in _declarative_constructor
     raise TypeError(
 TypeError: 'user_id' is an invalid keyword argument for Notification
+
+Erro ao distribuir material: name 'target_student_ids' is not defined
+Traceback (most recent call last):
+  File "C:\Users\admin\Desktop\ATIVA-IA\backend-python\app\routes\transcription_routes.py", line 1589, in distribute_material
+    print(f"DTO [LOOP] Checking {len(target_student_ids)} students")
+                                     ^^^^^^^^^^^^^^^^^^
+NameError: name 'target_student_ids' is not defined
+
+Erro ao distribuir material: name 'target_student_ids' is not defined
+Traceback (most recent call last):
+  File "C:\Users\admin\Desktop\ATIVA-IA\backend-python\app\routes\transcription_routes.py", line 1589, in distribute_material
+    print(f"DTO [LOOP] Checking {len(target_student_ids)} students")
+                                     ^^^^^^^^^^^^^^^^^^
+NameError: name 'target_student_ids' is not defined
+
+Erro ao distribuir material: name 'target_student_ids' is not defined
+Traceback (most recent call last):
+  File "C:\Users\admin\Desktop\ATIVA-IA\backend-python\app\routes\transcription_routes.py", line 1589, in distribute_material
+    print(f"DTO [LOOP] Checking {len(target_student_ids)} students")
+                                     ^^^^^^^^^^^^^^^^^^
+NameError: name 'target_student_ids' is not defined

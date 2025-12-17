@@ -266,6 +266,37 @@ export const uploadFileToStorage = async (file: any, folder: string = 'materials
     }
 };
 
+// Upload text content as file (for AI summaries on Vercel)
+export const uploadTextAsFile = async (content: string, filename: string): Promise<{ success: boolean; url?: string; error?: string }> => {
+    try {
+        const filePath = `materials/${filename}`;
+
+        // Convert text to Blob
+        const blob = new Blob([content], { type: 'text/markdown' });
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('context-documents')
+            .upload(filePath, blob, {
+                contentType: 'text/markdown',
+                upsert: false
+            });
+
+        if (uploadError) {
+            console.error('Supabase Text Upload Error:', uploadError);
+            return { success: false, error: uploadError.message };
+        }
+
+        const { data: urlData } = supabase.storage
+            .from('context-documents')
+            .getPublicUrl(filePath);
+
+        return { success: true, url: urlData.publicUrl };
+    } catch (error) {
+        console.error('Text upload error:', error);
+        return { success: false, error: 'Falha ao salvar resumo na nuvem' };
+    }
+};
+
 // ========== TEACHER API ==========
 
 export interface TeacherClass {
@@ -1188,11 +1219,15 @@ export const getActiveActivitiesList = async (subjectId: number): Promise<{ succ
 };
 
 // Professor:// Distribuir material de reforço (Professor)
-export const distributeActivityMaterial = async (activityId: number, file: any, title: string, textContent?: string): Promise<{ success: boolean; message?: string; count?: number; average?: number; error?: string }> => {
+export const distributeActivityMaterial = async (activityId: number, file: any, title: string, textContent?: string, contentUrl?: string): Promise<{ success: boolean; message?: string; count?: number; average?: number; error?: string }> => {
     const token = await AsyncStorage.getItem('authToken');
 
     const formData = new FormData();
     formData.append('title', title);
+
+    if (contentUrl) {
+        formData.append('content_url', contentUrl);
+    }
 
     if (file) {
         if (Platform.OS === 'web') {

@@ -1519,21 +1519,22 @@ def distribute_material(current_user, activity_id):
         # Verificar se a requisição tem o arquivo ou conteúdo de texto
         file = request.files.get('file')
         text_content = request.form.get('text_content')
+        content_url = request.form.get('content_url')
         title = request.form.get('title', 'Material de Reforço')
         
-        if not file and not text_content:
+        if not file and not text_content and not content_url:
             return jsonify({'success': False, 'error': 'Nenhum arquivo ou texto enviado'}), 400
             
         activity = LiveActivity.query.get(activity_id)
         if not activity:
             return jsonify({'success': False, 'error': 'Atividade não encontrada'}), 404
             
-        # Verificar permissão (apenas professor da disciplina)
+        # ... (auth check) ...
         session = TranscriptionSession.query.get(activity.session_id)
         if session.teacher_id != current_user.id:
             return jsonify({'success': False, 'error': 'Não autorizado'}), 403
 
-        # Calcular média da turma
+        # Calcular média da turma / Selecionar alunos abaixo da meta
         responses = LiveActivityResponse.query.filter_by(activity_id=activity_id).all()
         
         # LOG DEBUG
@@ -1546,8 +1547,7 @@ def distribute_material(current_user, activity_id):
         if not responses:
              return jsonify({'success': False, 'error': 'Nenhuma resposta nesta atividade para calcular média'}), 400
              
-        # CRITERIO DEFINIDO: Abaixo de 50% (independente da média da turma)
-        # O usuário definiu que "média" neste contexto refere-se a nota de corte de 50%
+        # CRITERIO DEFINIDO: Abaixo de 50%
         average_score = 50.0
         
         # Identificar alunos abaixo da média (< 50%)
@@ -1563,49 +1563,53 @@ def distribute_material(current_user, activity_id):
         
         if not target_student_ids:
             return jsonify({'success': True, 'message': 'Nenhum aluno abaixo da média encontrada. Material não distribuído.', 'count': 0})
-            
-        # ... validation ...
-
-        # Salvar arquivo ou criar a partir do texto
-        upload_folder = os.path.join(os.getcwd(), 'app', 'static', 'uploads')
-        if not os.path.exists(upload_folder):
-            os.makedirs(upload_folder)
-            
-        filename = ""
-        file_size = "0 KB"
-        
-        if file:
-            # ... file save ...
-            if file.filename == '':
-                return jsonify({'success': False, 'error': 'Nome do arquivo vazio'}), 400
-            safe_filename = secure_filename(file.filename)
-            filename = f"{activity_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{safe_filename}"
-            file_path = os.path.join(upload_folder, filename)
-            file.save(file_path)
-            file_size = f"{os.path.getsize(file_path) / 1024:.1f} KB"
-            
-        elif text_content:
-            # Criar arquivo markdown
-            safe_filename = f"resumo_ia_{datetime.now().strftime('%Y%m%d%H%M%S')}.md"
-            filename = f"{activity_id}_{safe_filename}"
-            file_path = os.path.join(upload_folder, filename)
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(text_content)
-            file_size = f"{os.path.getsize(file_path) / 1024:.1f} KB"
-            # LOG DEBUG
-            try:
-                with open("debug_distribution.txt", "a") as f:
-                    f.write(f"File created: {file_path}\n")
-            except: pass
         
         # URL absoluta para acesso (necessário para App mobile)
-        base_url = request.url_root.rstrip('/')
-        content_url = f"{base_url}/static/uploads/{filename}"
-        
-        # Determinar tipo do material
-        material_type = 'pdf'
-        if text_content:
-            material_type = 'document'
+        # Se vier do frontend (Supabase), usar direto
+        if content_url:
+             # Se já tem URL externa, usamos ela
+             final_content_url = content_url
+             file_size = "Unknown" # Ou passar do frontend se quiser
+             material_type = 'document'
+             
+             # LOG DEBUG
+             try:
+                with open("debug_distribution.txt", "a") as f:
+                    f.write(f"Using external URL: {final_content_url}\n")
+             except: pass
+             
+        else:
+             # Lógica Legada (Local File) - Falha no Vercel
+             upload_folder = os.path.join(os.getcwd(), 'app', 'static', 'uploads')
+             if not os.path.exists(upload_folder):
+                 os.makedirs(upload_folder)
+                 
+             filename = ""
+             file_size = "0 KB"
+             
+             if file:
+                 if file.filename == '':
+                     return jsonify({'success': False, 'error': 'Nome do arquivo vazio'}), 400
+                 safe_filename = secure_filename(file.filename)
+                 filename = f"{activity_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{safe_filename}"
+                 file_path = os.path.join(upload_folder, filename)
+                 file.save(file_path)
+                 file_size = f"{os.path.getsize(file_path) / 1024:.1f} KB"
+                 
+             elif text_content:
+                 safe_filename = f"resumo_ia_{datetime.now().strftime('%Y%m%d%H%M%S')}.md"
+                 filename = f"{activity_id}_{safe_filename}"
+                 file_path = os.path.join(upload_folder, filename)
+                 with open(file_path, 'w', encoding='utf-8') as f:
+                     f.write(text_content)
+                 file_size = f"{os.path.getsize(file_path) / 1024:.1f} KB"
+             
+             base_url = request.url_root.rstrip('/')
+             final_content_url = f"{base_url}/static/uploads/{filename}"
+             
+             material_type = 'pdf'
+             if text_content:
+                 material_type = 'document'
         
         # Criar registros de Material
         count = 0
@@ -1619,7 +1623,7 @@ def distribute_material(current_user, activity_id):
                     activity_id=activity_id,
                     title=title,
                     type=material_type, 
-                    content_url=content_url,
+                    content_url=final_content_url,
                     file_size=file_size
                 )
                 db.session.add(material)
