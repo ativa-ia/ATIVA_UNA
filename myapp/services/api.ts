@@ -4,7 +4,7 @@ import { supabase } from './supabase';
 
 // URL da API (mude para seu IP local se testar em dispositivo físico)
 // Para desenvolvimento local, use localhost
-//export const API_URL = 'http://localhost:3000/api';
+// export const API_URL = 'http://localhost:3000/api';
 
 // Para produção/Vercel, use:
 export const API_URL = 'https://ativa-ia-9rkb.vercel.app/api';
@@ -197,7 +197,6 @@ export const getSubjectMaterials = async (subjectId: number): Promise<Material[]
 
     const data = await response.json();
 
-    // Map API response to Frontend Model
     return data.map((item: any) => ({
         id: item.id.toString(),
         title: item.title,
@@ -207,6 +206,64 @@ export const getSubjectMaterials = async (subjectId: number): Promise<Material[]
         size: item.size || undefined,
         url: item.url
     }));
+};
+
+// Create a new material (Teacher)
+export const createMaterial = async (subjectId: number, data: any): Promise<{ success: boolean; message?: string; material?: any; error?: string }> => {
+    const token = await AsyncStorage.getItem('authToken');
+    try {
+        const response = await fetch(`${API_URL}/subjects/${subjectId}/materials`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify(data),
+        });
+        return response.json();
+    } catch (error) {
+        return { success: false, error: 'Erro ao criar material' };
+    }
+};
+
+// Upload file to storage (Generic)
+export const uploadFileToStorage = async (file: any, folder: string = 'materials') => {
+    try {
+        // 1. Upload to Supabase Storage
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const filePath = `${folder}/${fileName}`;
+
+        let fileBody: any;
+        if (Platform.OS === 'web') {
+            fileBody = file.file; // Browser File object
+        } else {
+            const response = await fetch(file.uri);
+            fileBody = await response.blob();
+        }
+
+        const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('context-documents') // Reuse existing bucket or change if 'materials' bucket exists
+            .upload(filePath, fileBody, {
+                contentType: file.mimeType || 'application/pdf',
+                upsert: false
+            });
+
+        if (uploadError) {
+            console.error('Supabase Storage Error:', uploadError);
+            return { success: false, error: 'Erro ao enviar para Storage: ' + uploadError.message };
+        }
+
+        // 2. Get Public URL
+        const { data: urlData } = supabase.storage
+            .from('context-documents') // CORRECT
+            .getPublicUrl(filePath);
+
+        return { success: true, url: urlData.publicUrl, path: filePath, size: file.size };
+    } catch (error) {
+        console.error('Upload flow error:', error);
+        return { success: false, error: 'Erro no processo de upload' };
+    }
 };
 
 // ========== TEACHER API ==========

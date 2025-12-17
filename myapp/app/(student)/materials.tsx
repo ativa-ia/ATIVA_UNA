@@ -98,9 +98,13 @@ export default function MaterialsScreen() {
 
         try {
             // Construir URL completa
-            // API_URL termina com /api, precisamos da base (http://localhost:3000)
-            const baseUrl = API_URL.replace('/api', '');
-            const fullUrl = `${baseUrl}${material.url}`;
+            // Construir URL completa
+            // Se já for absoluta (http/https), usar direto
+            let fullUrl = material.url;
+            if (!material.url.startsWith('http')) {
+                const baseUrl = API_URL.replace('/api', '');
+                fullUrl = `${baseUrl}${material.url}`;
+            }
 
             // Se for arquivo Markdown ou resumo IA, gerar PDF
             const isMarkdown = material.url.toLowerCase().endsWith('.md') || material.title.toLowerCase().includes('resumo');
