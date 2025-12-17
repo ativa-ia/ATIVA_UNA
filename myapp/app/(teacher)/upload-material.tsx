@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -6,14 +6,23 @@ import {
     ScrollView,
     TouchableOpacity,
     TextInput,
+    Platform,
+    Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import * as DocumentPicker from 'expo-document-picker';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
+import {
+    createMaterial,
+    uploadFileToStorage,
+    getTeacherClasses,
+    TeacherClass
+} from '@/services/api';
 
 /**
  * UploadMaterialScreen - Envio de Materiais (Professor)
@@ -23,34 +32,93 @@ export default function UploadMaterialScreen() {
     const insets = useSafeAreaInsets();
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
-    const [selectedClass, setSelectedClass] = useState('');
-    const [fileName, setFileName] = useState('');
+    const [selectedFile, setSelectedFile] = useState<any>(null);
+    const [uploading, setUploading] = useState(false);
 
-    const isFormValid = title.trim().length > 0 && fileName.length > 0;
+    // Classes logic
+    const [classes, setClasses] = useState<any[]>([]);
+    const [selectedClassId, setSelectedClassId] = useState<number | null>(null);
+    const [showClassModal, setShowClassModal] = useState(false);
+    const [loadingClasses, setLoadingClasses] = useState(false);
+
+    useEffect(() => {
+        loadClasses();
+    }, []);
+
+    const loadClasses = async () => {
+        setLoadingClasses(true);
+        try {
+            const data = await getTeacherClasses();
+            setClasses(data);
+        } catch (error) {
+            console.error(error);
+            Alert.alert('Erro', 'Não foi possível carregar as turmas.');
+        } finally {
+            setLoadingClasses(false);
+        }
+    };
+
+    const isFormValid = title.trim().length > 0 && selectedFile && selectedClassId;
 
     const handleCancel = () => {
         router.back();
     };
 
-    const handleSelectFile = () => {
-        // TODO: Implement file picker
-        // For now, simulate file selection
-        setFileName('Arquivo selecionado.pdf');
+    const handleSelectFile = async () => {
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/*'],
+                copyToCacheDirectory: true,
+            });
+
+            if (result.canceled) return;
+
+            const file = result.assets[0];
+            setSelectedFile(file);
+        } catch (error) {
+            console.error(error);
+            Alert.alert('Erro', 'Falha ao selecionar arquivo');
+        }
     };
 
-    const handleSelectClass = () => {
-        // TODO: Implement class picker modal
-        setSelectedClass('Cálculo I - Turma A');
-    };
-
-    const handleSubmit = () => {
+    const handleSubmit = async () => {
         if (!isFormValid) return;
 
-        // TODO: Implement file upload to backend
-        console.log('Uploading material:', { title, description, selectedClass, fileName });
+        setUploading(true);
 
-        // Navigate back after upload
-        router.back();
+        try {
+            // 1. Upload file
+            const uploadResult = await uploadFileToStorage(selectedFile, 'materials');
+
+            if (!uploadResult.success) {
+                Alert.alert('Erro', uploadResult.error || 'Falha no upload do arquivo');
+                return;
+            }
+
+            // 2. Create Material Record
+            const materialData = {
+                title,
+                url: uploadResult.url,
+                type: 'document', // Simplified for now
+                size: uploadResult.size ? `${(uploadResult.size / 1024 / 1024).toFixed(2)} MB` : undefined
+            };
+
+            const result = await createMaterial(selectedClassId, materialData);
+
+            if (result.success) {
+                Alert.alert('Sucesso', 'Material enviado com sucesso!', [
+                    { text: 'OK', onPress: () => router.back() }
+                ]);
+            } else {
+                Alert.alert('Erro', result.error || 'Falha ao salvar material');
+            }
+
+        } catch (error) {
+            console.error(error);
+            Alert.alert('Erro', 'Ocorreu um erro inesperado.');
+        } finally {
+            setUploading(false);
+        }
     };
 
     return (
@@ -73,12 +141,12 @@ export default function UploadMaterialScreen() {
                         <TouchableOpacity
                             style={styles.headerButton}
                             onPress={handleSubmit}
-                            disabled={!isFormValid}
+                            disabled={!isFormValid || uploading}
                         >
                             <Text style={[
                                 styles.sendText,
-                                !isFormValid && styles.sendTextDisabled
-                            ]}>Enviar</Text>
+                                (!isFormValid || uploading) && styles.sendTextDisabled
+                            ]}>{uploading ? 'Env...' : 'Enviar'}</Text>
                         </TouchableOpacity>
                     </View>
                 </LinearGradient>
@@ -101,7 +169,7 @@ export default function UploadMaterialScreen() {
                             >
                                 <MaterialIcons name="upload-file" size={20} color={colors.white} />
                                 <Text style={styles.uploadButtonText}>
-                                    {fileName || 'Toque para Adicionar Arquivos'}
+                                    {selectedFile ? selectedFile.name : 'Toque para Adicionar Arquivos'}
                                 </Text>
                             </TouchableOpacity>
                         </View>
@@ -139,7 +207,7 @@ export default function UploadMaterialScreen() {
                         <Text style={styles.inputLabel}>Enviar Para</Text>
                         <TouchableOpacity
                             style={styles.selectorButton}
-                            onPress={handleSelectClass}
+                            onPress={() => setShowClassModal(!showClassModal)}
                         >
                             <View style={styles.selectorContent}>
                                 <View style={styles.selectorIcon}>
@@ -147,13 +215,41 @@ export default function UploadMaterialScreen() {
                                 </View>
                                 <Text style={[
                                     styles.selectorText,
-                                    selectedClass ? styles.selectorTextSelected : {} // Fixed ternary
+                                    selectedClassId ? styles.selectorTextSelected : {}
                                 ]}>
-                                    {selectedClass || 'Selecione a turma ou grupo'}
+                                    {selectedClassId
+                                        ? classes.find(c => c.id === selectedClassId)?.name
+                                        : 'Selecione a turma'}
                                 </Text>
                             </View>
-                            <MaterialIcons name="arrow-forward-ios" size={20} color={colors.textSecondary} />
+                            <MaterialIcons name={showClassModal ? "expand-less" : "expand-more"} size={24} color={colors.textSecondary} />
                         </TouchableOpacity>
+
+                        {/* Simple Dropdown for class selection */}
+                        {showClassModal && (
+                            <View style={styles.dropdownList}>
+                                {loadingClasses ? (
+                                    <Text style={{ padding: 10, color: colors.textSecondary }}>Carregando turmas...</Text>
+                                ) : (
+                                    classes.length > 0 ? (
+                                        classes.map(cls => (
+                                            <TouchableOpacity
+                                                key={cls.id}
+                                                style={styles.dropdownItem}
+                                                onPress={() => {
+                                                    setSelectedClassId(cls.id);
+                                                    setShowClassModal(false);
+                                                }}
+                                            >
+                                                <Text style={styles.dropdownItemText}>{cls.name}</Text>
+                                            </TouchableOpacity>
+                                        ))
+                                    ) : (
+                                        <Text style={{ padding: 10, color: colors.textSecondary }}>Nenhuma turma encontrada.</Text>
+                                    )
+                                )}
+                            </View>
+                        )}
                     </View>
                 </ScrollView>
 
@@ -162,12 +258,14 @@ export default function UploadMaterialScreen() {
                     <TouchableOpacity
                         style={[
                             styles.submitButton,
-                            !isFormValid && styles.submitButtonDisabled
+                            (!isFormValid || uploading) && styles.submitButtonDisabled
                         ]}
                         onPress={handleSubmit}
-                        disabled={!isFormValid}
+                        disabled={!isFormValid || uploading}
                     >
-                        <Text style={styles.submitButtonText}>Enviar Material</Text>
+                        <Text style={styles.submitButtonText}>
+                            {uploading ? 'Enviando...' : 'Enviar Material'}
+                        </Text>
                     </TouchableOpacity>
                 </View>
             </View>
@@ -374,5 +472,29 @@ const styles = StyleSheet.create({
         fontWeight: typography.fontWeight.bold,
         fontFamily: typography.fontFamily.display,
         color: colors.white,
+    },
+    dropdownList: {
+        marginTop: spacing.xs,
+        backgroundColor: colors.white,
+        borderRadius: borderRadius.lg,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        maxHeight: 200,
+        overflow: 'hidden',
+        elevation: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+    },
+    dropdownItem: {
+        padding: spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.slate100,
+    },
+    dropdownItemText: {
+        fontSize: typography.fontSize.base,
+        fontFamily: typography.fontFamily.display,
+        color: colors.textPrimary,
     },
 });

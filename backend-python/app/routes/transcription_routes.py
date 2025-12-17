@@ -1546,10 +1546,11 @@ def distribute_material(current_user, activity_id):
         if not responses:
              return jsonify({'success': False, 'error': 'Nenhuma resposta nesta atividade para calcular média'}), 400
              
-        total_score = sum([r.percentage for r in responses])
-        average_score = total_score / len(responses)
+        # CRITERIO DEFINIDO: Abaixo de 50% (independente da média da turma)
+        # O usuário definiu que "média" neste contexto refere-se a nota de corte de 50%
+        average_score = 50.0
         
-        # Identificar alunos abaixo da média
+        # Identificar alunos abaixo da média (< 50%)
         target_responses = [r for r in responses if r.percentage < average_score]
         target_student_ids = [r.student_id for r in target_responses]
         
@@ -1597,8 +1598,14 @@ def distribute_material(current_user, activity_id):
                     f.write(f"File created: {file_path}\n")
             except: pass
         
-        # URL relativa para acesso
-        content_url = f"/static/uploads/{filename}"
+        # URL absoluta para acesso (necessário para App mobile)
+        base_url = request.url_root.rstrip('/')
+        content_url = f"{base_url}/static/uploads/{filename}"
+        
+        # Determinar tipo do material
+        material_type = 'pdf'
+        if text_content:
+            material_type = 'document'
         
         # Criar registros de Material
         count = 0
@@ -1611,7 +1618,7 @@ def distribute_material(current_user, activity_id):
                     subject_id=session.subject_id,
                     activity_id=activity_id,
                     title=title,
-                    type='pdf', 
+                    type=material_type, 
                     content_url=content_url,
                     file_size=file_size
                 )
