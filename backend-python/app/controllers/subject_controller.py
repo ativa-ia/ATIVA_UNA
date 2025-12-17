@@ -204,7 +204,9 @@ def get_student_materials(current_user):
         general_materials = Material.query.filter(Material.subject_id.in_(subject_ids)).all() if subject_ids else []
         
         # 2. Buscar materiais distribuídos especificamente (StudyMaterial)
+        print(f"DEBUG: get_student_materials for user {current_user.id} ({current_user.name})")
         personal_materials = StudyMaterial.query.filter_by(student_id=current_user.id).order_by(StudyMaterial.created_at.desc()).all()
+        print(f"DEBUG: Found {len(personal_materials)} personal materials")
         
         # Combinar e formatar
         all_materials = []
@@ -249,3 +251,56 @@ def get_student_materials(current_user):
     except Exception as e:
         print(f"Erro ao buscar materiais do aluno: {e}")
         return jsonify({'error': str(e)}), 500
+
+
+def upload_material(current_user, subject_id):
+    """
+    Upload de material de suporte pelo professor
+    """
+    try:
+        # Verificar se usuário é professor
+        if current_user.role != 'teacher':
+            return jsonify({'error': 'Apenas professores podem enviar materiais'}), 403
+            
+        # Verificar se o professor leciona a disciplina
+        teaching = Teaching.query.filter_by(
+            teacher_id=current_user.id,
+            subject_id=subject_id
+        ).first()
+        
+        if not teaching:
+            return jsonify({'error': 'Você não leciona esta disciplina'}), 403
+            
+        data = request.get_json() or {}
+        
+        title = data.get('title')
+        url = data.get('url')
+        material_type = data.get('type', 'document')
+        size = data.get('size')
+        
+        if not title or not url:
+            return jsonify({'error': 'Título e URL são obrigatórios'}), 400
+            
+        # Criar material
+        material = Material(
+            subject_id=subject_id,
+            title=title,
+            type=material_type,
+            content_url=url, # URL retornada pelo Supabase Storage
+            file_size=size,
+            uploaded_at=datetime.utcnow()
+        )
+        
+        db.session.add(material)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Material enviado com sucesso',
+            'material': material.to_dict()
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+

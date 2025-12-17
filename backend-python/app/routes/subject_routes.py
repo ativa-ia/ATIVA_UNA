@@ -18,6 +18,14 @@ def get_subject(current_user, subject_id):
     """GET /api/subjects/:id - Detalhes de uma disciplina"""
     return subject_controller.get_subject_details(current_user, subject_id)
 
+@subject_bp.route('/<int:subject_id>/materials', methods=['POST'])
+@token_required
+def upload_material_route(current_user, subject_id):
+    """POST /api/subjects/:id/materials - Upload de material"""
+    from app.controllers import subject_controller
+    return subject_controller.upload_material(current_user, subject_id)
+
+
 @subject_bp.route('/<int:subject_id>/materials', methods=['GET'])
 @token_required
 def get_materials(current_user, subject_id):

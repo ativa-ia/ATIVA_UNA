@@ -1,6 +1,6 @@
-Activity ID: 434
+Activity ID: 452
 Total Responses: 3
-Average Score: 66.66666666666667
-Target Students: [73]
-File created: C:\Users\Admin\Documents\PvBp\Assistente360\backend-python\app\static\uploads\434_resumo_ia_20251216164208.md
-Committed 1 materials to DB.
+Average Score: 50.0
+Target Students: [60, 88]
+File created: C:\Users\admin\Desktop\ATIVA-IA\backend-python\app\static\uploads\452_resumo_ia_20251217171954.md
+Committed 2 materials to DB.
