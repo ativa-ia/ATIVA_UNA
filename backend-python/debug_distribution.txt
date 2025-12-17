@@ -1,6 +1,6 @@
-Activity ID: 452
-Total Responses: 3
+Activity ID: 457
+Total Responses: 2
 Average Score: 50.0
-Target Students: [60, 88]
-File created: C:\Users\admin\Desktop\ATIVA-IA\backend-python\app\static\uploads\452_resumo_ia_20251217171954.md
+Target Students: [93, 90]
+Using external URL: https://ocuhqyrvpkmtmnrifttr.supabase.co/storage/v1/object/public/context-documents/materials/summary_457_1766006704524.md
 Committed 2 materials to DB.

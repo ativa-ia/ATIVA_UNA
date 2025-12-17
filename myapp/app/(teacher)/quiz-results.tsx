@@ -18,7 +18,7 @@ import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { getQuizReport, endQuiz, QuizReport } from '@/services/quiz';
-import { getLiveActivityReport, endLiveActivity, exportActivityPDF, distributeActivityMaterial, generateActivitySummary } from '@/services/api';
+import { getLiveActivityReport, endLiveActivity, exportActivityPDF, distributeActivityMaterial, generateActivitySummary, uploadTextAsFile } from '@/services/api';
 import RaceVisualization from '@/components/quiz/RaceVisualization';
 import PodiumDisplay from '@/components/quiz/PodiumDisplay';
 import PerformanceDistributionChart from '@/components/quiz/PerformanceDistributionChart';
@@ -312,8 +312,22 @@ export default function QuizResultsScreen() {
         setIsDistributing(true);
 
         try {
-            // Pass NULL for file, and aiSummary for textContent
-            const response = await distributeActivityMaterial(id, null, titleToSend, aiSummary);
+            // STEP 1: If we have AI summary, upload to Supabase first (for Vercel support)
+            let contentUrl = null;
+            if (aiSummary && aiSummary.trim()) {
+                const filename = `summary_${id}_${Date.now()}.md`;
+                const uploadRes = await uploadTextAsFile(aiSummary, filename);
+
+                if (!uploadRes.success) {
+                    Alert.alert("Erro", "Falha ao salvar o resumo na nuvem: " + uploadRes.error);
+                    setIsDistributing(false);
+                    return;
+                }
+                contentUrl = uploadRes.url;
+            }
+
+            // STEP 2: Call Backend with the URL
+            const response = await distributeActivityMaterial(id, null, titleToSend, aiSummary, contentUrl!);
 
             if (response.success) {
                 Alert.alert("Sucesso", response.message || "Material enviado!");
