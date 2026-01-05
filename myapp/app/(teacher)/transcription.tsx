@@ -36,6 +36,7 @@ import {
     broadcastActivity,
     updateActivity,
 } from '@/services/api';
+import { processText } from '@/services/n8n';
 // import { useAuth } from '@/context/AuthContext'; // Ajuste o caminho se necessário
 import { useRouter } from 'expo-router';
 import ConfirmationModal from '@/components/modals/ConfirmationModal';
@@ -74,6 +75,7 @@ export default function TranscriptionScreen() {
     const [session, setSession] = useState<TranscriptionSession | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
     const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
     // Estado da transcrição
@@ -97,6 +99,7 @@ export default function TranscriptionScreen() {
     // Estado do conteúdo gerado (exibido no painel esquerdo)
     const [generatedSummary, setGeneratedSummary] = useState<string | null>(null);
     const [generatedQuiz, setGeneratedQuiz] = useState<any>(null);
+    const [sidebarVisible, setSidebarVisible] = useState(false);
     const [showSummaryModal, setShowSummaryModal] = useState(false);
     const [displayMode, setDisplayMode] = useState<'none' | 'summary' | 'quiz'>('none');
 
@@ -496,97 +499,184 @@ export default function TranscriptionScreen() {
         setShowActivityModal(true);
     };
 
-    // Gerar Quiz
-    const handleGenerateQuiz = async (numQuestions: number) => {
+    // Enviar para IA (Genérico)
+    const handleSendToAI = async () => {
         if (!session) return;
 
         // Verificar se tem texto
         if (!transcribedText || transcribedText.trim().length === 0) {
-            console.log('[QUIZ] Erro: sem texto transcrito');
-            Alert.alert(
-                'Sem Texto',
-                'Grave algum conteúdo antes de gerar um quiz.'
-            );
-            return;
-        }
-
-        console.log('[QUIZ] Iniciando geração de quiz...');
-        console.log('[QUIZ] Session ID:', session.id);
-        console.log('[QUIZ] Texto transcrito:', transcribedText.substring(0, 100), '...');
-        console.log('[QUIZ] Comprimento do texto:', transcribedText.length, 'caracteres');
-        console.log('[QUIZ] Número de questões:', numQuestions);
-
-        // Calcular tempo: 1 minuto (60 segundos) por questão
-        const timeLimit = numQuestions * 60;
-        console.log('[QUIZ] Tempo limite:', timeLimit, 'segundos (', numQuestions, 'minutos)');
-
-        setIsGenerating(true);
-        setDisplayMode('quiz');
-        setGeneratedQuiz(null); // Limpar quiz anterior
-        try {
-            // Forçar salvamento antes de gerar
-            console.log('[QUIZ] Salvando transcrição no backend...');
-            await updateTranscription(session.id, transcribedText);
-            console.log('[QUIZ] Transcrição salva.');
-
-            console.log('[QUIZ] Chamando API generateQuiz...');
-            const result = await generateQuiz(session.id, numQuestions, timeLimit);
-            console.log('[QUIZ] Resposta da API:', JSON.stringify(result, null, 2));
-
-            if (result.success && result.activity) {
-                console.log('[QUIZ] Quiz gerado com sucesso! ID:', result.activity.id);
-                console.log('[QUIZ] Perguntas:', result.activity.content?.questions?.length || 0);
-                console.log('[QUIZ] Tempo limite:', result.activity.time_limit, 'segundos');
-                setCurrentActivity(result.activity);
-                // Backend agora retorna o conteúdo estruturado em 'content'
-                const quizContent = result.activity.content || result.activity.ai_generated_content || '';
-                setGeneratedQuiz(quizContent);
-                console.log('Quiz gerado:', quizContent);
+            if (Platform.OS === 'web') {
+                window.alert('Grave ou digite algum conteúdo antes de enviar para a IA.');
             } else {
-                console.log('[QUIZ] Erro da API:', result.error);
-                Alert.alert('Erro', result.error || 'Não foi possível gerar o quiz.');
-                setDisplayMode('none');
+                Alert.alert('Sem Texto', 'Grave ou digite algum conteúdo antes de enviar para a IA.');
             }
-        } catch (error) {
-            console.error('[QUIZ] Exceção ao gerar quiz:', error);
-            Alert.alert('Erro', 'Erro ao gerar quiz. Verifique sua conexão.');
-            setDisplayMode('none');
-        }
-        setIsGenerating(false);
-    };
-
-    // Gerar Resumo
-    const handleGenerateSummary = async () => {
-        if (!session) return;
-
-        // Verificar se tem texto
-        if (!transcribedText || transcribedText.trim().length === 0) {
-            Alert.alert(
-                'Sem Texto',
-                'Grave algum conteúdo antes de gerar um resumo.'
-            );
             return;
         }
 
         setIsGenerating(true);
-        setDisplayMode('summary');
-        setGeneratedSummary(null); // Limpar resumo anterior
+        // Não definimos displayMode ainda, esperamos a resposta
         try {
             // Forçar salvamento antes de gerar
             await updateTranscription(session.id, transcribedText);
 
-            const result = await generateSummary(session.id);
-            if (result.success) {
-                setCurrentActivity(result.activity);
-                setGeneratedSummary(result.activity.ai_generated_content || '');
-                console.log('Resumo gerado:', result.activity.ai_generated_content);
-            } else {
-                Alert.alert('Erro', result.error || 'Não foi possível gerar o resumo.');
-                setDisplayMode('none');
+            console.log('[AI] Enviando texto para N8N...');
+            // Envia APENAS o texto, sem instrução extra, conforme pedido
+            const n8nResponse = await processText(transcribedText);
+            console.log('[AI] Resposta do N8N:', JSON.stringify(n8nResponse, null, 2));
+
+            // Extrair conteúdo
+            const content = n8nResponse.output || n8nResponse.text || n8nResponse;
+
+            let parsedContent = content;
+
+            // Helper function to try extracting JSON
+            const tryParseJSON = (str: string) => {
+                if (typeof str !== 'string') return null;
+                try {
+                    // 1. Tentar parse direto
+                    return JSON.parse(str);
+                } catch (e) { }
+
+                try {
+                    // 2. Tentar encontrar blocos de código markdown (```json ... ``` ou ``` ... ```)
+                    const markdownMatch = str.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+                    if (markdownMatch && markdownMatch[1]) {
+                        return JSON.parse(markdownMatch[1]);
+                    }
+                } catch (e) { }
+
+                try {
+                    // 3. Tentar encontrar o primeiro '{' e o último '}' (heuristic brute force)
+                    const firstBrace = str.indexOf('{');
+                    const lastBrace = str.lastIndexOf('}');
+                    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+                        const potentialJson = str.substring(firstBrace, lastBrace + 1);
+                        return JSON.parse(potentialJson);
+                    }
+                } catch (e) { }
+
+                return null;
+            };
+
+            // Helper function to parse Quiz from formatted text (Fallback)
+            const parseQuizFromText = (text: string) => {
+                if (typeof text !== 'string') return null;
+
+                // Regex para identificar questões (ex: "1. Pergunta...")
+                const questionRegex = /(\d+)\.\s+(.+)/;
+                // Regex para identificar opções (ex: "A) Opção..." ou "a) Opção...")
+                const optionRegex = /^\s*([A-Da-d])[\)\.]\s+(.+)/;
+
+                const lines = text.split('\n');
+                const questions: any[] = [];
+                let currentQuestion: any = null;
+
+                for (const line of lines) {
+                    const trimmedLine = line.trim();
+                    if (!trimmedLine) continue;
+
+                    // Verifica se é uma nova pergunta
+                    const qMatch = trimmedLine.match(questionRegex);
+                    if (qMatch) {
+                        if (currentQuestion) {
+                            questions.push(currentQuestion);
+                        }
+                        currentQuestion = {
+                            question: qMatch[2].trim(),
+                            options: [],
+                            correct: 0 // Default, pois texto geralmente não indica explicitamente pra máquina
+                        };
+                        continue;
+                    }
+
+                    // Verifica se é uma opção
+                    if (currentQuestion) {
+                        const optMatch = trimmedLine.match(optionRegex);
+                        if (optMatch) {
+                            currentQuestion.options.push(optMatch[2].trim());
+                        }
+                    }
+                }
+                // Adiciona a última questão encontrada
+                if (currentQuestion) {
+                    questions.push(currentQuestion);
+                }
+
+                // Só considera válido se achou perguntas e opções
+                if (questions.length > 0 && questions[0].options.length > 0) {
+                    return { questions };
+                }
+                return null;
+            };
+
+            if (typeof content === 'string') {
+                const extractedComp = tryParseJSON(content);
+                // Se extraiu algo e parece ser um objeto significativo (tem questions ou é um resumo estruturado)
+                if (extractedComp && (typeof extractedComp === 'object')) {
+                    parsedContent = extractedComp;
+                } else {
+                    // Tenta o parser de texto (Fallback)
+                    const textQuiz = parseQuizFromText(content);
+                    if (textQuiz) {
+                        console.log('[AI] Quiz detectado via Text Parser!');
+                        parsedContent = textQuiz;
+                    } else {
+                        // Se falhar tudo, assume que é texto livre (Resumo/Resposta simples)
+                        parsedContent = { text: content };
+                    }
+                }
             }
+
+            // Determinar tipo de atividade baseado na estrutura
+            let activityType: 'quiz' | 'summary' = 'summary';
+            let title = 'Resposta da IA';
+
+            if (parsedContent && typeof parsedContent === 'object') {
+                if (parsedContent.questions && Array.isArray(parsedContent.questions)) {
+                    activityType = 'quiz';
+                    title = 'Quiz Gerado por IA';
+                    setGeneratedQuiz(parsedContent);
+                    setDisplayMode('quiz');
+                } else {
+                    // Assume resumo/texto
+                    activityType = 'summary';
+                    title = 'Resumo / Resposta';
+                    // Normaliza para string para exibição
+                    const textContent = parsedContent.text || parsedContent.summary || JSON.stringify(parsedContent, null, 2);
+                    setGeneratedSummary(textContent);
+                    setDisplayMode('summary');
+                }
+            } else {
+                // String simples
+                activityType = 'summary';
+                setGeneratedSummary(String(parsedContent));
+                setDisplayMode('summary');
+            }
+
+            // Criar atividade mock para visualização
+            const mockActivity: LiveActivity = {
+                id: Date.now(),
+                session_id: session.id,
+                checkpoint_id: 0,
+                activity_type: activityType,
+                title: title,
+                content: parsedContent, // Guarda o objeto estruturado
+                ai_generated_content: typeof parsedContent === 'string' ? parsedContent : JSON.stringify(parsedContent),
+                shared_with_students: false,
+                status: 'waiting',
+                time_limit: activityType === 'quiz' ? (parsedContent.questions?.length * 60 || 300) : 0,
+                time_remaining: null,
+                starts_at: null,
+                ends_at: null,
+                response_count: 0
+            };
+
+            setCurrentActivity(mockActivity);
+            console.log(`[AI] Atividade gerada: ${activityType}`);
+
         } catch (error: any) {
-            console.error('Erro ao gerar resumo:', error);
-            Alert.alert('Erro', error?.message || 'Erro ao gerar resumo. Verifique sua conexão.');
+            console.error('Erro ao enviar para IA:', error);
+            Alert.alert('Erro', error?.message || 'Erro ao processar com IA.');
             setDisplayMode('none');
         }
         setIsGenerating(false);
@@ -1067,47 +1157,160 @@ export default function TranscriptionScreen() {
         );
     }
 
+
+
+    // Sidebar Navigation Handler
+    const handleSidebarNavigation = (route: string) => {
+        setSidebarVisible(false);
+        if (route === 'dashboard') {
+            router.push('/(teacher)/dashboard');
+        } else if (route === 'ai-assistant') {
+            router.push({
+                pathname: '/(teacher)/ai-assistant',
+                params: { subject: subjectName, subjectId: session?.subject_id?.toString() || params.subjectId }
+            });
+        } else if (route === 'activities') {
+            router.push({
+                pathname: '/(teacher)/activities',
+                params: { subjectId: session?.subject_id?.toString() || params.subjectId, subjectName: subjectName }
+            });
+        } else if (route === 'active-activities') {
+            router.push({
+                pathname: '/(teacher)/active-activities',
+                params: { subjectId: session?.subject_id?.toString() || params.subjectId, subjectName: subjectName }
+            });
+        }
+    };
+
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
+        <View style={styles.container}>
             {/* Header */}
             <LinearGradient
                 colors={['#4f46e5', '#8b5cf6']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
                 style={[styles.header, { paddingTop: insets.top + spacing.sm }]}
             >
-                <TouchableOpacity style={styles.backButton} onPress={() => router.canGoBack() ? router.back() : router.push('/(teacher)/dashboard')}>
+                <TouchableOpacity
+                    style={styles.backButton}
+                    onPress={() => router.push('/(teacher)/dashboard')}
+                >
                     <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
                 </TouchableOpacity>
                 <View style={styles.headerCenter}>
-                    <Text style={styles.headerTitle}>Transcrever Aula</Text>
-                    <Text style={styles.headerSubtitle}>{subjectName}</Text>
+                    <Text style={styles.headerTitle}>{subjectName || 'Transcrição'}</Text>
+                    {/* <Text style={styles.headerSubtitle}>{isRecording ? 'Gravando...' : 'Pronto para ouvir'}</Text> */}
                 </View>
-                <View style={styles.saveIndicator}>
-                    {isSaving ? (
-                        <ActivityIndicator size="small" color={colors.white} />
-                    ) : lastSaved ? (
-                        <MaterialIcons name="cloud-done" size={20} color="#bef264" />
-                    ) : (
-                        <MaterialIcons name="cloud-off" size={20} color="rgba(255,255,255,0.7)" />
-                    )}
+
+                {/* Menu Button / Save Indicator */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View style={styles.saveIndicator}>
+                        {isSaving ? (
+                            <ActivityIndicator size="small" color={colors.white} />
+                        ) : saveError ? (
+                            <MaterialIcons name="error-outline" size={24} color="#fca5a5" />
+                        ) : (
+                            <MaterialIcons name="cloud-done" size={24} color="rgba(255,255,255,0.6)" />
+                        )}
+                    </View>
+                    <TouchableOpacity
+                        style={styles.menuButton}
+                        onPress={() => setSidebarVisible(true)}
+                    >
+                        <MaterialIcons name="menu" size={28} color={colors.white} />
+                    </TouchableOpacity>
                 </View>
             </LinearGradient>
 
-            {/* Status Banner */}
-            {isRecording && (
-                <View style={styles.recordingBanner}>
-                    <View style={styles.recordingDot} />
-                    <Text style={styles.recordingText}>Gravando...</Text>
-                </View>
-            )}
+            {/* Sidebar Modal */}
+            <Modal
+                visible={sidebarVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setSidebarVisible(false)}
+            >
+                <TouchableOpacity
+                    style={styles.sidebarOverlay}
+                    activeOpacity={1}
+                    onPress={() => setSidebarVisible(false)}
+                >
+                    <View style={styles.sidebarContainer}>
+                        {/* Sidebar Header */}
+                        <LinearGradient
+                            colors={['#4f46e5', '#8b5cf6']}
+                            style={styles.sidebarHeader}
+                        >
+                            <Text style={styles.sidebarTitle}>Menu da Disciplina</Text>
+                            <TouchableOpacity onPress={() => setSidebarVisible(false)}>
+                                <MaterialIcons name="close" size={24} color={colors.white} />
+                            </TouchableOpacity>
+                        </LinearGradient>
 
-            {session?.status === 'paused' && (
-                <View style={styles.pausedBanner}>
-                    <MaterialIcons name="pause-circle" size={16} color="#f59e0b" />
-                    <Text style={styles.pausedText}>Sessão pausada</Text>
-                </View>
-            )}
+                        <View style={styles.sidebarContent}>
+                            <Text style={styles.sidebarSectionTitle}>Navegação</Text>
+
+                            <TouchableOpacity
+                                style={styles.sidebarItem}
+                                onPress={() => handleSidebarNavigation('ai-assistant')}
+                            >
+                                <View style={[styles.sidebarIcon, { backgroundColor: '#e0f2fe' }]}>
+                                    <MaterialIcons name="auto-awesome" size={20} color="#0284c7" />
+                                </View>
+                                <Text style={styles.sidebarLabel}>Assistente de IA</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.sidebarItem}
+                                onPress={() => handleSidebarNavigation('activities')}
+                            >
+                                <View style={[styles.sidebarIcon, { backgroundColor: '#f3e8ff' }]}>
+                                    <MaterialIcons name="assignment" size={20} color="#9333ea" />
+                                </View>
+                                <Text style={styles.sidebarLabel}>Atividades e Quizzes</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.sidebarItem}
+                                onPress={() => handleSidebarNavigation('active-activities')}
+                            >
+                                <View style={[styles.sidebarIcon, { backgroundColor: '#fff7ed' }]}>
+                                    <MaterialIcons name="bolt" size={20} color="#ea580c" />
+                                </View>
+                                <Text style={styles.sidebarLabel}>Em Andamento</Text>
+                            </TouchableOpacity>
+
+                            <View style={styles.sidebarDivider} />
+
+                            <TouchableOpacity
+                                style={styles.sidebarItem}
+                                onPress={() => handleSidebarNavigation('dashboard')}
+                            >
+                                <View style={[styles.sidebarIcon, { backgroundColor: '#f1f5f9' }]}>
+                                    <MaterialIcons name="dashboard" size={20} color="#475569" />
+                                </View>
+                                <Text style={styles.sidebarLabel}>Voltar ao Dashboard</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
+
+            {/* Status Banner */}
+            {
+                isRecording && (
+                    <View style={styles.recordingBanner}>
+                        <View style={styles.recordingDot} />
+                        <Text style={styles.recordingText}>Gravando...</Text>
+                    </View>
+                )
+            }
+
+            {
+                session?.status === 'paused' && (
+                    <View style={styles.pausedBanner}>
+                        <MaterialIcons name="pause-circle" size={16} color="#f59e0b" />
+                        <Text style={styles.pausedText}>Sessão pausada</Text>
+                    </View>
+                )
+            }
 
             {/* Transcribed Text Area - Split Screen */}
             <MainContentWrapper {...mainContentWrapperProps}>
@@ -1591,29 +1794,7 @@ Pressione o botão do microfone para começar a falar."
 
             {/* Footer */}
             <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
-                {/* Seletor de Quantidade de Questões */}
-                <View style={styles.questionCountSelector}>
-                    <Text style={styles.questionCountLabel}>Questões:</Text>
-                    <View style={styles.questionCountOptions}>
-                        {[3, 5, 10, 15, 20].map((count) => (
-                            <TouchableOpacity
-                                key={count}
-                                style={[
-                                    styles.questionCountOption,
-                                    numQuestions === count && styles.questionCountOptionActive
-                                ]}
-                                onPress={() => setNumQuestions(count)}
-                            >
-                                <Text style={[
-                                    styles.questionCountOptionText,
-                                    numQuestions === count && styles.questionCountOptionTextActive
-                                ]}>
-                                    {count}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-                </View>
+
 
                 <View style={styles.footerButtons}>
                     {/* Botão de Histórico */}
@@ -1632,21 +1813,7 @@ Pressione o botão do microfone para começar a falar."
                             <Text style={styles.buttonLabel}>Histórico</Text>
                         </LinearGradient>
                     </TouchableOpacity>
-                    {/* Botão de Resumo */}
-                    <TouchableOpacity
-                        style={styles.summaryButton}
-                        onPress={handleGenerateSummary}
-                        activeOpacity={0.8}
-                        disabled={isGenerating}
-                    >
-                        <LinearGradient
-                            colors={['#22c55e', '#16a34a']}
-                            style={styles.summaryButtonGradient}
-                        >
-                            <MaterialIcons name="summarize" size={24} color={colors.white} />
-                            <Text style={styles.buttonLabel}>Resumo</Text>
-                        </LinearGradient>
-                    </TouchableOpacity>
+
 
                     {/* Botão de Gravação */}
                     <Animated.View style={isRecording ? { transform: [{ scale: pulseAnim }] } : undefined}>
@@ -1670,16 +1837,20 @@ Pressione o botão do microfone para começar a falar."
 
                     <TouchableOpacity
                         style={styles.quizButton}
-                        onPress={() => handleGenerateQuiz(numQuestions)}
+                        onPress={handleSendToAI}
                         activeOpacity={0.8}
                         disabled={isGenerating}
                     >
                         <LinearGradient
-                            colors={['#f59e0b', '#d97706']}
+                            colors={['#8b5cf6', '#7c3aed']}
                             style={styles.quizButtonGradient}
                         >
-                            <MaterialIcons name="quiz" size={24} color={colors.white} />
-                            <Text style={styles.buttonLabel}>Quiz</Text>
+                            {isGenerating ? (
+                                <ActivityIndicator size="small" color={colors.white} />
+                            ) : (
+                                <MaterialIcons name="send" size={24} color={colors.white} />
+                            )}
+                            <Text style={styles.buttonLabel}>Enviar IA</Text>
                         </LinearGradient>
                     </TouchableOpacity>
                 </View>
@@ -1743,11 +1914,83 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.sm,
         color: 'rgba(255,255,255,0.8)',
     },
+    menuButton: {
+        padding: 4,
+    },
     saveIndicator: {
-        width: 40,
-        height: 40,
+        width: 32,
+        height: 32,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    // Sidebar Styles
+    sidebarOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+    },
+    sidebarContainer: {
+        width: '80%',
+        maxWidth: 300,
+        backgroundColor: colors.white,
+        height: '100%',
+        shadowColor: "#000",
+        shadowOffset: { width: -2, height: 0 },
+        shadowOpacity: 0.25,
+        shadowRadius: 8,
+        elevation: 5,
+    },
+    sidebarHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: spacing.lg,
+        paddingTop: spacing.xl, // Safe area approx
+    },
+    sidebarTitle: {
+        fontSize: typography.fontSize.lg,
+        fontWeight: 'bold',
+        color: colors.white,
+    },
+    sidebarContent: {
+        flex: 1,
+        padding: spacing.md,
+    },
+    sidebarSectionTitle: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: 'bold',
+        color: colors.textSecondary,
+        marginBottom: spacing.md,
+        marginTop: spacing.sm,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+    },
+    sidebarItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.sm,
+        borderRadius: borderRadius.md,
+        marginBottom: spacing.xs,
+    },
+    sidebarIcon: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: spacing.md,
+    },
+    sidebarLabel: {
+        fontSize: typography.fontSize.base,
+        color: colors.textPrimary,
+        fontWeight: '500',
+    },
+    sidebarDivider: {
+        height: 1,
+        backgroundColor: colors.slate200,
+        marginVertical: spacing.md,
     },
     recordingBanner: {
         flexDirection: 'row',
