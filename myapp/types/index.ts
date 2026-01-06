@@ -38,14 +38,9 @@ export interface Student {
     id: string;
     name: string;
     avatarUrl?: string;
-    present?: boolean;
 }
 
-export interface Performance {
-    subject: string;
-    grade: number;
-    attendance: number;
-}
+
 
 export type UserRole = 'student' | 'teacher' | 'admin';
 

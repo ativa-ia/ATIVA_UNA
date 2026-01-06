@@ -56,9 +56,6 @@ export default function MaterialsScreen() {
             case 'calendar':
                 router.push('./calendar');
                 break;
-            case 'grades':
-                router.push('./grades');
-                break;
         }
     };
 

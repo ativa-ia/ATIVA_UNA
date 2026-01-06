@@ -60,9 +60,6 @@ export default function CalendarScreen() {
                 break;
             case 'calendar':
                 break;
-            case 'grades':
-                router.push('./grades');
-                break;
         }
     };
 
