@@ -1,6 +1,0 @@
-Activity ID: 457
-Total Responses: 2
-Average Score: 50.0
-Target Students: [93, 90]
-Using external URL: https://ocuhqyrvpkmtmnrifttr.supabase.co/storage/v1/object/public/context-documents/materials/summary_457_1766006704524.md
-Committed 2 materials to DB.
