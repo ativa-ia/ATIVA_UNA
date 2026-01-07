@@ -641,6 +641,63 @@ export default function TranscriptionScreen() {
                 }
             }
 
+            // --- NORMALIZAÇÃO DE DADOS (Compatibilidade com formatos variados do N8N) ---
+            if (parsedContent && typeof parsedContent === 'object') {
+                // Algumas vezes o N8N retorna { "quiz": [questions...] } em vez de { "questions": [...] }
+                // OU retorna { "quiz": { "questions": [...] } }
+                if (parsedContent.quiz) {
+                    if (Array.isArray(parsedContent.quiz)) {
+                        parsedContent.questions = parsedContent.quiz;
+                    } else if (parsedContent.quiz.questions && Array.isArray(parsedContent.quiz.questions)) {
+                        parsedContent.questions = parsedContent.quiz.questions;
+                    }
+                }
+
+                if (parsedContent.questions && Array.isArray(parsedContent.questions)) {
+                    // Normalizar cada questão
+                    parsedContent.questions = parsedContent.questions.map((q: any) => {
+                        // Converter options { A: "...", B: "..." } para array ["...", "..."]
+                        let normalizedOptions: string[] = [];
+                        let normalizedCorrect = 0;
+
+                        if (q.options && typeof q.options === 'object' && !Array.isArray(q.options)) {
+                            // Mapear A,B,C,D,E para array
+                            const keys = ['A', 'B', 'C', 'D', 'E'];
+                            normalizedOptions = keys.map(k => q.options[k] || q.options[k.toLowerCase()] || '').filter(o => o !== '');
+
+                            // Se a resposta vier como letra ("C"), converter para índice (2)
+                            if (typeof q.answer === 'string') {
+                                const answerLetter = q.answer.toUpperCase().trim();
+                                const index = keys.indexOf(answerLetter);
+                                if (index !== -1) normalizedCorrect = index;
+                            } else if (typeof q.correct === 'number') {
+                                normalizedCorrect = q.correct;
+                            }
+                        } else if (Array.isArray(q.options)) {
+                            // Já é array, manter
+                            normalizedOptions = q.options;
+                            if (typeof q.correct === 'number') {
+                                normalizedCorrect = q.correct;
+                            } else if (typeof q.answer === 'string') {
+                                // Tenta converter letra para index caso seja array mas resposta letra
+                                const keys = ['A', 'B', 'C', 'D', 'E'];
+                                const answerLetter = q.answer.toUpperCase().trim();
+                                const index = keys.indexOf(answerLetter);
+                                if (index !== -1) normalizedCorrect = index;
+                            }
+                        }
+
+                        return {
+                            question: q.question,
+                            options: normalizedOptions.length > 0 ? normalizedOptions : (q.options || []),
+                            correct: normalizedCorrect
+                        };
+                    });
+                }
+            }
+            // ---------------------------------------------------------------------------
+
+
             // NORMALIZAÇÃO DE DADOS DO QUIZ (Mapping N8N -> Componente)
             // O N8N pode retornar variações:
             // 1. { questions: [...] } ou { quiz: [...] }
