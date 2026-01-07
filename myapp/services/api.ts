@@ -783,6 +783,22 @@ export const generateQuiz = async (sessionId: number, numQuestions: number = 5, 
     return response.json();
 };
 
+// Salvar atividade gerada externamente
+export const saveGeneratedActivity = async (sessionId: number, data: any): Promise<{ success: boolean; activity: LiveActivity; checkpoint: TranscriptionCheckpoint }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/sessions/${sessionId}/save-generated-activity`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+    });
+
+    return response.json();
+};
+
 // Gerar Resumo via IA
 export const generateSummary = async (sessionId: number): Promise<{ success: boolean; activity: LiveActivity; checkpoint: TranscriptionCheckpoint; error?: string }> => {
     const token = await AsyncStorage.getItem('authToken');

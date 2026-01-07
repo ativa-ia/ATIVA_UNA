@@ -365,6 +365,75 @@ def generate_summary(current_user, session_id):
         return jsonify({'success': False, 'error': f'Erro ao gerar resumo: {str(e)}'}), 500
 
 
+
+@transcription_bp.route('/sessions/<int:session_id>/save-generated-activity', methods=['POST'])
+@token_required
+def save_generated_activity(current_user, session_id):
+    """
+    Salva atividade gerada externamente (ex: N8N)
+    
+    Body:
+    {
+        "activity_type": "quiz" | "summary",
+        "title": str,
+        "content": object,
+        "ai_generated_content": str (optional),
+        "time_limit": int (optional)
+    }
+    """
+    session = TranscriptionSession.query.get(session_id)
+    
+    if not session:
+        return jsonify({'success': False, 'error': 'Sessão não encontrada'}), 404
+    
+    if session.teacher_id != current_user.id:
+        return jsonify({'success': False, 'error': 'Não autorizado'}), 403
+    
+    data = request.get_json() or {}
+    activity_type = data.get('activity_type', 'summary')
+    title = data.get('title', 'Atividade Gerada')
+    content = data.get('content', {})
+    ai_generated_content = data.get('ai_generated_content', '')
+    time_limit = data.get('time_limit', 0)
+    
+    if not time_limit and activity_type == 'quiz' and isinstance(content, dict) and 'questions' in content:
+        time_limit = len(content['questions']) * 60
+    
+    # Criar checkpoint
+    checkpoint = TranscriptionCheckpoint(
+        session_id=session_id,
+        transcript_at_checkpoint=session.full_transcript or '',
+        word_count=session.word_count,
+        reason=activity_type
+    )
+    db.session.add(checkpoint)
+    db.session.flush()
+    
+    # Criar atividade
+    activity = LiveActivity(
+        session_id=session_id,
+        checkpoint_id=checkpoint.id,
+        activity_type=activity_type,
+        title=title,
+        content=content,
+        ai_generated_content=ai_generated_content,
+        time_limit=time_limit,
+        status='waiting',
+        shared_with_students=False
+    )
+    db.session.add(activity)
+    
+    session.status = 'paused'
+    db.session.commit()
+    
+    return jsonify({
+        'success': True,
+        'message': 'Atividade salva',
+        'activity': activity.to_dict(),
+        'checkpoint': checkpoint.to_dict()
+    }), 201
+
+
 # ==================== ATIVIDADES ====================
 
 @transcription_bp.route('/sessions/<int:session_id>/activities', methods=['POST'])
