@@ -35,6 +35,7 @@ import {
     createOpenQuestion,
     broadcastActivity,
     updateActivity,
+    saveGeneratedActivity,
 } from '@/services/api';
 import { processText } from '@/services/n8n';
 // import { useAuth } from '@/context/AuthContext'; // Ajuste o caminho se necessário
@@ -501,6 +502,86 @@ export default function TranscriptionScreen() {
 
     // Enviar para IA (Genérico)
     const handleSendToAI = async () => {
+        // Helper function to try extracting JSON
+        const tryParseJSON = (str: string) => {
+            if (typeof str !== 'string') return null;
+            try {
+                // 1. Tentar parse direto
+                return JSON.parse(str);
+            } catch (e) { }
+
+            try {
+                // 2. Tentar encontrar blocos de código markdown (```json ... ``` ou ``` ... ```)
+                const markdownMatch = str.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+                if (markdownMatch && markdownMatch[1]) {
+                    return JSON.parse(markdownMatch[1]);
+                }
+            } catch (e) { }
+
+            try {
+                // 3. Tentar encontrar o primeiro '{' e o último '}' (heuristic brute force)
+                const firstBrace = str.indexOf('{');
+                const lastBrace = str.lastIndexOf('}');
+                if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+                    const potentialJson = str.substring(firstBrace, lastBrace + 1);
+                    return JSON.parse(potentialJson);
+                }
+            } catch (e) { }
+
+            return null;
+        };
+
+        // Helper function to parse Quiz from formatted text (Fallback)
+        const parseQuizFromText = (text: string) => {
+            if (typeof text !== 'string') return null;
+
+            // Regex para identificar questões (ex: "1. Pergunta...")
+            const questionRegex = /(\d+)\.\s+(.+)/;
+            // Regex para identificar opções (ex: "A) Opção..." ou "a) Opção...")
+            const optionRegex = /^\s*([A-Da-d])[\)\.]\s+(.+)/;
+
+            const lines = text.split('\n');
+            const questions: any[] = [];
+            let currentQuestion: any = null;
+
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                if (!trimmedLine) continue;
+
+                // Verifica se é uma nova pergunta
+                const qMatch = trimmedLine.match(questionRegex);
+                if (qMatch) {
+                    if (currentQuestion) {
+                        questions.push(currentQuestion);
+                    }
+                    currentQuestion = {
+                        question: qMatch[2].trim(),
+                        options: [],
+                        correct: 0 // Default, pois texto geralmente não indica explicitamente pra máquina
+                    };
+                    continue;
+                }
+
+                // Verifica se é uma opção
+                if (currentQuestion) {
+                    const optMatch = trimmedLine.match(optionRegex);
+                    if (optMatch) {
+                        currentQuestion.options.push(optMatch[2].trim());
+                    }
+                }
+            }
+            // Adiciona a última questão encontrada
+            if (currentQuestion) {
+                questions.push(currentQuestion);
+            }
+
+            // Só considera válido se achou perguntas e opções
+            if (questions.length > 0 && questions[0].options.length > 0) {
+                return { questions };
+            }
+            return null;
+        };
+
         if (!session) return;
 
         // Verificar se tem texto
@@ -525,91 +606,24 @@ export default function TranscriptionScreen() {
             console.log('[AI] Resposta do N8N:', JSON.stringify(n8nResponse, null, 2));
 
             // Extrair conteúdo
-            const content = n8nResponse.output || n8nResponse.text || n8nResponse;
+            let content = n8nResponse.output || n8nResponse.text || n8nResponse;
+            if (Array.isArray(n8nResponse) && n8nResponse[0]?.output) {
+                content = n8nResponse[0].output;
+            }
 
+            // DETECÇÃO EXPLÍCITA DE TIPO (Solicitado pelo usuário)
             let parsedContent = content;
-
-            // Helper function to try extracting JSON
-            const tryParseJSON = (str: string) => {
-                if (typeof str !== 'string') return null;
-                try {
-                    // 1. Tentar parse direto
-                    return JSON.parse(str);
-                } catch (e) { }
-
-                try {
-                    // 2. Tentar encontrar blocos de código markdown (```json ... ``` ou ``` ... ```)
-                    const markdownMatch = str.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-                    if (markdownMatch && markdownMatch[1]) {
-                        return JSON.parse(markdownMatch[1]);
-                    }
-                } catch (e) { }
-
-                try {
-                    // 3. Tentar encontrar o primeiro '{' e o último '}' (heuristic brute force)
-                    const firstBrace = str.indexOf('{');
-                    const lastBrace = str.lastIndexOf('}');
-                    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-                        const potentialJson = str.substring(firstBrace, lastBrace + 1);
-                        return JSON.parse(potentialJson);
-                    }
-                } catch (e) { }
-
-                return null;
-            };
-
-            // Helper function to parse Quiz from formatted text (Fallback)
-            const parseQuizFromText = (text: string) => {
-                if (typeof text !== 'string') return null;
-
-                // Regex para identificar questões (ex: "1. Pergunta...")
-                const questionRegex = /(\d+)\.\s+(.+)/;
-                // Regex para identificar opções (ex: "A) Opção..." ou "a) Opção...")
-                const optionRegex = /^\s*([A-Da-d])[\)\.]\s+(.+)/;
-
-                const lines = text.split('\n');
-                const questions: any[] = [];
-                let currentQuestion: any = null;
-
-                for (const line of lines) {
-                    const trimmedLine = line.trim();
-                    if (!trimmedLine) continue;
-
-                    // Verifica se é uma nova pergunta
-                    const qMatch = trimmedLine.match(questionRegex);
-                    if (qMatch) {
-                        if (currentQuestion) {
-                            questions.push(currentQuestion);
-                        }
-                        currentQuestion = {
-                            question: qMatch[2].trim(),
-                            options: [],
-                            correct: 0 // Default, pois texto geralmente não indica explicitamente pra máquina
-                        };
-                        continue;
-                    }
-
-                    // Verifica se é uma opção
-                    if (currentQuestion) {
-                        const optMatch = trimmedLine.match(optionRegex);
-                        if (optMatch) {
-                            currentQuestion.options.push(optMatch[2].trim());
-                        }
-                    }
-                }
-                // Adiciona a última questão encontrada
-                if (currentQuestion) {
-                    questions.push(currentQuestion);
-                }
-
-                // Só considera válido se achou perguntas e opções
-                if (questions.length > 0 && questions[0].options.length > 0) {
-                    return { questions };
-                }
-                return null;
-            };
+            let explicitType: 'quiz' | 'summary' | null = null;
 
             if (typeof content === 'string') {
+                const typeMatch = content.match(/^\[TYPE:(QUIZ|SUMMARY)\]/i);
+                if (typeMatch) {
+                    explicitType = typeMatch[1].toUpperCase() === 'QUIZ' ? 'quiz' : 'summary';
+                    // Remove a tag para não atrapalhar o parse
+                    content = content.replace(/^\[TYPE:(QUIZ|SUMMARY)\]/i, '').trim();
+                    console.log(`[AI] Tipo explícito detectado: ${explicitType}`);
+                }
+
                 const extractedComp = tryParseJSON(content);
                 // Se extraiu algo e parece ser um objeto significativo (tem questions ou é um resumo estruturado)
                 if (extractedComp && (typeof extractedComp === 'object')) {
@@ -627,14 +641,96 @@ export default function TranscriptionScreen() {
                 }
             }
 
-            // Determinar tipo de atividade baseado na estrutura
-            let activityType: 'quiz' | 'summary' = 'summary';
+            // NORMALIZAÇÃO DE DADOS DO QUIZ (Mapping N8N -> Componente)
+            // O N8N pode retornar variações:
+            // 1. { questions: [...] } ou { quiz: [...] }
+            // 2. alternatives como Objeto { A: "...", B: "..." } ou Array ["A) ...", "B) ..."]
+
+            // Unificar entrada em 'questions'
+            if (parsedContent && typeof parsedContent === 'object') {
+                if (!parsedContent.questions && parsedContent.quiz && Array.isArray(parsedContent.quiz)) {
+                    parsedContent.questions = parsedContent.quiz;
+                }
+            }
+
+            if (parsedContent && typeof parsedContent === 'object' && parsedContent.questions && Array.isArray(parsedContent.questions)) {
+                try {
+                    const normalizedQuestions = parsedContent.questions.map((q: any) => {
+                        // Tenta encontrar campos
+                        const questionText = q.question_text || q.question;
+                        const alternatives = q.alternatives || q.options; // as vezes vem options direto
+
+                        if (questionText && alternatives) {
+                            let options: string[] = [];
+
+                            // Caso 1: Alternatives é Objeto
+                            if (!Array.isArray(alternatives) && typeof alternatives === 'object') {
+                                const keys = Object.keys(alternatives).sort();
+                                console.log('[DEBUG-NORMALIZATION] Keys found:', JSON.stringify(keys));
+                                for (const key of keys) {
+                                    options.push(alternatives[key]);
+                                }
+                            }
+                            // Caso 2: Alternatives é Array
+                            else if (Array.isArray(alternatives)) {
+                                options = alternatives.map((opt: string) => {
+                                    // Remove prefixos como "A) ", "a. ", etc se existirem, pois o componente adiciona
+                                    return opt.replace(/^[A-Ea-e][\)\.]\s*/, '').trim();
+                                });
+                            }
+
+                            // Mapear correto (Letra -> Index)
+                            let correctIndex = 0;
+                            if (q.correct_answer) {
+                                const correctLetter = q.correct_answer.toUpperCase().trim();
+                                if (correctLetter.length === 1 && correctLetter >= 'A' && correctLetter <= 'E') {
+                                    correctIndex = correctLetter.charCodeAt(0) - 65;
+                                }
+                            } else if (typeof q.correct === 'number') {
+                                correctIndex = q.correct;
+                            }
+
+                            return {
+                                question: questionText,
+                                options: options,
+                                correct: correctIndex
+                            };
+                        }
+                        return q;
+                    });
+                    parsedContent.questions = normalizedQuestions;
+                    console.log('[AI] Quiz Normalizado:', JSON.stringify(parsedContent, null, 2));
+                } catch (normError) {
+                    console.error('[AI] Erro na normalização do quiz:', normError);
+                }
+            }
+
+            // Determinar tipo de atividade baseado na estrutura ou tipo explícito
+            let activityType: 'quiz' | 'summary' = explicitType || 'summary';
             let title = 'Resposta da IA';
 
-            if (parsedContent && typeof parsedContent === 'object') {
+            if (explicitType) {
+                // Se tem tipo explícito, confia nele
+                activityType = explicitType;
+                if (activityType === 'quiz') {
+                    // Tenta pegar o título do quiz se disponível
+                    title = parsedContent.quiz_title || 'Quiz Gerado por IA';
+                    // Se o conteúdo parseado não tiver 'questions' mas for quiz explícito,
+                    // tenta garantir formato ou deixa que o parser de texto tenha feito o trabalho
+                    setGeneratedQuiz(parsedContent);
+                    setDisplayMode('quiz');
+                } else {
+                    title = 'Resumo / Resposta';
+                    const textContent = parsedContent.text || parsedContent.summary || (typeof parsedContent === 'string' ? parsedContent : JSON.stringify(parsedContent, null, 2));
+                    setGeneratedSummary(String(textContent));
+                    setDisplayMode('summary');
+                }
+            } else if (parsedContent && typeof parsedContent === 'object') {
+                // Heurística antiga (Fallback)
                 if (parsedContent.questions && Array.isArray(parsedContent.questions)) {
                     activityType = 'quiz';
-                    title = 'Quiz Gerado por IA';
+                    // Tenta pegar o título do quiz se disponível antes de fallback
+                    title = parsedContent.quiz_title || 'Quiz Gerado por IA';
                     setGeneratedQuiz(parsedContent);
                     setDisplayMode('quiz');
                 } else {
@@ -654,24 +750,66 @@ export default function TranscriptionScreen() {
             }
 
             // Criar atividade mock para visualização
-            const mockActivity: LiveActivity = {
-                id: Date.now(),
-                session_id: session.id,
-                checkpoint_id: 0,
-                activity_type: activityType,
-                title: title,
-                content: parsedContent, // Guarda o objeto estruturado
-                ai_generated_content: typeof parsedContent === 'string' ? parsedContent : JSON.stringify(parsedContent),
-                shared_with_students: false,
-                status: 'waiting',
-                time_limit: activityType === 'quiz' ? (parsedContent.questions?.length * 60 || 300) : 0,
-                time_remaining: null,
-                starts_at: null,
-                ends_at: null,
-                response_count: 0
-            };
 
-            setCurrentActivity(mockActivity);
+            // Salvar atividade no backend para obter ID real
+            const generatedContentStr = typeof parsedContent === 'string' ? parsedContent : JSON.stringify(parsedContent);
+            const calculatedTimeLimit = activityType === 'quiz' ? (parsedContent.questions?.length * 60 || 300) : 0;
+
+            try {
+                const saveResult = await saveGeneratedActivity(session.id, {
+                    activity_type: activityType,
+                    title: title,
+                    content: parsedContent,
+                    ai_generated_content: generatedContentStr,
+                    time_limit: calculatedTimeLimit
+                });
+
+                if (saveResult.success && saveResult.activity) {
+                    setCurrentActivity(saveResult.activity);
+                    console.log(`[AI] Atividade salva no backend: ${saveResult.activity.id}`);
+                } else {
+                    console.error('[AI] Erro ao salvar atividade:', saveResult);
+                    // Fallback visual (mas botões de edição falharão)
+                    const mockActivity: LiveActivity = {
+                        id: Date.now(),
+                        session_id: session.id,
+                        checkpoint_id: 0,
+                        activity_type: activityType,
+                        title: title,
+                        content: parsedContent,
+                        ai_generated_content: generatedContentStr,
+                        shared_with_students: false,
+                        status: 'waiting',
+                        time_limit: calculatedTimeLimit,
+                        time_remaining: null,
+                        starts_at: null,
+                        ends_at: null,
+                        response_count: 0
+                    };
+                    setCurrentActivity(mockActivity);
+                }
+            } catch (error) {
+                console.error('[AI] Exceção ao salvar atividade:', error);
+                // Fallback visual
+                const mockActivity: LiveActivity = {
+                    id: Date.now(),
+                    session_id: session.id,
+                    checkpoint_id: 0,
+                    activity_type: activityType,
+                    title: title,
+                    content: parsedContent,
+                    ai_generated_content: generatedContentStr,
+                    shared_with_students: false,
+                    status: 'waiting',
+                    time_limit: calculatedTimeLimit,
+                    time_remaining: null,
+                    starts_at: null,
+                    ends_at: null,
+                    response_count: 0
+                };
+                setCurrentActivity(mockActivity);
+            }
+
             console.log(`[AI] Atividade gerada: ${activityType}`);
 
         } catch (error: any) {
@@ -1971,7 +2109,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.sm,
-        borderRadius: borderRadius.md,
+        borderRadius: borderRadius.lg,
         marginBottom: spacing.xs,
     },
     sidebarIcon: {
