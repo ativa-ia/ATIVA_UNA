@@ -284,7 +284,9 @@ export default function TranscriptionScreen() {
 
                 // HACK: Tocar áudio silencioso para evitar throttling do navegador em background
                 try {
-                    const silentAudio = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAGZGF0YQQAAAAAAA==");
+                    // HACK: Tocar áudio silencioso para evitar throttling do navegador em background
+                    // Usando um WAV PCM linear simples e válido com silêncio
+                    const silentAudio = new Audio("data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YRAAAACAgICAgICAgICAgICAgICA");
                     silentAudio.loop = true;
                     silentAudio.play().catch(e => console.log('Audio autoplay falhou', e));
                     // @ts-ignore - Guardar referência para parar depois se necessário
@@ -488,6 +490,57 @@ export default function TranscriptionScreen() {
         });
     };
 
+    /**
+     * VOICE TRIGGER IMPLEMENTATION
+     * Detects "Fred" followed by a command
+     */
+    useEffect(() => {
+        if (!isRecording || !transcribedText) return;
+
+        // Limpar o índice processado se o texto for menor que o índice (limpeza de texto)
+        const lastProcessedIndex = (processedResultsRef.current as any).lastProcessedIndex || -1;
+        if (transcribedText.length < lastProcessedIndex) {
+            console.log('[VOICE TRIGGER] Resetting index because text was cleared.');
+            (processedResultsRef.current as any).lastProcessedIndex = -1;
+        }
+
+        // Regex para detectar o comando
+        const triggerRegex = /(?:^|\s|\.)(fred|frede)\s+(.+)/i;
+
+        // Verifica apenas o texto mais recente
+        const sliceLength = 100;
+        const recentText = transcribedText.slice(-sliceLength);
+        const match = recentText.match(triggerRegex);
+
+        if (match && !isGenerating && !isSaving) {
+            // Calcular índice absoluto do comando no texto completo
+            const matchIndexInSlice = match.index || 0;
+            const absoluteIndex = Math.max(0, transcribedText.length - sliceLength) + matchIndexInSlice;
+
+            const currentLastProcessedIndex = (processedResultsRef.current as any).lastProcessedIndex || -1;
+
+            // Se este comando (nesta posição específica) já foi processado, ignora
+            if (absoluteIndex <= currentLastProcessedIndex) {
+                return;
+            }
+
+            console.log('[VOICE TRIGGER] Comando detectado:', match[0], 'Index:', absoluteIndex);
+
+            // Atualizar o índice processado para evitar loops
+            (processedResultsRef.current as any).lastProcessedIndex = absoluteIndex;
+            (processedResultsRef.current as any).lastTriggerTime = Date.now();
+
+            // Feedback visual rápido
+            if (Platform.OS === 'web') {
+                // @ts-ignore
+                try { window.navigator.vibrate(200); } catch (e) { }
+            }
+
+            // Enviar para IA
+            handleSendToAI(match[2].trim());
+        }
+    }, [transcribedText, isRecording, isGenerating, isSaving]);
+
     // Pausar e abrir menu de atividades
     const handlePauseForActivity = async () => {
         if (isRecording) {
@@ -501,7 +554,7 @@ export default function TranscriptionScreen() {
     };
 
     // Enviar para IA (Genérico)
-    const handleSendToAI = async () => {
+    const handleSendToAI = async (command?: string) => {
         // Helper function to try extracting JSON
         const tryParseJSON = (str: string) => {
             if (typeof str !== 'string') return null;
@@ -602,7 +655,11 @@ export default function TranscriptionScreen() {
 
             console.log('[AI] Enviando texto para N8N...');
             // Envia APENAS o texto, sem instrução extra, conforme pedido
-            const n8nResponse = await processText(transcribedText);
+            // Agora enviando também classroom_id e comando
+            const n8nResponse = await processText(transcribedText, undefined, {
+                classroom_id: subjectName,
+                comando: command || null
+            });
             console.log('[AI] Resposta do N8N:', JSON.stringify(n8nResponse, null, 2));
 
             // Extrair conteúdo
@@ -762,47 +819,21 @@ export default function TranscriptionScreen() {
                 }
             }
 
-            // Determinar tipo de atividade baseado na estrutura ou tipo explícito
+            // Determinar tipo de atividade baseado EXCLUSIVAMENTE em tag explícita (pedido do usuário)
             let activityType: 'quiz' | 'summary' = explicitType || 'summary';
             let title = 'Resposta da IA';
 
-            if (explicitType) {
-                // Se tem tipo explícito, confia nele
-                activityType = explicitType;
-                if (activityType === 'quiz') {
-                    // Tenta pegar o título do quiz se disponível
-                    title = parsedContent.quiz_title || 'Quiz Gerado por IA';
-                    // Se o conteúdo parseado não tiver 'questions' mas for quiz explícito,
-                    // tenta garantir formato ou deixa que o parser de texto tenha feito o trabalho
-                    setGeneratedQuiz(parsedContent);
-                    setDisplayMode('quiz');
-                } else {
-                    title = 'Resumo / Resposta';
-                    const textContent = parsedContent.text || parsedContent.summary || (typeof parsedContent === 'string' ? parsedContent : JSON.stringify(parsedContent, null, 2));
-                    setGeneratedSummary(String(textContent));
-                    setDisplayMode('summary');
-                }
-            } else if (parsedContent && typeof parsedContent === 'object') {
-                // Heurística antiga (Fallback)
-                if (parsedContent.questions && Array.isArray(parsedContent.questions)) {
-                    activityType = 'quiz';
-                    // Tenta pegar o título do quiz se disponível antes de fallback
-                    title = parsedContent.quiz_title || 'Quiz Gerado por IA';
-                    setGeneratedQuiz(parsedContent);
-                    setDisplayMode('quiz');
-                } else {
-                    // Assume resumo/texto
-                    activityType = 'summary';
-                    title = 'Resumo / Resposta';
-                    // Normaliza para string para exibição
-                    const textContent = parsedContent.text || parsedContent.summary || JSON.stringify(parsedContent, null, 2);
-                    setGeneratedSummary(textContent);
-                    setDisplayMode('summary');
-                }
+            if (explicitType === 'quiz') {
+                // Tenta pegar o título do quiz se disponível
+                title = parsedContent.quiz_title || 'Quiz Gerado por IA';
+                setGeneratedQuiz(parsedContent);
+                setDisplayMode('quiz');
             } else {
-                // String simples
+                // Se for SUMMARY ou NULL (sem tag), trata como resumo/texto
                 activityType = 'summary';
-                setGeneratedSummary(String(parsedContent));
+                title = 'Resumo / Resposta';
+                const textContent = parsedContent.text || parsedContent.summary || (typeof parsedContent === 'string' ? parsedContent : JSON.stringify(parsedContent, null, 2));
+                setGeneratedSummary(String(textContent));
                 setDisplayMode('summary');
             }
 
@@ -2010,8 +2041,8 @@ Pressione o botão do microfone para começar a falar."
                     </TouchableOpacity>
 
 
-                    {/* Botão de Gravação */}
-                    <Animated.View style={isRecording ? { transform: [{ scale: pulseAnim }] } : undefined}>
+                    {/* Botão de Gravação (Centralizado e Maior) */}
+                    <Animated.View style={[{ transform: [{ scale: pulseAnim }] }, styles.recordButtonWrapper]}>
                         <TouchableOpacity
                             style={[styles.recordButton, isRecording && styles.recordButtonActive]}
                             onPress={toggleRecording}
@@ -2030,28 +2061,13 @@ Pressione o botão do microfone para começar a falar."
                         </TouchableOpacity>
                     </Animated.View>
 
-                    <TouchableOpacity
-                        style={styles.quizButton}
-                        onPress={handleSendToAI}
-                        activeOpacity={0.8}
-                        disabled={isGenerating}
-                    >
-                        <LinearGradient
-                            colors={['#8b5cf6', '#7c3aed']}
-                            style={styles.quizButtonGradient}
-                        >
-                            {isGenerating ? (
-                                <ActivityIndicator size="small" color={colors.white} />
-                            ) : (
-                                <MaterialIcons name="send" size={24} color={colors.white} />
-                            )}
-                            <Text style={styles.buttonLabel}>Enviar IA</Text>
-                        </LinearGradient>
-                    </TouchableOpacity>
+                    {/* Espaço vazio para manter alinhamento se necessário, ou remover */}
+                    <View style={{ width: 60 }} />
+
                 </View>
 
                 <Text style={styles.footerHint}>
-                    {isGenerating ? 'Gerando com IA...' : isRecording ? 'Gravando...' : 'Resumo | Gravar | Quiz'}
+                    {isGenerating ? 'Gerando com IA...' : isRecording ? 'Diga "Fred" para comandos...' : 'Toque para gravar'}
                 </Text>
             </View>
 
@@ -2429,6 +2445,10 @@ const styles = StyleSheet.create({
         gap: spacing.lg,
     },
     recordButton: {
+    },
+    recordButtonWrapper: {
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     recordButtonActive: {
         shadowColor: '#ef4444',

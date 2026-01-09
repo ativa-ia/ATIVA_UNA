@@ -4,10 +4,10 @@ import { Platform } from 'react-native';
 const N8N_WEBHOOK_URL = 'http://192.168.0.121:5678/webhook/3acfcfc6-e473-4ce7-9842-aa33ebdc368b';
 
 // Generic text processing via N8N Webhook
-export const processText = async (text: string, instruction?: string) => {
+export const processText = async (text: string, instruction?: string, extraParams?: Record<string, any>) => {
     try {
         const payload = instruction ? `${text}\n\n[INSTRUCTION]: ${instruction}` : text;
-        console.log('Sending text to N8N:', payload.substring(0, 50) + '...');
+        console.log('Sending text to N8N:', payload.substring(0, 50) + '...', 'Extra:', extraParams);
 
         const response = await fetch(N8N_WEBHOOK_URL, {
             method: 'POST',
@@ -16,14 +16,23 @@ export const processText = async (text: string, instruction?: string) => {
             },
             // Sending 'text' property as expected by the reference project
             // If N8N agent expects instructions inside the text, we prepend/append them.
-            body: JSON.stringify({ text: payload }),
+            // extraParams allows sending additional fields like { subject: 'Math', type: 'quiz' }
+            body: JSON.stringify({ text: payload, ...extraParams }),
         });
 
         if (!response.ok) {
             throw new Error(`N8N Request failed with status ${response.status}`);
         }
 
-        return await response.json();
+        const textResponse = await response.text();
+
+        try {
+            return JSON.parse(textResponse);
+        } catch (jsonError) {
+            console.error('Failed to parse N8N response:', textResponse);
+            // Return raw text if JSON parse fails (fallback for simple text or tagged strings)
+            return { output: textResponse };
+        }
     } catch (error) {
         console.error('Error processing text with N8N:', error);
         throw error;
