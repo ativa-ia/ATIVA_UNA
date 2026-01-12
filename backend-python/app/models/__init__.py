@@ -7,11 +7,10 @@ from app.models.enrollment import Enrollment
 from app.models.teaching import Teaching
 from app.models.material import Material
 from app.models.activity import Activity
-from app.models.announcement import Announcement
-from app.models.ai_session import AISession, AIMessage
-from app.models.quiz import Quiz, QuizQuestion, QuizResponse
+from app.models.ai_session import AISession, AIMessage, AIContextFile
+# from app.models.quiz import Quiz, QuizQuestion, QuizResponse
 from app.models.chat import ChatMessage
-from app.models.grade import Grade
+# from app.models.grade import Grade
 from app.models.activity_submission import ActivitySubmission
 from app.models.transcription_session import (
     TranscriptionSession,
@@ -29,18 +28,13 @@ __all__ = [
     'Teaching',
     'Material',
     'Activity',
-    'Announcement',
     'AISession',
     'AIMessage',
-    'Quiz',
-    'QuizQuestion',
-    'QuizResponse',
+    'AIContextFile',
     'ChatMessage',
-    'Grade',
     'ActivitySubmission',
     'TranscriptionSession',
     'TranscriptionCheckpoint',
     'LiveActivity',
     'LiveActivityResponse',
 ]
-

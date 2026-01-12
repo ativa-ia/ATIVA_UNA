@@ -46,10 +46,8 @@ def create_app(config_name=None):
         from app.routes.ai_routes import ai_bp
         from app.routes.notification_routes import notification_bp
         from app.routes.admin_routes import admin_bp
-        from app.routes.quiz_routes import quiz_bp
         from app.routes.chat_routes import chat_bp
         from app.routes.enrollment_routes import enrollment_bp
-        from app.routes.performance_routes import performance_bp
         from app.routes.transcription_routes import transcription_bp
         
         app.register_blueprint(auth_bp, url_prefix='/api/auth')
@@ -57,10 +55,8 @@ def create_app(config_name=None):
         app.register_blueprint(ai_bp, url_prefix='/api/ai')
         app.register_blueprint(notification_bp, url_prefix='/api/notifications')
         app.register_blueprint(admin_bp, url_prefix='/api/admin')
-        app.register_blueprint(quiz_bp, url_prefix='/api/quiz')
         app.register_blueprint(chat_bp, url_prefix='/api/chat')
         app.register_blueprint(enrollment_bp, url_prefix='/api/enrollments')
-        app.register_blueprint(performance_bp, url_prefix='/api/performance')
         app.register_blueprint(transcription_bp, url_prefix='/api/transcription')
         logger.info("Blueprints registrados com sucesso.")
     except Exception as e:

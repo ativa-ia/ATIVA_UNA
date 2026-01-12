@@ -116,6 +116,9 @@ class LiveActivity(db.Model):
     
     # Conteúdo gerado pela IA
     ai_generated_content = db.Column(db.Text, nullable=True)
+
+    # Caminho do relatório PDF
+    pdf_path = db.Column(db.String(500), nullable=True)
     
     # Se foi compartilhado com os alunos
     shared_with_students = db.Column(db.Boolean, default=False)

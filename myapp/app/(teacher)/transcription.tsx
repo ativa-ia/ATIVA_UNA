@@ -62,6 +62,25 @@ export default function TranscriptionScreen() {
 
     // Wrapper condicional para scroll no mobile
     const MainContentWrapper = isMobile ? ScrollView : View;
+
+    // Fred Command Overlay Component
+    const FredCommandOverlay = () => {
+        if (!fredCommand) return null;
+
+        return (
+            <Animated.View style={styles.fredOverlay}>
+                <View style={styles.fredContent}>
+                    <View style={styles.fredIconContainer}>
+                        <MaterialIcons name="record-voice-over" size={32} color="#FFF" />
+                    </View>
+                    <Text style={styles.fredText}>
+                        <Text style={{ fontWeight: 'bold' }}>Fred:</Text> {fredCommand}
+                    </Text>
+                </View>
+            </Animated.View>
+        );
+    };
+
     const mainContentWrapperProps = isMobile
         ? {
             style: { flex: 1 },
@@ -103,6 +122,9 @@ export default function TranscriptionScreen() {
     const [sidebarVisible, setSidebarVisible] = useState(false);
     const [showSummaryModal, setShowSummaryModal] = useState(false);
     const [displayMode, setDisplayMode] = useState<'none' | 'summary' | 'quiz'>('none');
+
+
+    const [fredCommand, setFredCommand] = useState<string | null>(null); // State for Fred Popup
 
     // History / Checkpoints
     const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -361,6 +383,12 @@ export default function TranscriptionScreen() {
 
                     recognition.onresult = (event: any) => {
                         let currentInterim = '';
+                        // Regex para identificar início de comando Fred
+                        const fredStartRegex = /^(?:fred|frede)\b/i;
+
+                        // Regex para extrair comando completo: Fred + comando
+                        const fredFullRegex = /^(?:fred|frede)\s+(.+)/i;
+
                         for (let i = 0; i < event.results.length; i++) {
                             const result = event.results[i];
                             const transcript = result[0].transcript.trim();
@@ -369,13 +397,70 @@ export default function TranscriptionScreen() {
                                 if (!processedResultsRef.current.has(i) && transcript !== lastFinalTextRef.current) {
                                     processedResultsRef.current.add(i);
                                     lastFinalTextRef.current = transcript;
-                                    const separator = savedTextRef.current ? ' ' : '';
-                                    savedTextRef.current = savedTextRef.current + separator + transcript;
-                                    setTranscribedText(savedTextRef.current);
-                                    triggerAutoSave(savedTextRef.current);
+
+                                    // Checa se é um comando Fred
+                                    const fredMatch = transcript.match(fredFullRegex);
+                                    if (fredMatch) {
+                                        // É um comando!
+                                        const commandContent = fredMatch[1].trim();
+                                        console.log('[ONRESULT] Fred command interceptado (Final):', commandContent);
+
+                                        // Mostrar no Pop-up (Finalização)
+                                        setFredCommand(commandContent);
+
+                                        // Feedback Tátil
+                                        if (Platform.OS === 'web') {
+                                            // @ts-ignore
+                                            try { window.navigator.vibrate(200); } catch (e) { }
+                                        }
+
+                                        // Enviar para IA e limpar popup depois
+                                        setTimeout(() => {
+                                            handleSendToAI(commandContent);
+                                            // Limpar popup após um tempo se a IA não responder rápido
+                                            setTimeout(() => setFredCommand(null), 4000);
+                                        }, 100);
+
+                                        // NÃO adiciona ao savedTextRef (interceptado)
+                                    } else {
+                                        // Texto normal
+                                        // Mas cuidado se o Fred estiver no meio: "Olá Fred faça isso"
+                                        // A implementação simples assume que o comando é uma sentença separada (pausa antes).
+                                        // Para robustez, podemos fazer um split, mas vamos manter simples por enquanto conforme solicitado "direto no popup".
+
+                                        // Verifica se tem Fred no meio (split simples se necessário, mas pode ser arriscado cortar fala normal)
+                                        // Se o usuário disser "Fred" no meio, provavelmente haverá uma pausa antes separando os results,
+                                        // ou será capturado aqui. Se for uma frase longa sem pausa "ola fred corre", será capturado como texto normal por enquanto,
+                                        // a menos que refinemos o regex de start para contains. 
+                                        // O pedido foi "ao inves de remover... a transcrição ser direta".
+                                        // Vamos assumir comando inicia a frase (utterance).
+
+                                        // Se NÃO for comando Fred no início, salva normal.
+                                        const separator = savedTextRef.current ? ' ' : '';
+                                        savedTextRef.current = savedTextRef.current + separator + transcript;
+                                        setTranscribedText(savedTextRef.current);
+                                        triggerAutoSave(savedTextRef.current);
+                                    }
                                 }
                             } else if (!result.isFinal) {
-                                currentInterim = transcript;
+                                // Interceptação de Interim
+                                const fredInterimMatch = transcript.match(fredFullRegex) || transcript.match(fredStartRegex);
+
+                                if (fredInterimMatch) {
+                                    // Se parece ser um comando Fred, mostra no popup e NÃO no interim text principal
+                                    // Se já temos o comando parcial
+                                    if (fredFullRegex.test(transcript)) {
+                                        const cmd = transcript.match(fredFullRegex)![1];
+                                        setFredCommand(cmd + '...'); // Feedback visual de que está ouvindo
+                                    } else {
+                                        setFredCommand('Ouvindo...');
+                                    }
+                                    // currentInterim fica vazio para não sujar a tela principal
+                                } else {
+                                    currentInterim = transcript;
+                                    // Se tínhamos um comando Fred antes e agora não parece mais (estranho, mas possível), limpamos?
+                                    // Melhor não limpar fredCommand aqui para não piscar.
+                                }
                             }
                         }
                         setInterimText(currentInterim);
@@ -494,52 +579,8 @@ export default function TranscriptionScreen() {
      * VOICE TRIGGER IMPLEMENTATION
      * Detects "Fred" followed by a command
      */
-    useEffect(() => {
-        if (!isRecording || !transcribedText) return;
-
-        // Limpar o índice processado se o texto for menor que o índice (limpeza de texto)
-        const lastProcessedIndex = (processedResultsRef.current as any).lastProcessedIndex || -1;
-        if (transcribedText.length < lastProcessedIndex) {
-            console.log('[VOICE TRIGGER] Resetting index because text was cleared.');
-            (processedResultsRef.current as any).lastProcessedIndex = -1;
-        }
-
-        // Regex para detectar o comando
-        const triggerRegex = /(?:^|\s|\.)(fred|frede)\s+(.+)/i;
-
-        // Verifica apenas o texto mais recente
-        const sliceLength = 100;
-        const recentText = transcribedText.slice(-sliceLength);
-        const match = recentText.match(triggerRegex);
-
-        if (match && !isGenerating && !isSaving) {
-            // Calcular índice absoluto do comando no texto completo
-            const matchIndexInSlice = match.index || 0;
-            const absoluteIndex = Math.max(0, transcribedText.length - sliceLength) + matchIndexInSlice;
-
-            const currentLastProcessedIndex = (processedResultsRef.current as any).lastProcessedIndex || -1;
-
-            // Se este comando (nesta posição específica) já foi processado, ignora
-            if (absoluteIndex <= currentLastProcessedIndex) {
-                return;
-            }
-
-            console.log('[VOICE TRIGGER] Comando detectado:', match[0], 'Index:', absoluteIndex);
-
-            // Atualizar o índice processado para evitar loops
-            (processedResultsRef.current as any).lastProcessedIndex = absoluteIndex;
-            (processedResultsRef.current as any).lastTriggerTime = Date.now();
-
-            // Feedback visual rápido
-            if (Platform.OS === 'web') {
-                // @ts-ignore
-                try { window.navigator.vibrate(200); } catch (e) { }
-            }
-
-            // Enviar para IA
-            handleSendToAI(match[2].trim());
-        }
-    }, [transcribedText, isRecording, isGenerating, isSaving]);
+    // Efeito de detecção removido em favor da interceptação direta no onresult
+    // useEffect(() => { ... }, [transcribedText...]);
 
     // Pausar e abrir menu de atividades
     const handlePauseForActivity = async () => {
@@ -2080,6 +2121,7 @@ Pressione o botão do microfone para começar a falar."
                 onConfirm={confirmModal.onConfirm}
                 onCancel={closeConfirmModal}
             />
+            <FredCommandOverlay />
         </View >
     );
 }
@@ -3412,4 +3454,39 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.sm,
     },
 
+    // Fred Overlay Styles
+    fredOverlay: {
+        position: 'absolute',
+        top: 120,
+        left: 20,
+        right: 20,
+        backgroundColor: '#ef4444',
+        borderRadius: 16,
+        padding: 16,
+        zIndex: 9999,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 10,
+    },
+    fredContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    fredIconContainer: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    fredText: {
+        color: '#FFF',
+        fontSize: 18,
+        fontWeight: '600',
+        flex: 1,
+    },
 });
