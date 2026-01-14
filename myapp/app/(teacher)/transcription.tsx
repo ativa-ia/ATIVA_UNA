@@ -1801,7 +1801,6 @@ export default function TranscriptionScreen() {
                                                         onPress={handleSendSummaryToPresentation}
                                                     >
                                                         <MaterialIcons name="tv" size={20} color={colors.white} />
-                                                        <Text style={styles.buttonText}>📺 Enviar para Tela</Text>
                                                     </TouchableOpacity>
                                                 )}
                                             </View>
