@@ -14,6 +14,7 @@ import SummarySlide from '@/components/presentation/SummarySlide';
 import QuizSlide from '@/components/presentation/QuizSlide';
 import PodiumDisplay from '@/components/quiz/PodiumDisplay';
 import MediaSlide from '@/components/presentation/MediaSlide';
+import LiveRankingSlide from '@/components/presentation/LiveRankingSlide';
 
 export default function PresentationScreen() {
     const { code } = useLocalSearchParams<{ code: string }>();
@@ -185,6 +186,8 @@ export default function PresentationScreen() {
                 return <QuizSlide data={content.data} />;
             case 'podium':
                 return <PodiumDisplay topStudents={content.data.topStudents || []} />;
+            case 'ranking':
+                return <LiveRankingSlide data={content.data} />;
             case 'image':
             case 'video':
                 return <MediaSlide type={content.type} data={content.data} />;

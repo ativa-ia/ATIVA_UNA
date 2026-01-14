@@ -296,6 +296,47 @@ export default function QuizResultsScreen() {
     }, [showPodium, presentationCode, ranking]);
 
 
+    // Enviar ranking ao vivo automaticamente para apresentação durante o quiz
+    useEffect(() => {
+        // Só envia ranking se:
+        // 1. Há apresentação ativa
+        // 2. Quiz NÃO está encerrado (não está mostrando pódio)
+        // 3. Há ranking disponível
+        if (presentationCode && !showPodium && ranking.length > 0) {
+            const sendRankingAuto = async () => {
+                try {
+                    const topStudents = ranking
+                        .filter((r: any) => r.status === 'submitted' || r.score > 0)
+                        .slice(0, 10) // Top 10
+                        .map((student: any, index: number) => {
+                            return {
+                                position: index + 1,
+                                student_name: student.student_name,
+                                points: student.points || (student.score * 100),
+                                answered: student.score || 0, // score = questões respondidas
+                                total: student.total || 0,
+                            };
+                        });
+
+                    if (topStudents.length > 0) {
+                        await sendToPresentation(presentationCode, 'ranking', {
+                            title: '🏆 Ranking ao Vivo',
+                            ranking: topStudents,
+                            total_students: ranking.length
+                        });
+                        console.log('[AUTO] Ranking enviado automaticamente para apresentação');
+                    }
+                } catch (error) {
+                    console.error('[AUTO] Erro ao enviar ranking:', error);
+                }
+            };
+
+            sendRankingAuto();
+        }
+    }, [ranking, presentationCode, showPodium, report]);
+
+
+
     const handleExportPDF = async () => {
         if (!activityId && !quizId) return;
 
