@@ -1,7 +1,11 @@
 import * as FileSystem from 'expo-file-system';
 import { Platform } from 'react-native';
 
-const N8N_WEBHOOK_URL = process.env.EXPO_PUBLIC_N8N_WEBHOOK_URL || 'http://192.168.0.121:5678/webhook/3acfcfc6-e473-4ce7-9842-aa33ebdc368b';
+const N8N_WEBHOOK_URL = process.env.EXPO_PUBLIC_N8N_WEBHOOK_URL;
+
+if (!N8N_WEBHOOK_URL) {
+    throw new Error('EXPO_PUBLIC_N8N_WEBHOOK_URL environment variable is not set');
+}
 
 // Generic text processing via N8N Webhook
 export const processText = async (text: string, instruction?: string, extraParams?: Record<string, any>) => {
