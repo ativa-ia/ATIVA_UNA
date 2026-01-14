@@ -38,6 +38,13 @@ import {
     saveGeneratedActivity,
 } from '@/services/api';
 import { processText } from '@/services/n8n';
+import {
+    startPresentation,
+    sendToPresentation,
+    endPresentation,
+    getActivePresentation
+} from '@/services/presentation';
+import PresentationControls from '@/components/presentation/PresentationControls';
 // import { useAuth } from '@/context/AuthContext'; // Ajuste o caminho se necessário
 import { useRouter } from 'expo-router';
 import ConfirmationModal from '@/components/modals/ConfirmationModal';
@@ -69,14 +76,27 @@ export default function TranscriptionScreen() {
 
         return (
             <Animated.View style={styles.fredOverlay}>
-                <View style={styles.fredContent}>
-                    <View style={styles.fredIconContainer}>
-                        <MaterialIcons name="record-voice-over" size={32} color="#FFF" />
+                <LinearGradient
+                    colors={['#6366f1', '#a855f7']} // Indigo to Purple gradient
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.fredGradient}
+                >
+                    <View style={styles.fredContent}>
+                        <View style={styles.fredIconContainer}>
+                            <MaterialIcons name="smart-toy" size={28} color="#FFF" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.fredLabel}>Assistente Fred</Text>
+                            <Text style={styles.fredText}>
+                                {fredCommand === 'Ouvindo...' ? 'Ouvindo...' : fredCommand}
+                            </Text>
+                        </View>
+                        {fredCommand === 'Ouvindo...' && (
+                            <ActivityIndicator size="small" color="#FFF" />
+                        )}
                     </View>
-                    <Text style={styles.fredText}>
-                        <Text style={{ fontWeight: 'bold' }}>Fred:</Text> {fredCommand}
-                    </Text>
-                </View>
+                </LinearGradient>
             </Animated.View>
         );
     };
@@ -122,6 +142,11 @@ export default function TranscriptionScreen() {
     const [sidebarVisible, setSidebarVisible] = useState(false);
     const [showSummaryModal, setShowSummaryModal] = useState(false);
     const [displayMode, setDisplayMode] = useState<'none' | 'summary' | 'quiz'>('none');
+
+    // Estados de Apresentação
+    const [presentationCode, setPresentationCode] = useState<string | null>(null);
+    const [presentationActive, setPresentationActive] = useState(false);
+
 
 
     const [fredCommand, setFredCommand] = useState<string | null>(null); // State for Fred Popup
@@ -183,6 +208,24 @@ export default function TranscriptionScreen() {
             }
         };
     }, []);
+
+    // Carregar apresentação ativa ao montar componente
+    useEffect(() => {
+        loadActivePresentation();
+    }, []);
+
+    const loadActivePresentation = async () => {
+        try {
+            const response = await getActivePresentation();
+            if (response.active && response.session) {
+                setPresentationCode(response.session.code);
+                setPresentationActive(true);
+            }
+        } catch (error) {
+            console.error('Erro ao carregar apresentação ativa:', error);
+        }
+    };
+
 
     // Atualizar ref da sessão sempre que session mudar
     useEffect(() => {
@@ -383,11 +426,11 @@ export default function TranscriptionScreen() {
 
                     recognition.onresult = (event: any) => {
                         let currentInterim = '';
-                        // Regex para identificar início de comando Fred
-                        const fredStartRegex = /^(?:fred|frede)\b/i;
+                        // Regex para identificar início de comando Fred (aceita pontuação opcional)
+                        const fredStartRegex = /^(?:fred|frede)[!?,.]?\b/i;
 
-                        // Regex para extrair comando completo: Fred + comando
-                        const fredFullRegex = /^(?:fred|frede)\s+(.+)/i;
+                        // Regex para extrair comando completo: Fred + (pontuação opcional) + espaço + comando
+                        const fredFullRegex = /^(?:fred|frede)[!?,.]?\s+(.+)/i;
 
                         for (let i = 0; i < event.results.length; i++) {
                             const result = event.results[i];
@@ -440,6 +483,9 @@ export default function TranscriptionScreen() {
                                         savedTextRef.current = savedTextRef.current + separator + transcript;
                                         setTranscribedText(savedTextRef.current);
                                         triggerAutoSave(savedTextRef.current);
+
+                                        // Garantir que o popup limpe se não foi um comando válido
+                                        setFredCommand(null);
                                     }
                                 }
                             } else if (!result.isFinal) {
@@ -594,6 +640,68 @@ export default function TranscriptionScreen() {
         setShowActivityModal(true);
     };
 
+    // Função para iniciar apresentação
+    const handleStartPresentation = async () => {
+        try {
+            const response = await startPresentation();
+            if (response.success && response.code) {
+                setPresentationCode(response.code);
+                setPresentationActive(true);
+
+                // Copiar URL para clipboard (opcional)
+                Alert.alert(
+                    'Apresentação Iniciada',
+                    `Código: ${response.code}\n\nURL: ${response.url}`,
+                    [{ text: 'OK' }]
+                );
+            }
+        } catch (error) {
+            Alert.alert('Erro', 'Falha ao iniciar apresentação');
+        }
+    };
+
+    // Função para enviar resumo para apresentação
+    const handleSendSummaryToPresentation = async () => {
+        if (!presentationCode || !generatedSummary) return;
+
+        try {
+            await sendToPresentation(presentationCode, 'summary', {
+                text: generatedSummary,
+                title: 'Resumo da Aula'
+            });
+            Alert.alert('✅ Sucesso', 'Resumo enviado para a tela de apresentação');
+        } catch (error) {
+            Alert.alert('Erro', 'Falha ao enviar resumo');
+        }
+    };
+
+    // Função para encerrar apresentação
+    const handleEndPresentation = async () => {
+        if (!presentationCode) {
+            Alert.alert('Erro', 'Nenhuma apresentação ativa');
+            return;
+        }
+
+        try {
+            console.log('[PRESENTATION] Encerrando apresentação:', presentationCode);
+            const response = await endPresentation(presentationCode);
+            console.log('[PRESENTATION] Resposta:', response);
+
+            if (response.success) {
+                setPresentationActive(false);
+                setPresentationCode(null);
+                Alert.alert('✅ Sucesso', 'Apresentação encerrada!');
+            } else {
+                Alert.alert('Erro', response.error || 'Falha ao encerrar');
+            }
+        } catch (error) {
+            console.error('[PRESENTATION] Erro ao encerrar:', error);
+            Alert.alert('Erro', 'Falha ao encerrar apresentação');
+        }
+    };
+
+
+
     // Enviar para IA (Genérico)
     const handleSendToAI = async (command?: string) => {
         // Helper function to try extracting JSON
@@ -679,7 +787,9 @@ export default function TranscriptionScreen() {
         if (!session) return;
 
         // Verificar se tem texto
-        if (!transcribedText || transcribedText.trim().length === 0) {
+        // Usar savedTextRef para evitar closure stale quando chamado via onresult
+        const currentText = savedTextRef.current;
+        if (!currentText || currentText.trim().length === 0) {
             if (Platform.OS === 'web') {
                 window.alert('Grave ou digite algum conteúdo antes de enviar para a IA.');
             } else {
@@ -692,12 +802,12 @@ export default function TranscriptionScreen() {
         // Não definimos displayMode ainda, esperamos a resposta
         try {
             // Forçar salvamento antes de gerar
-            await updateTranscription(session.id, transcribedText);
+            await updateTranscription(session.id, currentText);
 
             console.log('[AI] Enviando texto para N8N...');
             // Envia APENAS o texto, sem instrução extra, conforme pedido
             // Agora enviando também classroom_id e comando
-            const n8nResponse = await processText(transcribedText, undefined, {
+            const n8nResponse = await processText(currentText, undefined, {
                 classroom_id: subjectName,
                 comando: command || null
             });
@@ -1579,6 +1689,24 @@ export default function TranscriptionScreen() {
                 )
             }
 
+            {/* Seção de Apresentação */}
+            <View style={styles.presentationSection}>
+                {!presentationActive ? (
+                    <TouchableOpacity
+                        style={styles.startPresentationButton}
+                        onPress={handleStartPresentation}
+                    >
+                        <MaterialIcons name="cast" size={20} color={colors.white} />
+                        <Text style={styles.buttonText}>Iniciar Transmissão</Text>
+                    </TouchableOpacity>
+                ) : (
+                    <PresentationControls
+                        code={presentationCode}
+                        onEnd={handleEndPresentation}
+                    />
+                )}
+            </View>
+
             {/* Transcribed Text Area - Split Screen */}
             <MainContentWrapper {...mainContentWrapperProps}>
                 {/* Painel Esquerdo - Conteúdo Gerado */}
@@ -1665,6 +1793,17 @@ export default function TranscriptionScreen() {
                                                         <Text style={styles.sendSummaryButtonText}>Enviar para Alunos</Text>
                                                     </LinearGradient>
                                                 </TouchableOpacity>
+
+                                                {/* Botão Enviar para Tela de Apresentação */}
+                                                {presentationActive && (
+                                                    <TouchableOpacity
+                                                        style={styles.sendToScreenButton}
+                                                        onPress={handleSendSummaryToPresentation}
+                                                    >
+                                                        <MaterialIcons name="tv" size={20} color={colors.white} />
+                                                        <Text style={styles.buttonText}>📺 Enviar para Tela</Text>
+                                                    </TouchableOpacity>
+                                                )}
                                             </View>
                                         </>
                                     )}
@@ -3457,36 +3596,82 @@ const styles = StyleSheet.create({
     // Fred Overlay Styles
     fredOverlay: {
         position: 'absolute',
-        top: 120,
+        top: 100, // Slightly higher
         left: 20,
         right: 20,
-        backgroundColor: '#ef4444',
-        borderRadius: 16,
-        padding: 16,
         zIndex: 9999,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 4 },
+        shadowColor: "#6366f1",
+        shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.3,
-        shadowRadius: 8,
+        shadowRadius: 16,
         elevation: 10,
+        borderRadius: 20,
+    },
+    fredGradient: {
+        borderRadius: 20,
+        padding: 4, // Border effect or padding
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.3)',
     },
     fredContent: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
+        backgroundColor: 'rgba(255,255,255,0.15)', // Glassy feel inside
+        borderRadius: 16,
+        padding: 12,
+        paddingHorizontal: 16,
     },
     fredIconContainer: {
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        backgroundColor: 'rgba(255,255,255,0.2)',
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(255,255,255,0.25)',
         justifyContent: 'center',
         alignItems: 'center',
     },
+    fredLabel: {
+        color: 'rgba(255,255,255,0.8)',
+        fontSize: 10,
+        fontWeight: 'bold',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+        marginBottom: 2,
+    },
     fredText: {
         color: '#FFF',
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: '600',
-        flex: 1,
+        lineHeight: 22,
+    },
+    presentationSection: {
+        padding: spacing.md,
+        backgroundColor: colors.slate50,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.slate200,
+    },
+    startPresentationButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: colors.success,
+        padding: spacing.md,
+        borderRadius: borderRadius.lg,
+        gap: spacing.sm,
+    },
+    sendToScreenButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: colors.primary,
+        padding: spacing.sm,
+        borderRadius: borderRadius.md,
+        gap: spacing.xs,
+        marginTop: spacing.sm,
+    },
+    buttonText: {
+        color: colors.white,
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.semibold,
     },
 });

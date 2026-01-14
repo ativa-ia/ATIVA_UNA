@@ -20,6 +20,10 @@ export const colors = {
   warning: '#f59e0b',      // Amber 500
   info: '#0ea5e9',         // Sky 500
 
+  // Aliases for common usage
+  success: '#10b981',      // Same as secondary (Emerald 500)
+  error: '#f43f5e',        // Same as danger (Rose 500)
+
   // Backgrounds - Light Mode Focus
   backgroundLight: '#f8fafc', // Slate 50 (Soft White)
   backgroundCard: '#ffffff',  // Pure White
