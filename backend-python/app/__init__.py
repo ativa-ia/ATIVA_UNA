@@ -33,7 +33,10 @@ def create_app(config_name=None):
         db.init_app(app)
         migrate.init_app(app, db)
         socketio.init_app(app)
-        CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True, expose_headers=["Content-Disposition"])
+        # CORS: supports_credentials=True não deve ser usado com origins='*'
+        # Como estamos usando JWT (Bearer Token), geralmente não precisamos de credentials (cookies)
+        # Se precisarmos, devemos especificar as origens.
+        CORS(app, resources={r"/*": {"origins": "*"}}, expose_headers=["Content-Disposition"])
         logger.info("Extensoes inicializadas com sucesso.")
     except Exception as e:
         logger.error(f"Erro ao inicializar extensoes: {e}")
