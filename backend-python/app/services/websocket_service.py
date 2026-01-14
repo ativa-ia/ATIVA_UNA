@@ -84,3 +84,60 @@ def emit_new_response(quiz_id, student_data):
     room = f"quiz_{quiz_id}"
     logger.info(f"Emitindo nova resposta para room: {room}")
     socketio.emit('new_response', student_data, room=room)
+
+
+# ========== PRESENTATION EVENTS ==========
+
+def emit_presentation_content(code, content):
+    """
+    Emite novo conteúdo para todas as telas conectadas à apresentação
+    Similar a: emit_ranking_update
+    """
+    room = f'presentation_{code}'
+    socketio.emit('presentation_content', content, room=room)
+    logger.info(f'Conteúdo emitido para sala {room}')
+
+
+def emit_presentation_clear(code):
+    """
+    Emite evento para limpar tela de apresentação
+    """
+    room = f'presentation_{code}'
+    socketio.emit('presentation_clear', {}, room=room)
+    logger.info(f'Tela limpa na sala {room}')
+
+
+def emit_presentation_ended(code):
+    """
+    Emite evento indicando que apresentação foi encerrada
+    """
+    room = f'presentation_{code}'
+    socketio.emit('presentation_ended', {}, room=room)
+    logger.info(f'Apresentação encerrada na sala {room}')
+
+
+@socketio.on('join_presentation')
+def handle_join_presentation(data):
+    """
+    Cliente entra em sala de apresentação
+    Similar a eventos de quiz
+    """
+    code = data.get('code')
+    if code:
+        room = f'presentation_{code}'
+        join_room(room)
+        emit('joined_presentation', {'code': code})
+        logger.info(f'Cliente entrou na sala {room}')
+
+
+@socketio.on('leave_presentation')
+def handle_leave_presentation(data):
+    """
+    Cliente sai da sala de apresentação
+    """
+    code = data.get('code')
+    if code:
+        room = f'presentation_{code}'
+        leave_room(room)
+        logger.info(f'Cliente saiu da sala {room}')
+

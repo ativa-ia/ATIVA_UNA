@@ -29,6 +29,7 @@ import ComparativeStatsPanel from '@/components/quiz/ComparativeStatsPanel';
 
 import { useWebSocket } from '@/hooks/useWebSocket';
 import ConfirmationModal from '@/components/modals/ConfirmationModal';
+import { sendToPresentation, getActivePresentation } from '@/services/presentation';
 
 /**
  * QuizResultsScreen - Resultados do Quiz em Tempo Real (Professor)
@@ -53,6 +54,10 @@ export default function QuizResultsScreen() {
     const [isGeneratingAI, setIsGeneratingAI] = useState(false);
     const [isDistributing, setIsDistributing] = useState(false);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+    // Estados de Apresentação
+    const [presentationCode, setPresentationCode] = useState<string | null>(null);
+
 
     // WebSocket para atualizações em tempo real
     const { isConnected, ranking: wsRanking } = useWebSocket({
@@ -173,6 +178,23 @@ export default function QuizResultsScreen() {
         fetchInitialReport();
     }, [quizId, activityId]);
 
+    // Carregar apresentação ativa
+    useEffect(() => {
+        loadPresentationCode();
+    }, []);
+
+    const loadPresentationCode = async () => {
+        try {
+            const response = await getActivePresentation();
+            if (response.active && response.session) {
+                setPresentationCode(response.session.code);
+            }
+        } catch (error) {
+            console.error('Erro ao carregar apresentação:', error);
+        }
+    };
+
+
     const handleEndQuiz = async () => {
         // Se já está mostrando o pódio, voltar para a tela anterior
         if (showPodium) {
@@ -242,6 +264,37 @@ export default function QuizResultsScreen() {
             router.back();
         }
     };
+
+    // Enviar pódio automaticamente para apresentação quando aparecer
+    useEffect(() => {
+        if (showPodium && presentationCode && ranking.length > 0) {
+            const sendPodiumAuto = async () => {
+                try {
+                    const topStudents = ranking
+                        .filter((r: any) => r.status === 'submitted')
+                        .slice(0, 3)
+                        .map((student: any, index: number) => ({
+                            position: index + 1,
+                            student_name: student.student_name,
+                            points: student.points || (student.score * 100),
+                            percentage: student.percentage || 0,
+                            score: student.score || 0,
+                            total: student.total || 0,
+                        }));
+
+                    await sendToPresentation(presentationCode, 'podium', {
+                        topStudents
+                    });
+                    console.log('[AUTO] Pódio enviado automaticamente para apresentação');
+                } catch (error) {
+                    console.error('[AUTO] Erro ao enviar pódio:', error);
+                }
+            };
+
+            sendPodiumAuto();
+        }
+    }, [showPodium, presentationCode, ranking]);
+
 
     const handleExportPDF = async () => {
         if (!activityId && !quizId) return;
@@ -341,6 +394,36 @@ export default function QuizResultsScreen() {
             setIsDistributing(false);
         }
     };
+
+    // Função para enviar pódio para apresentação
+    const handleSendPodiumToPresentation = async () => {
+        if (!presentationCode || !report) {
+            Alert.alert('Erro', 'Nenhuma apresentação ativa');
+            return;
+        }
+
+        try {
+            const topStudents = ranking
+                .filter((r: any) => r.status === 'submitted')
+                .slice(0, 3)
+                .map((student: any, index: number) => ({
+                    position: index + 1,
+                    student_name: student.student_name,
+                    points: student.points || (student.score * 100),
+                    percentage: student.percentage || 0,
+                    score: student.score || 0,
+                    total: student.total || 0,
+                }));
+
+            await sendToPresentation(presentationCode, 'podium', {
+                topStudents
+            });
+            Alert.alert('✅ Sucesso', 'Pódio enviado para a tela!');
+        } catch (error) {
+            Alert.alert('Erro', 'Falha ao enviar pódio');
+        }
+    };
+
 
 
 
@@ -1080,5 +1163,20 @@ const styles = StyleSheet.create({
         color: colors.white,
         fontSize: 13,
         fontWeight: 'bold',
+    },
+    sendPodiumButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: colors.primary,
+        padding: spacing.md,
+        borderRadius: borderRadius.lg,
+        gap: spacing.sm,
+        marginTop: spacing.md,
+    },
+    sendPodiumButtonText: {
+        color: colors.white,
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.semibold,
     },
 });
