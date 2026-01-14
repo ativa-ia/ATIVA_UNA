@@ -1,0 +1,6 @@
+Activity ID: 3
+Total Responses: 3
+Average Score: 50.0
+Target Students: [4]
+Using external URL: https://ocuhqyrvpkmtmnrifttr.supabase.co/storage/v1/object/public/context-documents/materials/summary_3_1768243202743.md
+Committed 1 materials to DB.

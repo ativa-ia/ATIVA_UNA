@@ -19,7 +19,7 @@ class Subject(db.Model):
     enrollments = db.relationship('Enrollment', backref='subject', lazy=True, cascade='all, delete-orphan')
     materials = db.relationship('Material', backref='subject', lazy=True, cascade='all, delete-orphan')
     activities = db.relationship('Activity', backref='subject', lazy=True, cascade='all, delete-orphan')
-    announcements = db.relationship('Announcement', backref='subject', lazy=True, cascade='all, delete-orphan')
+    # announcements = db.relationship('Announcement', backref='subject', lazy=True, cascade='all, delete-orphan')
     
     def __repr__(self):
         return f'<Subject {self.name}>'
