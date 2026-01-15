@@ -4,10 +4,12 @@ import { supabase } from './supabase';
 
 // URL da API (mude para seu IP local se testar em dispositivo físico)
 // Para desenvolvimento local, use localhost
-export const API_URL = 'http://localhost:3000/api';
+//export const API_URL = 'http://localhost:3000/api';
 
 // Para produção/Vercel, use:
 //export const API_URL = 'https://ativa-ia-9rkb.vercel.app/api';
+
+export const API_URL = 'https://ativa2-oslvj8ip0-ativa-ias-projects.vercel.app/api';
 
 export interface LoginData {
     email: string;
