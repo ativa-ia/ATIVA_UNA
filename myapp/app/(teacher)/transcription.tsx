@@ -350,8 +350,8 @@ export default function TranscriptionScreen() {
                 // HACK: Tocar áudio silencioso para evitar throttling do navegador em background
                 try {
                     // HACK: Tocar áudio silencioso para evitar throttling do navegador em background
-                    // Usando um WAV PCM linear simples e válido com silêncio
-                    const silentAudio = new Audio("data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YRAAAACAgICAgICAgICAgICAgICA");
+                    // WAV PCM linear 16-bit 8000Hz mono com silêncio (0x00)
+                    const silentAudio = new Audio("data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YRAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
                     silentAudio.loop = true;
                     silentAudio.play().catch(e => console.log('Audio autoplay falhou', e));
                     // @ts-ignore - Guardar referência para parar depois se necessário
