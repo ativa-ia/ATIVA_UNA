@@ -439,10 +439,32 @@ def upload_context(current_user):
         return jsonify({'success': False, 'error': 'Requisição inválida (esperado arquivo ou url)'}), 400
     
     
-    if not subject_id or not session_id:
-        return jsonify({'success': False, 'error': 'ID da disciplina e ID da sessão necessários'}), 400
+    if not subject_id:
+        return jsonify({'success': False, 'error': 'ID da disciplina necessário'}), 400
         
     try:
+        # Check session_id or get/create one
+        if not session_id:
+             # Find latest active session to attach context
+            from app.models.ai_session import AISession
+            session = AISession.query.filter_by(
+                teacher_id=current_user.id,
+                subject_id=subject_id,
+                status='active'
+            ).order_by(AISession.started_at.desc()).first()
+            
+            if not session:
+                # Create a default session if none exists
+                session = AISession(
+                    teacher_id=current_user.id,
+                    subject_id=subject_id,
+                    status='active'
+                )
+                db.session.add(session)
+                db.session.flush()
+                
+            session_id = session.id
+        
         content = ""
         
         # Extração de texto
@@ -455,7 +477,8 @@ def upload_context(current_user):
             except Exception as e:
                 # Fallback for some PDFs or connection issues
                 print(f"Error reading PDF: {e}")
-                return jsonify({'success': False, 'error': 'Erro ao ler PDF. O arquivo pode estar corrompido ou protegido.'}), 400
+                # Don't fail entire upload if text extraction fails, still save record
+                content = "[Erro na extração de texto do PDF]"
                 
         elif filename.lower().endswith('.docx'):
             file_type = "docx"
@@ -465,19 +488,19 @@ def upload_context(current_user):
                 for para in doc.paragraphs:
                     content += para.text + "\n"
             except Exception as e:
-                 return jsonify({'success': False, 'error': 'Erro ao ler DOCX.'}), 400
+                 content = "[Erro na extração de texto do DOCX]"
         else:
             # Assume text/plain
-            if isinstance(file_stream, io.BytesIO):
-                 content = file_stream.getvalue().decode('utf-8', errors='ignore')
-            else:
-                 content = file_stream.read().decode('utf-8', errors='ignore')
+            try:
+                if isinstance(file_stream, io.BytesIO):
+                     content = file_stream.getvalue().decode('utf-8', errors='ignore')
+                else:
+                     content = file_stream.read().decode('utf-8', errors='ignore')
+            except:
+                content = ""
             
         if not content.strip():
-            return jsonify({'success': False, 'error': 'Não foi possível extrair texto do arquivo (conteúdo vazio ou imagem)'}), 400
-            
-        if not content.strip():
-            return jsonify({'success': False, 'error': 'Não foi possível extrair texto do arquivo'}), 400
+             content = "[Conteúdo não extraído]"
             
         # Salvar no banco vinculado à SESSÃO
         context_file = AIContextFile(
@@ -490,9 +513,9 @@ def upload_context(current_user):
         db.session.add(context_file)
         db.session.commit()
         
-        # Gerar sugestões de perguntas
-        from app.services.ai_service import generate_study_questions
-        suggestions = generate_study_questions(content)
+        # Gerar sugestões de perguntas (Opcional, pode ser desativado para performance)
+        # from app.services.ai_service import generate_study_questions
+        # suggestions = generate_study_questions(content)
         
         return jsonify({
             'success': True,
