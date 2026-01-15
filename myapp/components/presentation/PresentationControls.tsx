@@ -11,7 +11,7 @@ interface Props {
 }
 
 export default function PresentationControls({ code, onEnd }: Props) {
-    const presentationURL = `http://localhost:8081/presentation?code=${code}`;
+    const presentationURL = `https://ativa-una.vercel.app/presentation?code=${code}`;
 
     const handleCopyURL = () => {
         Clipboard.setString(presentationURL);
