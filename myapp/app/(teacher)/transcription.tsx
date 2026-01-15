@@ -347,18 +347,8 @@ export default function TranscriptionScreen() {
                     } catch (e) { }
                 }
 
-                // HACK: Tocar áudio silencioso para evitar throttling do navegador em background
-                try {
-                    // HACK: Tocar áudio silencioso para evitar throttling do navegador em background
-                    // Usando um WAV PCM linear simples e válido com silêncio
-                    const silentAudio = new Audio("data:audio/wav;base64,UklGRjIAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YRAAAACAgICAgICAgICAgICAgICA");
-                    silentAudio.loop = true;
-                    silentAudio.play().catch(e => console.log('Audio autoplay falhou', e));
-                    // @ts-ignore - Guardar referência para parar depois se necessário
-                    window._silentAudio = silentAudio;
-                } catch (e) {
-                    console.log('Silent audio falhou', e);
-                }
+                // HACK: Tocar áudio silencioso REMOVIDO para evitar ruído
+                console.log('Gravando sem hack de áudio silencioso');
             }
 
         } else {
@@ -367,24 +357,13 @@ export default function TranscriptionScreen() {
             }
             pulseAnim.setValue(1);
 
-            if (Platform.OS === 'web') {
-                // Parar áudio silencioso
-                // @ts-ignore
-                if (window._silentAudio) {
-                    // @ts-ignore
-                    window._silentAudio.pause();
-                    // @ts-ignore
-                    window._silentAudio = null;
-                }
-            }
+            // Cleanup removido
+
         }
 
         return () => {
-            // @ts-ignore
-            if (Platform.OS === 'web' && window._silentAudio) {
-                // @ts-ignore
-                window._silentAudio.pause();
-            }
+            // Cleanup removido
+
 
             if (animationRef.current) {
                 animationRef.current.stop();
