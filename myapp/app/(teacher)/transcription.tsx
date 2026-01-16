@@ -1631,7 +1631,7 @@ export default function TranscriptionScreen() {
                                 <View style={[styles.sidebarIcon, { backgroundColor: '#e0f2fe' }]}>
                                     <MaterialIcons name="auto-awesome" size={20} color="#0284c7" />
                                 </View>
-                                <Text style={styles.sidebarLabel}>Assistente de IA</Text>
+                                <Text style={styles.sidebarLabel}>Contexto para Fred</Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity
