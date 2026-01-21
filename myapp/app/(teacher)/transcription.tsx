@@ -36,6 +36,7 @@ import {
     broadcastActivity,
     updateActivity,
     saveGeneratedActivity,
+    getPublicSettings
 } from '@/services/api';
 import { processText } from '@/services/n8n';
 import {
@@ -147,8 +148,7 @@ export default function TranscriptionScreen() {
     const [presentationCode, setPresentationCode] = useState<string | null>(null);
     const [presentationActive, setPresentationActive] = useState(false);
 
-
-
+    const [triggerWord, setTriggerWord] = useState('Fred'); // Default
     const [fredCommand, setFredCommand] = useState<string | null>(null); // State for Fred Popup
 
     // History / Checkpoints
@@ -207,6 +207,17 @@ export default function TranscriptionScreen() {
                 });
             }
         };
+    }, []);
+
+    // Load System Settings (Trigger Word)
+    useEffect(() => {
+        const loadSettings = async () => {
+            const { success, settings } = await getPublicSettings();
+            if (success && settings['trigger_word']) {
+                setTriggerWord(settings['trigger_word'].trim());
+            }
+        };
+        loadSettings();
     }, []);
 
     // Carregar apresentação ativa ao montar componente
@@ -426,13 +437,31 @@ export default function TranscriptionScreen() {
 
                     recognition.onresult = (event: any) => {
                         let currentInterim = '';
-                        // Regex para identificar início de comando Fred (aceita pontuação opcional)
-                        const fredStartRegex = /^(?:fred|frede)[!?,.]?\b/i;
+                        // Regex construído dinamicamente pelo triggerWord
+                        // Escapa caracteres especiais se houver
+                        const safeTrigger = triggerWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-                        // Regex para extrair comando completo: Fred + (pontuação opcional) + espaço + comando
-                        const fredFullRegex = /^(?:fred|frede)[!?,.]?\s+(.+)/i;
+                        // Dinâmico: Aceita a palavra exata + pontuação opcional
+                        // Adicionamos 'e' opcional no final para casos como Fred/Frede se terminar em consoante muda comum (opcional, pode ser removido se causar confusão com outras palavras)
+                        // Para simplicidade: apenas a palavra + variação com 'e' se a palavra for pequena (<5 chars) ou for "Fred" hardcoded logic
+                        // Simplificação: apenas a palavra exata, case insensitive.
+                        // Removemos a verificação complexa de pontuação rígida no início para ser mais permissivo
+                        const pattern = `${safeTrigger}(?:e)?`;
 
-                        for (let i = 0; i < event.results.length; i++) {
+                        // Regex Start: Começa com a palavra (aceita espaços antes se não for o início absoluto)
+                        // (?:\b|^) garante que não pegue meio de palavra (ex: 'aluna' não ativa 'luna')
+                        const fredStartRegex = new RegExp(`(?:\\b|^)${pattern}[\\s!?,.]*`, 'i');
+
+                        // Regex Full: Palavra + qualquer coisa depois
+                        const fredFullRegex = new RegExp(`(?:\\b|^)${pattern}[\\s!?,.]+(.+)`, 'i');
+
+
+                        // OTIMIZAÇÃO CRÍTICA: event.resultIndex indica onde as mudanças começaram.
+                        // Em vez de iterar de 0 até results.length (O(N^2) acumulado),
+                        // iteramos apenas sobre os novos resultados (O(N) linear).
+                        const startIndex = event.resultIndex !== undefined ? event.resultIndex : 0;
+
+                        for (let i = startIndex; i < event.results.length; i++) {
                             const result = event.results[i];
                             const transcript = result[0].transcript.trim();
 
@@ -553,7 +582,7 @@ export default function TranscriptionScreen() {
             isRecordingRef.current = false;
             cleanup();
         };
-    }, [triggerAutoSave]);
+    }, [triggerAutoSave, triggerWord]); // Dependencia de triggerWord para recriar se mudar
 
     const toggleRecording = () => {
         if (Platform.OS !== 'web') {

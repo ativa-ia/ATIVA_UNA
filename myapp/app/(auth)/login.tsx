@@ -67,7 +67,7 @@ export default function LoginScreen() {
 
     const handleSuccess = async (token: string, role: string) => {
         await saveAuth(token, role);
-        if (role === 'admin') {
+        if (role === 'admin' || role === 'super_admin') {
             router.replace('/(admin)/dashboard');
         } else if (role === 'student') {
             router.replace('/(student)/dashboard');

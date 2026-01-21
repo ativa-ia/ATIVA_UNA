@@ -41,6 +41,18 @@ export const colors = {
   slate800: '#1e293b',
   slate900: '#0f172a',
 
+  // Zinc Aliases (mapped to Slate for consistency)
+  zinc50: '#f8fafc',
+  zinc100: '#f1f5f9',
+  zinc200: '#e2e8f0',
+  zinc300: '#cbd5e1',
+  zinc400: '#94a3b8',
+  zinc500: '#64748b',
+  zinc600: '#475569',
+  zinc700: '#334155',
+  zinc800: '#1e293b',
+  zinc900: '#0f172a',
+
   // Semantics
   white: '#ffffff',
   black: '#000000',
