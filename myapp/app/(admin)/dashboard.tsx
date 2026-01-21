@@ -6,10 +6,10 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
-import { API_URL } from '@/services/api';
+import { API_URL, getAllSettings, updateSetting } from '@/services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-type AdminAction = 'user' | 'subject' | 'enroll' | 'teach' | null;
+type AdminAction = 'user' | 'subject' | 'enroll' | 'teach' | 'settings' | null;
 
 export default function AdminDashboard() {
     const insets = useSafeAreaInsets();
@@ -19,6 +19,8 @@ export default function AdminDashboard() {
     // Data Lists
     const [users, setUsers] = useState<any[]>([]);
     const [subjects, setSubjects] = useState<any[]>([]);
+    const [settingsList, setSettingsList] = useState<any[]>([]);
+    const [userRole, setUserRole] = useState<string | null>(null);
 
     // Form States
     const [formData, setFormData] = useState({
@@ -26,6 +28,7 @@ export default function AdminDashboard() {
         subjectName: '', subjectCode: '', credits: '4', // Subject
         studentId: '', subjectId: '', // Enroll
         teacherId: '', // Teach
+        settingKey: '', settingValue: '', settingDesc: '', // Settings
     });
 
     useEffect(() => {
@@ -35,6 +38,9 @@ export default function AdminDashboard() {
     const fetchData = async () => {
         try {
             const token = await AsyncStorage.getItem('authToken');
+            const storedRole = await AsyncStorage.getItem('userRole');
+            setUserRole(storedRole);
+
             const headers = { 'Authorization': `Bearer ${token}` };
 
             const [usersRes, subjectsRes] = await Promise.all([
@@ -48,6 +54,11 @@ export default function AdminDashboard() {
             if (usersData.success) setUsers(usersData.users);
             if (subjectsData.success) setSubjects(subjectsData.subjects);
 
+            if (storedRole === 'super_admin') {
+                const settingsRes = await getAllSettings();
+                if (settingsRes.success) setSettingsList(settingsRes.settings);
+            }
+
         } catch (error) {
             console.error('Erro ao buscar dados:', error);
         }
@@ -56,20 +67,30 @@ export default function AdminDashboard() {
     const handleAction = async (endpoint: string, payload: any) => {
         setLoading(true);
         try {
-            const token = await AsyncStorage.getItem('authToken');
-            const response = await fetch(`${API_URL}/admin/${endpoint}`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify(payload)
-            });
+            let success = false;
+            let message = '';
 
-            const data = await response.json();
+            if (endpoint === 'settings') {
+                const res = await updateSetting(payload);
+                success = res.success;
+                message = res.message || '';
+            } else {
+                const token = await AsyncStorage.getItem('authToken');
+                const response = await fetch(`${API_URL}/admin/${endpoint}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                success = data.success;
+                message = data.message;
+            }
 
-            if (data.success) {
-                Alert.alert('Sucesso', data.message);
+            if (success) {
+                Alert.alert('Sucesso', message);
                 setActiveAction(null);
                 fetchData(); // Refresh lists
                 setFormData({
@@ -77,9 +98,10 @@ export default function AdminDashboard() {
                     subjectName: '', subjectCode: '', credits: '4',
                     studentId: '', subjectId: '',
                     teacherId: '',
+                    settingKey: '', settingValue: '', settingDesc: '',
                 });
             } else {
-                Alert.alert('Erro', data.message || 'Falha na operação');
+                Alert.alert('Erro', message || 'Falha na operação');
             }
         } catch (error) {
             Alert.alert('Erro', 'Erro de conexão');
@@ -128,6 +150,28 @@ export default function AdminDashboard() {
                             </TouchableOpacity>
                         ))}
                     </View>
+
+                    {/* Settings List */}
+                    {activeAction === 'settings' && (
+                        <View style={styles.listColumn}>
+                            <Text style={styles.columnHeader}>Variáveis</Text>
+                            {settingsList.map(s => (
+                                <TouchableOpacity
+                                    key={s.key}
+                                    style={styles.listItem}
+                                    onPress={() => setFormData({
+                                        ...formData,
+                                        settingKey: s.key,
+                                        settingValue: s.value,
+                                        settingDesc: s.description || ''
+                                    })}
+                                >
+                                    <Text style={styles.listItemTitle}>{s.key}</Text>
+                                    <Text style={styles.listItemSubtitle}>{s.value}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    )}
                 </View>
             </View>
         );
@@ -282,6 +326,32 @@ export default function AdminDashboard() {
                         </TouchableOpacity>
                     </View>
                 );
+            case 'settings':
+                return (
+                    <View style={styles.form}>
+                        <Text style={styles.formTitle}>Configurações do Sistema</Text>
+                        {/* Key and Description are now fixed for simplicity */}
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Nova Palavra de Ativação (ex: Assistente)"
+                            placeholderTextColor={colors.zinc500}
+                            value={formData.settingValue}
+                            onChangeText={t => setFormData({ ...formData, settingValue: t })}
+                        />
+
+                        <TouchableOpacity
+                            style={styles.submitButton}
+                            onPress={() => handleAction('settings', {
+                                key: 'trigger_word', // Fixed key
+                                value: formData.settingValue,
+                                description: 'Palavra de ativação para comandos de voz', // Fixed description
+                                is_public: true
+                            })}
+                        >
+                            <Text style={styles.submitButtonText}>Salvar Configuração</Text>
+                        </TouchableOpacity>
+                    </View>
+                );
             default:
                 return null;
         }
@@ -325,6 +395,15 @@ export default function AdminDashboard() {
                         </View>
                         <Text style={styles.cardText}>Atribuir Prof</Text>
                     </TouchableOpacity>
+
+                    {userRole === 'super_admin' && (
+                        <TouchableOpacity style={styles.card} onPress={() => setActiveAction('settings')}>
+                            <View style={[styles.iconBg, { backgroundColor: '#ef4444' }]}>
+                                <MaterialIcons name="settings" size={32} color="white" />
+                            </View>
+                            <Text style={styles.cardText}>Configurações</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
 
                 {activeAction && (
