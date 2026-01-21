@@ -3,13 +3,16 @@ import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert,
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { API_URL, getAllSettings, updateSetting } from '@/services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SystemHealth } from '@/components/admin/SystemHealth';
+import { AIConfiguration } from '@/components/admin/AIConfiguration';
 
-type AdminAction = 'user' | 'subject' | 'enroll' | 'teach' | 'settings' | null;
+type AdminAction = 'user' | 'subject' | 'enroll' | 'teach' | null;
 
 export default function AdminDashboard() {
     const insets = useSafeAreaInsets();
@@ -21,6 +24,7 @@ export default function AdminDashboard() {
     const [subjects, setSubjects] = useState<any[]>([]);
     const [settingsList, setSettingsList] = useState<any[]>([]);
     const [userRole, setUserRole] = useState<string | null>(null);
+    const [userName, setUserName] = useState('Admin');
 
     // Form States
     const [formData, setFormData] = useState({
@@ -33,7 +37,13 @@ export default function AdminDashboard() {
 
     useEffect(() => {
         fetchData();
+        getUserName();
     }, []);
+
+    const getUserName = async () => {
+        const name = await AsyncStorage.getItem('userName');
+        if (name) setUserName(name);
+    }
 
     const fetchData = async () => {
         try {
@@ -91,7 +101,10 @@ export default function AdminDashboard() {
 
             if (success) {
                 Alert.alert('Sucesso', message);
-                setActiveAction(null);
+                // Only reset activeAction if it's not settings (since settings is always visible)
+                if (endpoint !== 'settings') {
+                    setActiveAction(null);
+                }
                 fetchData(); // Refresh lists
                 setFormData({
                     email: '', password: '', name: '', role: 'student',
@@ -150,28 +163,6 @@ export default function AdminDashboard() {
                             </TouchableOpacity>
                         ))}
                     </View>
-
-                    {/* Settings List */}
-                    {activeAction === 'settings' && (
-                        <View style={styles.listColumn}>
-                            <Text style={styles.columnHeader}>Variáveis</Text>
-                            {settingsList.map(s => (
-                                <TouchableOpacity
-                                    key={s.key}
-                                    style={styles.listItem}
-                                    onPress={() => setFormData({
-                                        ...formData,
-                                        settingKey: s.key,
-                                        settingValue: s.value,
-                                        settingDesc: s.description || ''
-                                    })}
-                                >
-                                    <Text style={styles.listItemTitle}>{s.key}</Text>
-                                    <Text style={styles.listItemSubtitle}>{s.value}</Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    )}
                 </View>
             </View>
         );
@@ -186,14 +177,14 @@ export default function AdminDashboard() {
                         <TextInput
                             style={styles.input}
                             placeholder="Nome"
-                            placeholderTextColor={colors.zinc500}
+                            placeholderTextColor={colors.zinc400}
                             value={formData.name}
                             onChangeText={t => setFormData({ ...formData, name: t })}
                         />
                         <TextInput
                             style={styles.input}
                             placeholder="Email"
-                            placeholderTextColor={colors.zinc500}
+                            placeholderTextColor={colors.zinc400}
                             value={formData.email}
                             onChangeText={t => setFormData({ ...formData, email: t })}
                             autoCapitalize="none"
@@ -201,7 +192,7 @@ export default function AdminDashboard() {
                         <TextInput
                             style={styles.input}
                             placeholder="Senha"
-                            placeholderTextColor={colors.zinc500}
+                            placeholderTextColor={colors.zinc400}
                             value={formData.password}
                             onChangeText={t => setFormData({ ...formData, password: t })}
                             secureTextEntry
@@ -211,13 +202,13 @@ export default function AdminDashboard() {
                                 style={[styles.roleButton, formData.role === 'student' && styles.roleButtonActive]}
                                 onPress={() => setFormData({ ...formData, role: 'student' })}
                             >
-                                <Text style={styles.roleText}>Aluno</Text>
+                                <Text style={[styles.roleText, formData.role === 'student' && styles.roleTextActive]}>Aluno</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={[styles.roleButton, formData.role === 'teacher' && styles.roleButtonActive]}
                                 onPress={() => setFormData({ ...formData, role: 'teacher' })}
                             >
-                                <Text style={styles.roleText}>Professor</Text>
+                                <Text style={[styles.roleText, formData.role === 'teacher' && styles.roleTextActive]}>Professor</Text>
                             </TouchableOpacity>
                         </View>
                         <TouchableOpacity
@@ -240,14 +231,14 @@ export default function AdminDashboard() {
                         <TextInput
                             style={styles.input}
                             placeholder="Nome (ex: Cálculo I)"
-                            placeholderTextColor={colors.zinc500}
+                            placeholderTextColor={colors.zinc400}
                             value={formData.subjectName}
                             onChangeText={t => setFormData({ ...formData, subjectName: t })}
                         />
                         <TextInput
                             style={styles.input}
                             placeholder="Código (ex: MAT101)"
-                            placeholderTextColor={colors.zinc500}
+                            placeholderTextColor={colors.zinc400}
                             value={formData.subjectCode}
                             onChangeText={t => setFormData({ ...formData, subjectCode: t })}
                             autoCapitalize="characters"
@@ -271,7 +262,7 @@ export default function AdminDashboard() {
                         <TextInput
                             style={styles.input}
                             placeholder="ID do Aluno (Toque na lista abaixo)"
-                            placeholderTextColor={colors.zinc500}
+                            placeholderTextColor={colors.zinc400}
                             value={formData.studentId}
                             onChangeText={t => setFormData({ ...formData, studentId: t })}
                             keyboardType="numeric"
@@ -279,7 +270,7 @@ export default function AdminDashboard() {
                         <TextInput
                             style={styles.input}
                             placeholder="ID da Disciplina (Toque na lista abaixo)"
-                            placeholderTextColor={colors.zinc500}
+                            placeholderTextColor={colors.zinc400}
                             value={formData.subjectId}
                             onChangeText={t => setFormData({ ...formData, subjectId: t })}
                             keyboardType="numeric"
@@ -302,7 +293,7 @@ export default function AdminDashboard() {
                         <TextInput
                             style={styles.input}
                             placeholder="ID do Professor (Toque na lista abaixo)"
-                            placeholderTextColor={colors.zinc500}
+                            placeholderTextColor={colors.zinc400}
                             value={formData.teacherId}
                             onChangeText={t => setFormData({ ...formData, teacherId: t })}
                             keyboardType="numeric"
@@ -310,7 +301,7 @@ export default function AdminDashboard() {
                         <TextInput
                             style={styles.input}
                             placeholder="ID da Disciplina (Toque na lista abaixo)"
-                            placeholderTextColor={colors.zinc500}
+                            placeholderTextColor={colors.zinc400}
                             value={formData.subjectId}
                             onChangeText={t => setFormData({ ...formData, subjectId: t })}
                             keyboardType="numeric"
@@ -326,84 +317,139 @@ export default function AdminDashboard() {
                         </TouchableOpacity>
                     </View>
                 );
-            case 'settings':
-                return (
+            default:
+                return null;
+        }
+    };
+
+    const renderSettingsSection = () => {
+        if (userRole !== 'super_admin') return null;
+
+        return (
+            <View style={styles.settingsSection}>
+
+                <View style={styles.settingsHeader}>
+                    <MaterialIcons name="settings" size={24} color={colors.danger} />
+                    <Text style={styles.settingsTitle}>Configurações do Sistema</Text>
+                </View>
+
+                <SystemHealth />
+                <AIConfiguration />
+
+                <View style={styles.formContainer}>
                     <View style={styles.form}>
-                        <Text style={styles.formTitle}>Configurações do Sistema</Text>
-                        {/* Key and Description are now fixed for simplicity */}
                         <TextInput
                             style={styles.input}
                             placeholder="Nova Palavra de Ativação (ex: Assistente)"
-                            placeholderTextColor={colors.zinc500}
+                            placeholderTextColor={colors.zinc400}
                             value={formData.settingValue}
                             onChangeText={t => setFormData({ ...formData, settingValue: t })}
                         />
 
                         <TouchableOpacity
-                            style={styles.submitButton}
+                            style={[styles.submitButton, { backgroundColor: colors.danger }]}
                             onPress={() => handleAction('settings', {
-                                key: 'trigger_word', // Fixed key
+                                key: 'trigger_word',
                                 value: formData.settingValue,
-                                description: 'Palavra de ativação para comandos de voz', // Fixed description
+                                description: 'Palavra de ativação para comandos de voz',
                                 is_public: true
                             })}
                         >
                             <Text style={styles.submitButtonText}>Salvar Configuração</Text>
                         </TouchableOpacity>
                     </View>
-                );
-            default:
-                return null;
-        }
+                </View>
+
+                {/* Settings List */}
+                <View style={[styles.listColumn, { marginTop: spacing['2xl'] }]}>
+                    <Text style={styles.columnHeader}>Variáveis Ativas</Text>
+                    {settingsList.map(s => (
+                        <TouchableOpacity
+                            key={s.key}
+                            style={styles.listItem}
+                            onPress={() => setFormData({
+                                ...formData,
+                                settingKey: s.key,
+                                settingValue: s.value,
+                                settingDesc: s.description || ''
+                            })}
+                        >
+                            <Text style={styles.listItemTitle}>{s.key}</Text>
+                            <Text style={styles.listItemSubtitle}>{s.value}</Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+            </View>
+        );
+    };
+
+    // Get current date string 
+    const getCurrentDate = () => {
+        const date = new Date();
+        const options: Intl.DateTimeFormatOptions = {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'short'
+        };
+        const formatted = date.toLocaleDateString('pt-BR', options);
+        return formatted.charAt(0).toUpperCase() + formatted.slice(1);
     };
 
     return (
-        <View style={[styles.container, { paddingTop: insets.top }]}>
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>Painel Admin</Text>
-                <TouchableOpacity onPress={() => router.replace('/(auth)/login')}>
-                    <MaterialIcons name="logout" size={24} color={colors.zinc400} />
-                </TouchableOpacity>
-            </View>
+        <View style={styles.container}>
+            {/* Gradient Header */}
+            <LinearGradient
+                colors={['#4f46e5', '#7c3aed']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.headerGradient, { paddingTop: insets.top + spacing.md }]}
+            >
+                <View style={styles.headerTop}>
+                    <View>
+                        <Text style={styles.greeting}>Painel Admin</Text>
+                        <Text style={styles.date}>{userName} • {getCurrentDate()}</Text>
+                    </View>
+                    <TouchableOpacity
+                        style={styles.headerButton}
+                        onPress={() => router.replace('/(auth)/login')}
+                    >
+                        <MaterialIcons name="logout" size={20} color={colors.white} />
+                    </TouchableOpacity>
+                </View>
+            </LinearGradient>
 
-            <ScrollView contentContainerStyle={styles.content}>
+            <ScrollView
+                contentContainerStyle={styles.content}
+                showsVerticalScrollIndicator={false}
+            >
                 <View style={styles.grid}>
                     <TouchableOpacity style={styles.card} onPress={() => setActiveAction('user')}>
-                        <View style={[styles.iconBg, { backgroundColor: '#3B82F6' }]}>
-                            <MaterialIcons name="person-add" size={32} color="white" />
+                        <View style={[styles.iconBg, { backgroundColor: colors.info }]}>
+                            <MaterialIcons name="person-add" size={28} color={colors.white} />
                         </View>
                         <Text style={styles.cardText}>Criar Usuário</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.card} onPress={() => setActiveAction('subject')}>
-                        <View style={[styles.iconBg, { backgroundColor: '#10b981' }]}>
-                            <MaterialIcons name="library-add" size={32} color="white" />
+                        <View style={[styles.iconBg, { backgroundColor: colors.secondary }]}>
+                            <MaterialIcons name="library-add" size={28} color={colors.white} />
                         </View>
                         <Text style={styles.cardText}>Criar Disciplina</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.card} onPress={() => setActiveAction('enroll')}>
-                        <View style={[styles.iconBg, { backgroundColor: '#f59e0b' }]}>
-                            <MaterialIcons name="school" size={32} color="white" />
+                        <View style={[styles.iconBg, { backgroundColor: colors.warning }]}>
+                            <MaterialIcons name="school" size={28} color={colors.white} />
                         </View>
                         <Text style={styles.cardText}>Matricular</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity style={styles.card} onPress={() => setActiveAction('teach')}>
-                        <View style={[styles.iconBg, { backgroundColor: '#8b5cf6' }]}>
-                            <MaterialIcons name="work" size={32} color="white" />
+                        <View style={[styles.iconBg, { backgroundColor: colors.accent }]}>
+                            <MaterialIcons name="work" size={28} color={colors.white} />
                         </View>
                         <Text style={styles.cardText}>Atribuir Prof</Text>
                     </TouchableOpacity>
-
-                    {userRole === 'super_admin' && (
-                        <TouchableOpacity style={styles.card} onPress={() => setActiveAction('settings')}>
-                            <View style={[styles.iconBg, { backgroundColor: '#ef4444' }]}>
-                                <MaterialIcons name="settings" size={32} color="white" />
-                            </View>
-                            <Text style={styles.cardText}>Configurações</Text>
-                        </TouchableOpacity>
-                    )}
                 </View>
 
                 {activeAction && (
@@ -420,6 +466,8 @@ export default function AdminDashboard() {
                         {renderDataList()}
                     </View>
                 )}
+
+                {renderSettingsSection()}
             </ScrollView>
 
             {loading && (
@@ -434,60 +482,89 @@ export default function AdminDashboard() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: colors.backgroundDark,
+        backgroundColor: colors.backgroundLight, // Light mode background
     },
-    header: {
+    headerGradient: {
+        paddingHorizontal: spacing.base,
+        paddingBottom: spacing.xl,
+        borderBottomLeftRadius: 24,
+        borderBottomRightRadius: 24,
+    },
+    headerTop: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: spacing.base,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.zinc800,
     },
-    headerTitle: {
+    greeting: {
         fontSize: typography.fontSize.xl,
         fontWeight: typography.fontWeight.bold,
-        color: colors.white,
         fontFamily: typography.fontFamily.display,
+        color: colors.white,
+    },
+    date: {
+        fontSize: typography.fontSize.sm,
+        fontFamily: typography.fontFamily.body,
+        color: 'rgba(255,255,255,0.8)',
+        marginTop: 4,
+    },
+    headerButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     content: {
         padding: spacing.base,
+        paddingBottom: 40,
     },
     grid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: spacing.base,
         justifyContent: 'space-between',
+        marginTop: spacing.md,
     },
     card: {
         width: '47%',
-        backgroundColor: colors.zinc900,
+        backgroundColor: colors.white,
         padding: spacing.base,
         borderRadius: borderRadius.lg,
         alignItems: 'center',
-        borderWidth: 1,
-        borderColor: colors.zinc800,
+        // Shadow for depth
+        shadowColor: colors.textPrimary,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        elevation: 3,
+        marginBottom: spacing.xs,
     },
     iconBg: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
+        width: 50,
+        height: 50,
+        borderRadius: 25,
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: spacing.sm,
     },
     cardText: {
-        color: colors.white,
+        color: colors.textPrimary,
         fontWeight: typography.fontWeight.semibold,
         fontFamily: typography.fontFamily.display,
+        fontSize: typography.fontSize.sm,
     },
     formContainer: {
         marginTop: spacing.xl,
-        backgroundColor: colors.zinc900,
+        backgroundColor: colors.white,
         padding: spacing.base,
         borderRadius: borderRadius.lg,
-        borderWidth: 1,
-        borderColor: colors.zinc800,
+        // Shadow for depth
+        shadowColor: colors.textPrimary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 4,
     },
     form: {
         gap: spacing.md,
@@ -495,16 +572,16 @@ const styles = StyleSheet.create({
     formTitle: {
         fontSize: typography.fontSize.lg,
         fontWeight: typography.fontWeight.bold,
-        color: colors.white,
+        color: colors.textPrimary,
         marginBottom: spacing.sm,
     },
     input: {
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.slate100,
         padding: spacing.md,
         borderRadius: borderRadius.default,
-        color: colors.white,
+        color: colors.textPrimary,
         borderWidth: 1,
-        borderColor: colors.zinc700,
+        borderColor: colors.slate200,
     },
     roleContainer: {
         flexDirection: 'row',
@@ -513,19 +590,22 @@ const styles = StyleSheet.create({
     roleButton: {
         flex: 1,
         padding: spacing.md,
-        backgroundColor: colors.zinc800,
+        backgroundColor: colors.slate100,
         borderRadius: borderRadius.default,
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: colors.zinc700,
+        borderColor: colors.slate200,
     },
     roleButtonActive: {
         backgroundColor: colors.primary,
         borderColor: colors.primary,
     },
     roleText: {
-        color: colors.white,
+        color: colors.textSecondary,
         fontWeight: typography.fontWeight.semibold,
+    },
+    roleTextActive: {
+        color: colors.white,
     },
     submitButton: {
         backgroundColor: colors.primary,
@@ -533,6 +613,11 @@ const styles = StyleSheet.create({
         borderRadius: borderRadius.default,
         alignItems: 'center',
         marginTop: spacing.sm,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
     },
     submitButtonText: {
         color: colors.white,
@@ -544,11 +629,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     closeButtonText: {
-        color: colors.zinc400,
+        color: colors.zinc500,
     },
     loadingOverlay: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(0,0,0,0.7)',
+        backgroundColor: 'rgba(255,255,255,0.8)',
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -556,7 +641,7 @@ const styles = StyleSheet.create({
         marginTop: spacing.lg,
     },
     listTitle: {
-        color: colors.zinc400,
+        color: colors.zinc500,
         marginBottom: spacing.sm,
         fontSize: typography.fontSize.sm,
     },
@@ -568,20 +653,20 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     columnHeader: {
-        color: colors.white,
+        color: colors.textPrimary,
         fontWeight: 'bold',
-        marginBottom: spacing.xs,
+        marginBottom: spacing.sm,
     },
     listItem: {
-        backgroundColor: colors.zinc900,
+        backgroundColor: colors.white,
         padding: spacing.sm,
         borderRadius: borderRadius.sm,
         marginBottom: spacing.xs,
         borderWidth: 1,
-        borderColor: colors.zinc800,
+        borderColor: colors.slate200,
     },
     listItemTitle: {
-        color: colors.white,
+        color: colors.textPrimary,
         fontSize: typography.fontSize.xs,
         fontWeight: 'bold',
     },
@@ -589,4 +674,22 @@ const styles = StyleSheet.create({
         color: colors.zinc500,
         fontSize: 10,
     },
+    settingsSection: {
+        marginTop: spacing['2xl'],
+        borderTopWidth: 1,
+        borderTopColor: colors.slate200,
+        paddingTop: spacing.lg,
+    },
+    settingsHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+        marginBottom: spacing.sm,
+    },
+    settingsTitle: {
+        fontSize: typography.fontSize.xl,
+        fontWeight: typography.fontWeight.bold,
+        color: colors.textPrimary,
+    },
 });
+
