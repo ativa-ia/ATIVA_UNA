@@ -1168,3 +1168,47 @@ export const getStudentMaterials = async (): Promise<Material[]> => {
         url: item.content_url || item.url
     }));
 };
+
+// ========== SETTINGS API ==========
+
+export interface SystemSetting {
+    key: string;
+    value: string;
+    description?: string;
+    is_public: boolean;
+}
+
+// Obter configurações públicas (sem auth)
+export const getPublicSettings = async (): Promise<{ success: boolean; settings: Record<string, string> }> => {
+    try {
+        const response = await fetch(`${API_URL}/settings/public`);
+        return response.json();
+    } catch (error) {
+        return { success: false, settings: {} };
+    }
+};
+
+// Obter todas as configurações (Super Admin)
+export const getAllSettings = async (): Promise<{ success: boolean; settings: SystemSetting[] }> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/settings/`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+    return response.json();
+};
+
+// Atualizar configuração (Super Admin)
+export const updateSetting = async (data: Partial<SystemSetting> & { key: string; value: string }): Promise<{ success: boolean; message?: string; setting?: SystemSetting }> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/settings/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+    });
+    return response.json();
+};

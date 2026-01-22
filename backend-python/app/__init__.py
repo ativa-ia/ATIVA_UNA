@@ -53,6 +53,7 @@ def create_app(config_name=None):
         from app.routes.enrollment_routes import enrollment_bp
         from app.routes.transcription_routes import transcription_bp
         from app.routes.presentation_routes import presentation_bp
+        from app.routes.settings_routes import settings_bp
         
         app.register_blueprint(auth_bp, url_prefix='/api/auth')
         app.register_blueprint(subject_bp, url_prefix='/api/subjects')
@@ -63,6 +64,7 @@ def create_app(config_name=None):
         app.register_blueprint(enrollment_bp, url_prefix='/api/enrollments')
         app.register_blueprint(transcription_bp, url_prefix='/api/transcription')
         app.register_blueprint(presentation_bp, url_prefix='/api/presentation')
+        app.register_blueprint(settings_bp, url_prefix='/api/settings')
         logger.info("Blueprints registrados com sucesso.")
     except Exception as e:
         logger.error(f"Erro ao registrar blueprints: {e}")
@@ -82,13 +84,30 @@ def create_app(config_name=None):
     
     # Rota de Health Check
     @app.route('/health')
+    @app.route('/api/health')
     def health_check():
         logger.info("Health check endpoint called")
-        return {
-            'status': 'ok',
-            'message': 'Server is healthy',
+        
+        # Verificar Banco de Dados
+        db_status = "offline"
+        try:
+            from sqlalchemy import text
+            db.session.execute(text('SELECT 1'))
+            db_status = "online"
+        except Exception as e:
+            logger.error(f"Health Check DB Error: {e}")
+            db_status = "offline"
+
+        response = {
+            'status': 'ok' if db_status == 'online' else 'degraded',
+            'services': {
+                'api': 'online',
+                'database': db_status
+            },
             'version': '1.0.0'
-        }, 200
+        }
+        
+        return response, 200
     
     # Rota de Debug (temporária para diagnóstico)
     @app.route('/debug')
