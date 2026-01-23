@@ -34,12 +34,19 @@ def create_app(config_name=None):
         migrate.init_app(app, db)
         socketio.init_app(app)
         # CORS: supports_credentials=True não deve ser usado com origins='*'
-        # Como estamos usando JWT (Bearer Token), geralmente não precisamos de credentials (cookies)
-        # Se precisarmos, devemos especificar as origens.
-        CORS(app, resources={r"/*": {"origins": "*"}}, expose_headers=["Content-Disposition"])
+        CORS(app, resources={r"/*": {"origins": "*"}})
         logger.info("Extensoes inicializadas com sucesso.")
     except Exception as e:
         logger.error(f"Erro ao inicializar extensoes: {e}")
+
+    # FORCE CORS HEADERS (Manual Override para Vercel)
+    @app.after_request
+    def after_request(response):
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        return response
+
     
     # Registrar blueprints
     try:
