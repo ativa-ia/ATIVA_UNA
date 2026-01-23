@@ -36,9 +36,7 @@ def create_app(config_name=None):
         # CORS: supports_credentials=True não deve ser usado com origins='*'
         # Como estamos usando JWT (Bearer Token), geralmente não precisamos de credentials (cookies)
         # Se precisarmos, devemos especificar as origens.
-        # CORS: Simplified to allow all origins.
-        # Fixed Regex: r"/.*" to unambiguously match all paths (e.g. /api/auth/...). 
-        CORS(app, resources={r"/.*": {"origins": "*"}})
+        CORS(app, resources={r"/*": {"origins": "*"}}, expose_headers=["Content-Disposition"])
         logger.info("Extensoes inicializadas com sucesso.")
     except Exception as e:
         logger.error(f"Erro ao inicializar extensoes: {e}")
