@@ -27,7 +27,7 @@ export default function AdminLayout() {
             });
             const data = await response.json();
 
-            if (data.success && data.user && data.user.role === 'admin') {
+            if (data.success && data.user && (data.user.role === 'admin' || data.user.role === 'super_admin')) {
                 setIsAuthorized(true);
             } else {
                 // Not admin, redirect based on role

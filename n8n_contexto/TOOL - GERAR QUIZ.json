@@ -1,0 +1,120 @@
+{
+  "name": "TOOL - GERAR QUIZ",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "text"
+            },
+            {
+              "name": "identifier"
+            }
+          ]
+        }
+      },
+      "id": "e0d4d3b3-be0f-4fe8-8785-1652a98de599",
+      "typeVersion": 1.1,
+      "name": "exec prod",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Questão do Usuário:\n{{ $json.text }}",
+        "options": {
+          "systemMessage": "=Você é o 'QuizMaster', um agente especialista em educação. Sua única função é receber um tópico e criar um quiz de múltipla escolha sobre ele\n\nRegras de Saída:\n- No inicio de todo quiz gerado adicione, OBRIGATORIAMENTE, a tag \"[TYPE:QUIZ]\" para identificar que é um quiz.\n- A quantidade de questões a ser gerada deve ser passada junto ao comando, caso não, a quantidade padrão será 10 questões.\n- Logo após insira o JSON cru.\n- **PROIBIDO:** Não use blocos de código markdown (```json).\n- **PROIBIDO:** Não inclua explicações ou texto conversacional.\n\nModelo da estrutura que deve ser seguido:\n[TYPE:QUIZ]\n{\n  \"questions\": [\n    {\n      \"question\": \"Texto da pergunta aqui?\",\n      \"options\": [\"Opção A\", \"Opção B\", \"Opção C\", \"Opção D\", \"Opção E\"],\n      \"correct\": 0\n    },\n    {\n      \"question\": \"Outra pergunta?\",\n      \"options\": [\"Opção A\", \"Opção B\", \"Opção C\", \"Opção D\", \"Opção E\"],\n      \"correct\": 2\n    }\n  ]\n}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        400,
+        32
+      ],
+      "id": "4a53372b-0c8d-4ad3-9976-a9bc4ea69d66",
+      "name": "AI Agent1"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        352,
+        352
+      ],
+      "id": "f3987add-7b27-4878-bc10-befd2db1389b",
+      "name": "OpenAI Chat Model1",
+      "credentials": {
+        "openAiApi": {
+          "id": "2s6eKDYc5QrLBhxy",
+          "name": "OpenAi account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "exec prod": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "041898da-b8dc-4c42-8687-8e6b2037132e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3a8e0f55d1edf7e085c6388718996112d320b6942de89a26aa2ceeb69d9abffc"
+  },
+  "id": "3dFKcwsJTxBgrBshCPrq0",
+  "tags": [
+    {
+      "updatedAt": "2026-01-14T22:39:12.025Z",
+      "createdAt": "2026-01-14T22:39:12.025Z",
+      "id": "20oy9wiNWimI7e8G",
+      "name": "CHAT IA"
+    },
+    {
+      "updatedAt": "2026-01-14T22:40:07.447Z",
+      "createdAt": "2026-01-14T22:40:07.447Z",
+      "id": "2rh1PYqoejrIBT5y",
+      "name": "TOOL"
+    }
+  ]
+}

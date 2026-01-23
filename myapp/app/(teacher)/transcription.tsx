@@ -36,13 +36,15 @@ import {
     broadcastActivity,
     updateActivity,
     saveGeneratedActivity,
+    getPublicSettings
 } from '@/services/api';
 import { processText } from '@/services/n8n';
 import {
     startPresentation,
     sendToPresentation,
     endPresentation,
-    getActivePresentation
+    getActivePresentation,
+    controlPresentationVideo
 } from '@/services/presentation';
 import PresentationControls from '@/components/presentation/PresentationControls';
 // import { useAuth } from '@/context/AuthContext'; // Ajuste o caminho se necessário
@@ -147,8 +149,14 @@ export default function TranscriptionScreen() {
     const [presentationCode, setPresentationCode] = useState<string | null>(null);
     const [presentationActive, setPresentationActive] = useState(false);
 
+    // Ref para garantir acesso ao código atualizado dentro de callbacks (Stale Closure fix)
+    const presentationCodeRef = useRef<string | null>(null);
 
+    useEffect(() => {
+        presentationCodeRef.current = presentationCode;
+    }, [presentationCode]);
 
+    const [triggerWord, setTriggerWord] = useState('Fred'); // Default
     const [fredCommand, setFredCommand] = useState<string | null>(null); // State for Fred Popup
 
     // History / Checkpoints
@@ -207,6 +215,17 @@ export default function TranscriptionScreen() {
                 });
             }
         };
+    }, []);
+
+    // Load System Settings (Trigger Word)
+    useEffect(() => {
+        const loadSettings = async () => {
+            const { success, settings } = await getPublicSettings();
+            if (success && settings['trigger_word']) {
+                setTriggerWord(settings['trigger_word'].trim());
+            }
+        };
+        loadSettings();
     }, []);
 
     // Carregar apresentação ativa ao montar componente
@@ -426,13 +445,31 @@ export default function TranscriptionScreen() {
 
                     recognition.onresult = (event: any) => {
                         let currentInterim = '';
-                        // Regex para identificar início de comando Fred (aceita pontuação opcional)
-                        const fredStartRegex = /^(?:fred|frede)[!?,.]?\b/i;
+                        // Regex construído dinamicamente pelo triggerWord
+                        // Escapa caracteres especiais se houver
+                        const safeTrigger = triggerWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-                        // Regex para extrair comando completo: Fred + (pontuação opcional) + espaço + comando
-                        const fredFullRegex = /^(?:fred|frede)[!?,.]?\s+(.+)/i;
+                        // Dinâmico: Aceita a palavra exata + pontuação opcional
+                        // Adicionamos 'e' opcional no final para casos como Fred/Frede se terminar em consoante muda comum (opcional, pode ser removido se causar confusão com outras palavras)
+                        // Para simplicidade: apenas a palavra + variação com 'e' se a palavra for pequena (<5 chars) ou for "Fred" hardcoded logic
+                        // Simplificação: apenas a palavra exata, case insensitive.
+                        // Removemos a verificação complexa de pontuação rígida no início para ser mais permissivo
+                        const pattern = `${safeTrigger}(?:e)?`;
 
-                        for (let i = 0; i < event.results.length; i++) {
+                        // Regex Start: Começa com a palavra (aceita espaços antes se não for o início absoluto)
+                        // (?:\b|^) garante que não pegue meio de palavra (ex: 'aluna' não ativa 'luna')
+                        const fredStartRegex = new RegExp(`(?:\\b|^)${pattern}[\\s!?,.]*`, 'i');
+
+                        // Regex Full: Palavra + qualquer coisa depois
+                        const fredFullRegex = new RegExp(`(?:\\b|^)${pattern}[\\s!?,.]+(.+)`, 'i');
+
+
+                        // OTIMIZAÇÃO CRÍTICA: event.resultIndex indica onde as mudanças começaram.
+                        // Em vez de iterar de 0 até results.length (O(N^2) acumulado),
+                        // iteramos apenas sobre os novos resultados (O(N) linear).
+                        const startIndex = event.resultIndex !== undefined ? event.resultIndex : 0;
+
+                        for (let i = startIndex; i < event.results.length; i++) {
                             const result = event.results[i];
                             const transcript = result[0].transcript.trim();
 
@@ -553,7 +590,7 @@ export default function TranscriptionScreen() {
             isRecordingRef.current = false;
             cleanup();
         };
-    }, [triggerAutoSave]);
+    }, [triggerAutoSave, triggerWord]); // Dependencia de triggerWord para recriar se mudar
 
     const toggleRecording = () => {
         if (Platform.OS !== 'web') {
@@ -702,19 +739,31 @@ export default function TranscriptionScreen() {
 
 
 
+
+
+
+
+
+
     // Enviar para IA (Genérico)
     const handleSendToAI = async (command?: string) => {
-        // Helper function to try extracting JSON
+        // Helper function to try extracting JSON (Robust enough for AI output)
         const tryParseJSON = (str: string) => {
             if (typeof str !== 'string') return null;
+
+            // 1. Limpar comentários de linha (// ...) que a IA adora colocar
+            // Cuidado para não remover // dentro de URLs (http://...)
+            // Simplificação: remove // apenas se tiver espaço antes ou inicio de linha, até o fim da linha
+            const cleanStr = str.replace(/(^|[^:])\/\/.*$/gm, '$1');
+
             try {
                 // 1. Tentar parse direto
-                return JSON.parse(str);
+                return JSON.parse(cleanStr);
             } catch (e) { }
 
             try {
                 // 2. Tentar encontrar blocos de código markdown (```json ... ``` ou ``` ... ```)
-                const markdownMatch = str.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+                const markdownMatch = cleanStr.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
                 if (markdownMatch && markdownMatch[1]) {
                     return JSON.parse(markdownMatch[1]);
                 }
@@ -722,10 +771,10 @@ export default function TranscriptionScreen() {
 
             try {
                 // 3. Tentar encontrar o primeiro '{' e o último '}' (heuristic brute force)
-                const firstBrace = str.indexOf('{');
-                const lastBrace = str.lastIndexOf('}');
+                const firstBrace = cleanStr.indexOf('{');
+                const lastBrace = cleanStr.lastIndexOf('}');
                 if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-                    const potentialJson = str.substring(firstBrace, lastBrace + 1);
+                    const potentialJson = cleanStr.substring(firstBrace, lastBrace + 1);
                     return JSON.parse(potentialJson);
                 }
             } catch (e) { }
@@ -818,14 +867,70 @@ export default function TranscriptionScreen() {
             if (Array.isArray(n8nResponse) && n8nResponse[0]?.output) {
                 content = n8nResponse[0].output;
             }
+            // Suporte para n8n retornando { data: { output: "..." } }
+            if (n8nResponse.data?.output) {
+                content = n8nResponse.data.output;
+            }
 
             // DETECÇÃO EXPLÍCITA DE TIPO (Solicitado pelo usuário)
             let parsedContent = content;
-            let explicitType: 'quiz' | 'summary' | null = null;
+            let explicitType: 'quiz' | 'summary' | 'command' | 'document' | null = null;
 
             if (typeof content === 'string') {
+                const cmdMatch = content.match(/^\[TYPE:CMD\]/i);
+                // Detectar [TYPE:DOCUMENT]
+                const documentMatch = content.match(/^\[TYPE:DOCUMENT\]/i);
+                if (documentMatch) {
+                    console.log('[AI] Documento detectado! Processando...');
+
+                    // Extrair DOCUMENT_ID
+                    const docIdMatch = content.match(/DOCUMENT_ID:\s*([a-f0-9-]+)/i);
+                    if (docIdMatch && presentationCode) {
+                        const documentId = docIdMatch[1];
+                        console.log(`[AI] Enviando documento ${documentId} para apresentação ${presentationCode}`);
+
+                        try {
+                            // Importar função do api.ts
+                            const { sendDocumentToPresentation } = require('@/services/api');
+                            const result = await sendDocumentToPresentation(documentId, presentationCode);
+
+                            if (result.success) {
+                                console.log('[AI] Documento enviado com sucesso!');
+                                Alert.alert('✅ Sucesso', 'Documento enviado para apresentação!');
+                            } else {
+                                console.error('[AI] Erro ao enviar documento:', result.error);
+                                Alert.alert('Erro', result.error || 'Falha ao enviar documento');
+                            }
+                        } catch (error) {
+                            console.error('[AI] Exceção ao enviar documento:', error);
+                            Alert.alert('Erro', 'Falha ao processar documento');
+                        }
+                    } else if (!presentationCode) {
+                        Alert.alert('Aviso', 'Inicie uma apresentação primeiro para exibir documentos');
+                    }
+
+                    // Limpar popup do Fred
+                    setFredCommand(null);
+                    setIsGenerating(false);
+                    return; // Não processar mais nada
+                }
+
                 const typeMatch = content.match(/^\[TYPE:(QUIZ|SUMMARY)\]/i);
-                if (typeMatch) {
+
+                if (cmdMatch) {
+                    // *** NOVO: Fluxo de COMANDO ***
+                    explicitType = 'command';
+                    content = content.replace(/^\[TYPE:CMD\]/i, '').trim();
+                    console.log(`[AI] Tipo explícito detectado: COMMAND`);
+
+                    const commandJson = tryParseJSON(content);
+                    if (commandJson && commandJson.action) {
+                        // Executar comando imediatamente
+                        processAICommand(commandJson);
+                        setIsGenerating(false);
+                        return; // Interrompe o fluxo (não salva como atividade normal)
+                    }
+                } else if (typeMatch) {
                     explicitType = typeMatch[1].toUpperCase() === 'QUIZ' ? 'quiz' : 'summary';
                     // Remove a tag para não atrapalhar o parse
                     content = content.replace(/^\[TYPE:(QUIZ|SUMMARY)\]/i, '').trim();
@@ -971,7 +1076,8 @@ export default function TranscriptionScreen() {
             }
 
             // Determinar tipo de atividade baseado EXCLUSIVAMENTE em tag explícita (pedido do usuário)
-            let activityType: 'quiz' | 'summary' = explicitType || 'summary';
+            // Garantir que não seja 'command' (embora o return acima já evite, o TS precisa de garantia)
+            let activityType: 'quiz' | 'summary' = explicitType === 'quiz' ? 'quiz' : 'summary';
             let title = 'Resposta da IA';
 
             if (explicitType === 'quiz') {
@@ -1523,6 +1629,86 @@ export default function TranscriptionScreen() {
         }
     };
 
+    // Processador de Comandos da IA
+    const processAICommand = async (commandIn: any) => {
+        console.log('[AI COMMAND] Processando:', commandIn);
+        const { action, payload } = commandIn;
+
+        if (action === 'send_content') {
+            const url = payload.url;
+            // Validação básica de URL para evitar placeholders da IA
+            if (!url || url.includes('A_URL_') || (!url.startsWith('http') && !url.startsWith('www'))) {
+                console.warn('[AI COMMAND] URL inválida ou placeholder detectado:', url);
+                if (Platform.OS === 'web') {
+                    // @ts-ignore
+                    window.alert(`Fred tentou enviar um vídeo, mas não encontrou o link exato.\n(Debug: ${url})`);
+                } else {
+                    Alert.alert('Vídeo não encontrado', 'A IA não conseguiu encontrar um link válido para este conteúdo.');
+                }
+                return;
+            }
+
+            // Usar REF para evitar stale closure
+            let targetCode = presentationCodeRef.current;
+
+            if (!presentationActive || !targetCode) {
+                // Tenta auto-iniciar se não estiver ativo
+                console.log('[AI COMMAND] Iniciando apresentação automaticamente...');
+                try {
+                    const startRes = await startPresentation();
+                    if (startRes.success && startRes.code) {
+                        targetCode = startRes.code;
+                        setPresentationCode(targetCode);
+                        setPresentationActive(true);
+                        // Pequeno delay para garantir que o socket conectou?
+                        await new Promise(r => setTimeout(r, 1000));
+                    } else {
+                        Alert.alert('Erro', 'Não foi possível iniciar a apresentação para enviar o conteúdo.');
+                        return;
+                    }
+                } catch (e) {
+                    console.error('[AI COMMAND] Erro ao auto-iniciar:', e);
+                    return;
+                }
+            }
+
+            // Enviar conteúdo (Vídeo/Imagem)
+            if (targetCode && (payload.type === 'video' || payload.type === 'image')) {
+                console.log('[AI COMMAND] Enviando conteúdo para:', targetCode);
+                // Usando a mesma função de envio de conteúdo multimídia
+                const result = await sendToPresentation(targetCode, payload.type, {
+                    url: payload.url,
+                    caption: payload.caption || 'Enviado por Fred'
+                });
+
+                if (result.success) {
+                    if (Platform.OS === 'web') {
+                        // @ts-ignore
+                        try { window.navigator.vibrate([100, 50, 100]); } catch (e) { }
+                    }
+                    setFredCommand('Conteúdo enviado!');
+                } else {
+                    Alert.alert('Erro', 'Falha ao enviar conteúdo para a TV: ' + (result.error || 'Erro desconhecido'));
+                }
+            }
+
+        } else if (action === 'control_video') {
+            const currentCode = presentationCodeRef.current;
+            if (!currentCode) {
+                console.log('[AI COMMAND] Comando ignorado: Nenhuma apresentação ativa (Ref is null).');
+                return;
+            }
+            // payload: { command: 'play'|'pause'|'seek', value?: number }
+            try {
+                const result = await controlPresentationVideo(currentCode, payload.command, payload.value);
+                console.log('[AI COMMAND] Resultado Controle:', result);
+                setFredCommand(`Comando: ${payload.command}`);
+            } catch (e) {
+                console.error('[AI COMMAND] Erro ao enviar controle:', e);
+            }
+        }
+    };
+
     const wordCount = transcribedText.split(/\s+/).filter(w => w).length;
 
     if (isLoading) {
@@ -1700,10 +1886,13 @@ export default function TranscriptionScreen() {
                         <Text style={styles.buttonText}>Iniciar Transmissão</Text>
                     </TouchableOpacity>
                 ) : (
-                    <PresentationControls
-                        code={presentationCode}
-                        onEnd={handleEndPresentation}
-                    />
+                    <>
+
+                        <PresentationControls
+                            code={presentationCode}
+                            onEnd={handleEndPresentation}
+                        />
+                    </>
                 )}
             </View>
 

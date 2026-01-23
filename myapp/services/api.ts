@@ -1168,3 +1168,120 @@ export const getStudentMaterials = async (): Promise<Material[]> => {
         url: item.content_url || item.url
     }));
 };
+
+// ========== SETTINGS API ==========
+
+export interface SystemSetting {
+    key: string;
+    value: string;
+    description?: string;
+    is_public: boolean;
+}
+
+// Obter configurações públicas (sem auth)
+export const getPublicSettings = async (): Promise<{ success: boolean; settings: Record<string, string> }> => {
+    try {
+        const response = await fetch(`${API_URL}/settings/public`);
+        return response.json();
+    } catch (error) {
+        return { success: false, settings: {} };
+    }
+};
+
+// Obter todas as configurações (Super Admin)
+export const getAllSettings = async (): Promise<{ success: boolean; settings: SystemSetting[] }> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/settings/`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+    return response.json();
+};
+
+// Atualizar configuração (Super Admin)
+export const updateSetting = async (data: Partial<SystemSetting> & { key: string; value: string }): Promise<{ success: boolean; message?: string; setting?: SystemSetting }> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/settings/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+    });
+    return response.json();
+};
+
+// ========== DOCUMENTS API ==========
+
+export interface Document {
+    filename: string;
+    classroom_id: string;
+    total_sections: number;
+    total_chunks: number;
+    sections: Array<{
+        section_id: number;
+        title: string;
+        content: string;
+        metadata?: any;
+    }>;
+}
+
+// Buscar documento completo do Supabase
+export const getDocument = async (classroomId: string, filename: string = 'GUIA TURBO'): Promise<{
+    success: boolean;
+    document?: Document;
+    error?: string;
+}> => {
+    try {
+        const response = await fetch(`${API_URL}/documents/retrieve?classroom_id=${classroomId}&filename=${encodeURIComponent(filename)}`);
+        return response.json();
+    } catch (error) {
+        console.error('Erro ao buscar documento:', error);
+        return { success: false, error: 'Erro ao buscar documento' };
+    }
+};
+
+// Listar todos os documentos disponíveis para um classroom
+export const listDocuments = async (classroomId: string): Promise<{
+    success: boolean;
+    documents?: string[];
+    error?: string;
+}> => {
+    try {
+        const response = await fetch(`${API_URL}/documents/list?classroom_id=${classroomId}`);
+        return response.json();
+    } catch (error) {
+        console.error('Erro ao listar documentos:', error);
+        return { success: false, error: 'Erro ao listar documentos' };
+    }
+};
+
+// Enviar documento da temp_documents para apresentação
+export const sendDocumentToPresentation = async (documentId: string, presentationCode: string): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+}> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/documents/send_to_presentation`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+                document_id: documentId,
+                presentation_code: presentationCode
+            }),
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Erro ao enviar documento para apresentação:', error);
+        return { success: false, error: 'Erro ao enviar documento' };
+    }
+};
+
+
