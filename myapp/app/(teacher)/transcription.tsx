@@ -847,12 +847,53 @@ export default function TranscriptionScreen() {
             if (Array.isArray(n8nResponse) && n8nResponse[0]?.output) {
                 content = n8nResponse[0].output;
             }
+            // Suporte para n8n retornando { data: { output: "..." } }
+            if (n8nResponse.data?.output) {
+                content = n8nResponse.data.output;
+            }
 
             // DETECÇÃO EXPLÍCITA DE TIPO (Solicitado pelo usuário)
             let parsedContent = content;
-            let explicitType: 'quiz' | 'summary' | null = null;
+            let explicitType: 'quiz' | 'summary' | 'document' | null = null;
 
             if (typeof content === 'string') {
+                // Detectar [TYPE:DOCUMENT]
+                const documentMatch = content.match(/^\[TYPE:DOCUMENT\]/i);
+                if (documentMatch) {
+                    console.log('[AI] Documento detectado! Processando...');
+
+                    // Extrair DOCUMENT_ID
+                    const docIdMatch = content.match(/DOCUMENT_ID:\s*([a-f0-9-]+)/i);
+                    if (docIdMatch && presentationCode) {
+                        const documentId = docIdMatch[1];
+                        console.log(`[AI] Enviando documento ${documentId} para apresentação ${presentationCode}`);
+
+                        try {
+                            // Importar função do api.ts
+                            const { sendDocumentToPresentation } = require('@/services/api');
+                            const result = await sendDocumentToPresentation(documentId, presentationCode);
+
+                            if (result.success) {
+                                console.log('[AI] Documento enviado com sucesso!');
+                                Alert.alert('✅ Sucesso', 'Documento enviado para apresentação!');
+                            } else {
+                                console.error('[AI] Erro ao enviar documento:', result.error);
+                                Alert.alert('Erro', result.error || 'Falha ao enviar documento');
+                            }
+                        } catch (error) {
+                            console.error('[AI] Exceção ao enviar documento:', error);
+                            Alert.alert('Erro', 'Falha ao processar documento');
+                        }
+                    } else if (!presentationCode) {
+                        Alert.alert('Aviso', 'Inicie uma apresentação primeiro para exibir documentos');
+                    }
+
+                    // Limpar popup do Fred
+                    setFredCommand(null);
+                    setIsGenerating(false);
+                    return; // Não processar mais nada
+                }
+
                 const typeMatch = content.match(/^\[TYPE:(QUIZ|SUMMARY)\]/i);
                 if (typeMatch) {
                     explicitType = typeMatch[1].toUpperCase() === 'QUIZ' ? 'quiz' : 'summary';

@@ -11,7 +11,7 @@ export interface PresentationSession {
 }
 
 export interface PresentationContent {
-    type: 'summary' | 'quiz' | 'podium' | 'ranking' | 'image' | 'video' | 'question' | 'blank';
+    type: 'summary' | 'quiz' | 'podium' | 'ranking' | 'image' | 'video' | 'question' | 'document' | 'blank';
     data: any;
     timestamp: string;
 }

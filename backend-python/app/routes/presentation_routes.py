@@ -121,7 +121,7 @@ def send_content(current_user, code):
     content_data = data.get('data', {})
     
     # Validar tipo de conteúdo
-    valid_types = ['summary', 'quiz', 'podium', 'ranking', 'image', 'video', 'question', 'blank']
+    valid_types = ['summary', 'quiz', 'podium', 'ranking', 'image', 'video', 'question', 'document', 'blank']
     if content_type not in valid_types:
         return jsonify({'success': False, 'error': 'Tipo de conteúdo inválido'}), 400
     

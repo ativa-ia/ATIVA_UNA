@@ -1,0 +1,236 @@
+{
+  "name": "MCP SERVER",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "8c6390c6-9c7e-42c4-8e88-525fc89d1197"
+      },
+      "type": "@n8n/n8n-nodes-langchain.mcpTrigger",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "f2453d88-fb50-47f4-a5e9-0d4dd01b5259",
+      "name": "MCP Server Trigger1",
+      "webhookId": "8c6390c6-9c7e-42c4-8e88-525fc89d1197"
+    },
+    {
+      "parameters": {
+        "name": "gerar_quiz",
+        "description": "2. CHAT IA | GERADOR DE QUIZES (`gerar_quiz`)\nFunção: Especialista pedagógico focado na criação AUTOMÁTICA de instrumentos de avaliação e exercícios.\n\nQUANDO USAR:\n\nSempre que o professor pedir questões, você deve EXECUTAR IMEDIATAMENTE sem pedir confirmação ou permissão extra.\n\nPara gerar simulados, testes rápidos ou provas assim que o material base for localizado.\n\nQuando for necessário criar gabaritos de exercícios de forma direta e autônoma.\n\nQUANDO NÃO USAR:\n\nEsse chat não serve para tirar dúvidas conceituais.\n\nEsse chat não serve para buscar referências externas na web.\n\nEsse chat não serve para resumir a aula, apenas para criar perguntas sobre ela.",
+        "workflowId": {
+          "__rl": true,
+          "value": "3dFKcwsJTxBgrBshCPrq0",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/3dFKcwsJTxBgrBshCPrq0",
+          "cachedResultName": "TOOL - GERAR QUIZ"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('text', `text será o ´text´ enviado pelo usuário`, 'string') }}",
+            "identifier": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('identifier', `será o ´classroom_id´ enviado pelo usuário`, 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "identifier",
+              "displayName": "identifier",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.1,
+      "position": [
+        208,
+        384
+      ],
+      "id": "82b1232d-f97b-4e24-a19c-ae55b7483015",
+      "name": "gerar_quiz"
+    },
+    {
+      "parameters": {
+        "name": "gerar_resumo",
+        "description": "CHAT IA | GERADOR DE RESUMOS (`gerar_resumo`) Função: Especialista em síntese e estruturação de conhecimento, focado na transformação AUTOMÁTICA de transcrições em documentos organizados e digeríveis.\n\nQUANDO USAR:\n\nSempre que houver solicitações de \"Resumo\", \"Síntese\", \"Recapitulação\", \"Fichamento\" ou \"Pontos Principais\".\n\nPara transformar o texto bruto da aula em listas de tópicos, mapas mentais textuais ou sumários executivos.\n\nQuando o objetivo for obter uma visão macro e consolidada do que foi discutido, devendo EXECUTAR IMEDIATAMENTE sem pedir confirmação.\n\nQUANDO NÃO USAR:\n\nEsse chat não serve para responder perguntas pontuais ou tirar dúvidas específicas (use consultar_material).\n\nEsse chat não serve para criar questões ou testes (use gerar_quiz).\n\nEsse chat não deve inventar informações que não estejam presentes no texto base fornecido.",
+        "workflowId": {
+          "__rl": true,
+          "value": "76FPE4cln04WYECA",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/76FPE4cln04WYECA",
+          "cachedResultName": "TOOL - GERAR RESUMO"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('text', `text será o ´text´ enviado pelo usuário`, 'string') }}",
+            "identifier": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('identifier', `será o ´classroom_id´ enviado pelo usuário`, 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "text",
+              "displayName": "text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "identifier",
+              "displayName": "identifier",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.1,
+      "position": [
+        416,
+        272
+      ],
+      "id": "62f7756d-a6dd-4d3f-8976-2abac2db9b40",
+      "name": "gerar_resumo"
+    },
+    {
+      "parameters": {
+        "name": "consultar_material",
+        "description": "1. CHAT IA | CONSULTAR MATERIAL (consultar_material)\n\nFunção:\nFerramenta de busca direta no banco de dados vetorial (PDFs/Arquivos da aula). Recupera trechos técnicos brutos do material oficial, filtrados obrigatoriamente pelo class id da sala atual.\n\nPARÂMETROS OBRIGATÓRIOS:\n\nquery: pergunta ou termo a ser buscado no material\n\nclassroom_id: identificador da sala/disciplina atual (usado para filtrar a metadata do banco vetorial)\n\n⚠️ Sem o classroom_id, a ferramenta não deve retornar resultados.\n\nQUANDO USAR:\n\nSempre que o professor perguntar se um tópico consta no material\n\nPara encontrar definições, conceitos ou protocolos citados na apostila\n\nPara rascunhar respostas para alunos baseadas estritamente na bibliografia da aula\n\nPara validar se uma informação é “oficial” ou não antes de responder\n\nQUANDO NÃO USAR:\n\nEsse recurso não cria provas ou listas de exercícios (use gerar_quiz)\n\nEsse recurso não busca notícias recentes ou dados externos da internet (use pesquisa_web)\n\nEsse recurso não inventa informações; se não estiver no PDF da sala correspondente ao classroom_id, ele retornará vazio\n\nREGRA CRÍTICA:\n\nA ferramenta NÃO pode acessar ou retornar conteúdo de outras salas",
+        "workflowId": {
+          "__rl": true,
+          "value": "KKwHZuLMW6JBi_ogosWfS",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/KKwHZuLMW6JBi_ogosWfS",
+          "cachedResultName": "TOOL - CONSULTAR MATERIAL"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "query": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('query', `query será a ´query´ enviado pelo usuário`, 'string') }}",
+            "identifier": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('identifier', `será o ´classroom_id´ enviado pelo usuário`, 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "query",
+              "displayName": "query",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "identifier",
+              "displayName": "identifier",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.1,
+      "position": [
+        16,
+        384
+      ],
+      "id": "8e17264f-9a3a-40cb-a0a1-075d0fd8d8fc",
+      "name": "consultar_material"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "gerar_quiz": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Server Trigger1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "gerar_resumo": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Server Trigger1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "consultar_material": {
+      "ai_tool": [
+        [
+          {
+            "node": "MCP Server Trigger1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "51ba3475-5613-41fa-92ce-995d29f4d48a",
+  "meta": {
+    "instanceId": "3a8e0f55d1edf7e085c6388718996112d320b6942de89a26aa2ceeb69d9abffc"
+  },
+  "id": "E3fIQaE3la1AosSHHIObF",
+  "tags": [
+    {
+      "updatedAt": "2026-01-14T22:39:12.025Z",
+      "createdAt": "2026-01-14T22:39:12.025Z",
+      "id": "20oy9wiNWimI7e8G",
+      "name": "CHAT IA"
+    },
+    {
+      "updatedAt": "2026-01-14T22:39:52.292Z",
+      "createdAt": "2026-01-14T22:39:52.292Z",
+      "id": "me9HLrXpAguVBKUW",
+      "name": "MCP SERVER"
+    }
+  ]
+}
