@@ -55,6 +55,9 @@ export default function PresentationScreen() {
         }
     };
 
+    // Estado de controle de vídeo
+    const [videoControl, setVideoControl] = useState<{ command: 'play' | 'pause' | 'seek', value?: number, timestamp: number } | undefined>(undefined);
+
     // WebSocket - Entrar na sala
     useEffect(() => {
         if (socket && code) {
@@ -68,6 +71,16 @@ export default function PresentationScreen() {
                 setContent({ type: 'blank', data: {}, timestamp: new Date().toISOString() });
             });
 
+            // Listen for Video Controls
+            socket.on('video_control', (data: any) => {
+                console.log('[Presentation] Video Control Received:', data);
+                setVideoControl({
+                    command: data.command,
+                    value: data.value,
+                    timestamp: Date.now() // Force update even if command is same
+                });
+            });
+
             socket.on('presentation_ended', () => {
                 setSessionActive(false);
             });
@@ -77,6 +90,7 @@ export default function PresentationScreen() {
                 socket.off('presentation_content');
                 socket.off('presentation_clear');
                 socket.off('presentation_ended');
+                socket.off('video_control');
             };
         }
     }, [socket, code]);
@@ -95,65 +109,7 @@ export default function PresentationScreen() {
         return () => clearInterval(interval);
     }, [socket, code, sessionActive]);
 
-    if (loading) {
-        return (
-            <LinearGradient
-                colors={['#0f172a', '#1e293b', '#334155']}
-                style={styles.gradientContainer}
-            >
-                <View style={styles.loadingContent}>
-                    <View style={styles.iconContainer}>
-                        <MaterialIcons name="cast-connected" size={64} color={colors.primary} />
-                    </View>
-                    <ActivityIndicator size="large" color={colors.primary} style={styles.spinner} />
-                    <Text style={styles.loadingText}>Conectando à apresentação</Text>
-                    <View style={styles.dotsContainer}>
-                        <View style={[styles.dot, styles.dotPulse1]} />
-                        <View style={[styles.dot, styles.dotPulse2]} />
-                        <View style={[styles.dot, styles.dotPulse3]} />
-                    </View>
-                </View>
-            </LinearGradient>
-        );
-    }
-
-    if (error) {
-        return (
-            <LinearGradient
-                colors={['#450a0a', '#7f1d1d', '#991b1b']}
-                style={styles.gradientContainer}
-            >
-                <View style={styles.errorContent}>
-                    <View style={styles.errorIconContainer}>
-                        <MaterialIcons name="error-outline" size={80} color={colors.error} />
-                    </View>
-                    <Text style={styles.errorTitle}>Erro de Conexão</Text>
-                    <Text style={styles.errorMessage}>{error}</Text>
-                    <View style={styles.codeBox}>
-                        <Text style={styles.codeLabel}>Código fornecido:</Text>
-                        <Text style={styles.codeValue}>{code}</Text>
-                    </View>
-                </View>
-            </LinearGradient>
-        );
-    }
-
-    if (!sessionActive) {
-        return (
-            <LinearGradient
-                colors={['#1e1b4b', '#312e81', '#3730a3']}
-                style={styles.gradientContainer}
-            >
-                <View style={styles.endedContent}>
-                    <View style={styles.endedIconContainer}>
-                        <MaterialIcons name="check-circle" size={80} color={colors.success} />
-                    </View>
-                    <Text style={styles.endedTitle}>Apresentação Encerrada</Text>
-                    <Text style={styles.endedSubtitle}>Obrigado por participar!</Text>
-                </View>
-            </LinearGradient>
-        );
-    }
+    // ... (rest of code)
 
     // Renderizar conteúdo baseado no tipo
     const renderContent = () => {
@@ -190,7 +146,8 @@ export default function PresentationScreen() {
                 return <LiveRankingSlide data={content.data} />;
             case 'image':
             case 'video':
-                return <MediaSlide type={content.type} data={content.data} />;
+                // Pass video control state
+                return <MediaSlide type={content.type} data={content.data} controlState={content.type === 'video' ? videoControl : undefined} />;
             default:
                 return (
                     <View style={styles.centerContainer}>

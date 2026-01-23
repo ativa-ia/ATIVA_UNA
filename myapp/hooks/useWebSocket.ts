@@ -56,9 +56,15 @@ export function useWebSocket({ quizId, enabled = true }: UseWebSocketOptions) {
             socket.emit('join_quiz', { quiz_id: quizId });
         });
 
-        socket.on('disconnect', () => {
+        socket.on('connect_error', (err) => {
+            console.error('[WebSocket] Erro de conexão:', err.message);
+            console.log('[WebSocket] Detalhes:', err);
+        });
+
+        socket.on('disconnect', (reason) => {
             console.log('[WebSocket] ========================================');
             console.log('[WebSocket] DESCONECTADO DO SERVIDOR');
+            console.log('[WebSocket] Razão:', reason);
             console.log('[WebSocket] ========================================');
             setIsConnected(false);
         });

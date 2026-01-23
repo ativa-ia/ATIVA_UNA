@@ -13,10 +13,13 @@ if __name__ == '__main__':
     print(f'>> http://localhost:{port}')
     print(f'>> WebSocket habilitado\n')
     
+    print(f'>> Mode: {socketio.server.async_mode}')
+
     socketio.run(
         app,
         host='0.0.0.0',
         port=port,
         debug=True,
-        allow_unsafe_werkzeug=True
+        use_reloader=False, # Reloader sometimes breaks socket connections in dev
+        allow_unsafe_werkzeug=True 
     )
