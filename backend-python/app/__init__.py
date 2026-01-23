@@ -39,14 +39,6 @@ def create_app(config_name=None):
     except Exception as e:
         logger.error(f"Erro ao inicializar extensoes: {e}")
 
-    # FORCE CORS HEADERS (Manual Override para Vercel)
-    @app.after_request
-    def after_request(response):
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-        return response
-
     
     # Registrar blueprints
     try:
