@@ -117,11 +117,35 @@ export const endPresentation = async (code: string): Promise<{
     return response.json();
 };
 
+// ... (existing code)
+
+/**
+ * Controlar vídeo da apresentação (Professor)
+ */
+export const controlPresentationVideo = async (code: string, command: 'play' | 'pause' | 'seek', value?: number): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+}> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/presentation/${code}/control`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ command, value })
+    });
+
+    return response.json();
+};
+
 /**
  * Obter sessão ativa do professor
  */
 export const getActivePresentation = async (): Promise<{
-    success: boolean;
+    // ... (existing code)    success: boolean;
     active: boolean;
     session?: PresentationSession;
 }> => {
