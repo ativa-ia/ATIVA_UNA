@@ -235,13 +235,34 @@ export default function TranscriptionScreen() {
 
     const loadActivePresentation = async () => {
         try {
+            console.log('[PRESENTATION] Carregando apresentação ativa...');
             const response = await getActivePresentation();
+            console.log('[PRESENTATION] Resposta de getActivePresentation:', response);
+
             if (response.active && response.session) {
-                setPresentationCode(response.session.code);
-                setPresentationActive(true);
+                // Verificar se a sessão está realmente ativa (não ended)
+                console.log('[PRESENTATION] Sessão encontrada, status:', response.session.status);
+                if (response.session.status === 'active') {
+                    setPresentationCode(response.session.code);
+                    setPresentationActive(true);
+                    console.log('[PRESENTATION] ✅ Apresentação ativa restaurada:', response.session.code);
+                } else {
+                    // Sessão existe mas está encerrada, limpar estado
+                    setPresentationCode(null);
+                    setPresentationActive(false);
+                    console.log('[PRESENTATION] ⚠️ Apresentação encontrada mas está encerrada');
+                }
+            } else {
+                // Nenhuma apresentação ativa
+                setPresentationCode(null);
+                setPresentationActive(false);
+                console.log('[PRESENTATION] ℹ️ Nenhuma apresentação ativa');
             }
         } catch (error) {
-            console.error('Erro ao carregar apresentação ativa:', error);
+            console.error('[PRESENTATION] ❌ Erro ao carregar apresentação ativa:', error);
+            // Em caso de erro, limpar estado para evitar bugs
+            setPresentationCode(null);
+            setPresentationActive(false);
         }
     };
 
@@ -882,31 +903,44 @@ export default function TranscriptionScreen() {
                 const documentMatch = content.match(/^\[TYPE:DOCUMENT\]/i);
                 if (documentMatch) {
                     console.log('[AI] Documento detectado! Processando...');
+                    console.log('[AI] Conteúdo completo:', content);
 
                     // Extrair DOCUMENT_ID
                     const docIdMatch = content.match(/DOCUMENT_ID:\s*([a-f0-9-]+)/i);
-                    if (docIdMatch && presentationCode) {
+                    console.log('[AI] Regex match result:', docIdMatch);
+                    console.log('[AI] Presentation code (REF):', presentationCodeRef.current);
+
+                    if (docIdMatch && presentationCodeRef.current) {
                         const documentId = docIdMatch[1];
-                        console.log(`[AI] Enviando documento ${documentId} para apresentação ${presentationCode}`);
+                        console.log(`[AI] ✅ Documento ID extraído: ${documentId}`);
+                        console.log(`[AI] ✅ Código de apresentação: ${presentationCodeRef.current}`);
+                        console.log(`[AI] 🚀 Enviando documento para apresentação...`);
 
                         try {
                             // Importar função do api.ts
                             const { sendDocumentToPresentation } = require('@/services/api');
-                            const result = await sendDocumentToPresentation(documentId, presentationCode);
+                            const result = await sendDocumentToPresentation(documentId, presentationCodeRef.current);
+
+                            console.log('[AI] 📦 Resposta do backend:', JSON.stringify(result, null, 2));
 
                             if (result.success) {
-                                console.log('[AI] Documento enviado com sucesso!');
+                                console.log('[AI] ✅ Documento enviado com sucesso!');
                                 Alert.alert('✅ Sucesso', 'Documento enviado para apresentação!');
                             } else {
-                                console.error('[AI] Erro ao enviar documento:', result.error);
+                                console.error('[AI] ❌ Erro ao enviar documento:', result.error);
                                 Alert.alert('Erro', result.error || 'Falha ao enviar documento');
                             }
                         } catch (error) {
-                            console.error('[AI] Exceção ao enviar documento:', error);
+                            console.error('[AI] ❌ Exceção ao enviar documento:', error);
                             Alert.alert('Erro', 'Falha ao processar documento');
                         }
-                    } else if (!presentationCode) {
+                    } else if (!presentationCodeRef.current) {
+                        console.warn('[AI] ⚠️ Apresentação não está ativa (Ref is null)');
                         Alert.alert('Aviso', 'Inicie uma apresentação primeiro para exibir documentos');
+                    } else {
+                        console.error('[AI] ❌ DOCUMENT_ID não encontrado no conteúdo');
+                        console.error('[AI] Conteúdo recebido:', content);
+                        Alert.alert('Erro', 'ID do documento não encontrado na resposta');
                     }
 
                     // Limpar popup do Fred
