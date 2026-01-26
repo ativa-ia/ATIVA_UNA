@@ -114,6 +114,19 @@ export default function PresentationScreen() {
 
     // Renderizar conteúdo baseado no tipo
     const renderContent = () => {
+        // 1. Verificar se a sessão foi encerrada
+        if (!sessionActive) {
+            return (
+                <View style={styles.endedContent}>
+                    <View style={styles.endedIconContainer}>
+                        <MaterialIcons name="cancel-presentation" size={80} color={colors.white} />
+                    </View>
+                    <Text style={styles.endedTitle}>Apresentação Encerrada</Text>
+                    <Text style={styles.endedSubtitle}>O professor finalizou esta sessão.</Text>
+                </View>
+            );
+        }
+
         if (!content || content.type === 'blank') {
             return (
                 <LinearGradient
@@ -154,7 +167,7 @@ export default function PresentationScreen() {
             default:
                 return (
                     <View style={styles.centerContainer}>
-                        <Text style={styles.errorText}>Tipo de conteúdo desconhecido</Text>
+                        <Text style={styles.errorText}>Tipo de conteúdo desconhecido: {content.type}</Text>
                     </View>
                 );
         }

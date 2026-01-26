@@ -232,6 +232,14 @@ def get_active_presentation(current_user):
             'active': False,
             'session': None
         })
+
+    return jsonify({
+        'success': True,
+        'active': True,
+        'session': session.to_dict(),
+        'code': session.code,
+        'url': f'http://localhost:8081/presentation?code={session.code}'
+    })
     
 
 @presentation_bp.route('/<code_or_id>/control', methods=['POST'])
