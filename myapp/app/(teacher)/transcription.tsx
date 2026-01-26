@@ -745,6 +745,72 @@ export default function TranscriptionScreen() {
 
 
 
+    // --- SHARED FUNCTION: Enviar para tela (Botão e Voz) ---
+    const handleSendToScreen = async (feedbackMode: 'alert' | 'fred' = 'alert') => {
+        // FIX: Priorizar o que está VISÍVEL (generatedQuiz) sobre o salvo (currentActivity)
+        let contentToSend = generatedQuiz;
+
+        // Fallback para currentActivity se generatedQuiz for nulo (ex: refresh da página)
+        if (!contentToSend && currentActivity) {
+            contentToSend = currentActivity.content;
+        }
+
+        // Garantir que é objeto, não string
+        if (typeof contentToSend === 'string') {
+            try {
+                contentToSend = JSON.parse(contentToSend);
+            } catch (e) {
+                console.error('Erro parse content to send', e);
+            }
+        }
+
+        // Debug data
+        const qCount = contentToSend?.questions?.length || 0;
+        console.log(`[SEND TO SCREEN] Enviando quiz com ${qCount} questões (Mode: ${feedbackMode})`);
+
+        try {
+            // 1. Validar Sessão Ativa (Refresh Code)
+            const sessionCheck = await getActivePresentation();
+            const targetCode = sessionCheck.session?.code || presentationCodeRef.current;
+
+            if (!targetCode) {
+                const msg = 'Nenhuma apresentação ativa encontrada.';
+                if (feedbackMode === 'alert') Alert.alert('Erro', msg);
+                else {
+                    setFredCommand(msg);
+                    setTimeout(() => setFredCommand(null), 3000);
+                }
+                return;
+            }
+
+            // 2. Enviar para o código validado
+            await sendToPresentation(
+                targetCode,
+                'quiz',
+                contentToSend
+            );
+
+            const successMsg = `Quiz (${qCount} questões) enviado!`;
+            if (feedbackMode === 'alert') Alert.alert('Sucesso', successMsg);
+            else {
+                setFredCommand(successMsg);
+                setTimeout(() => setFredCommand(null), 3000);
+            }
+
+            // Atualizar ref se necessário
+            presentationCodeRef.current = targetCode;
+
+        } catch (error) {
+            console.error('Erro envio:', error);
+            const errorMsg = 'Falha ao enviar para apresentação';
+            if (feedbackMode === 'alert') Alert.alert('Erro', errorMsg);
+            else {
+                setFredCommand(errorMsg);
+                setTimeout(() => setFredCommand(null), 3000);
+            }
+        }
+    };
+
     // Enviar para IA (Genérico)
     const handleSendToAI = async (command?: string) => {
         // Helper function to try extracting JSON (Robust enough for AI output)
@@ -848,33 +914,90 @@ export default function TranscriptionScreen() {
         }
 
         setIsGenerating(true);
-        setCurrentActivity(null); // RESET: Força limpeza do ID anterior para evitar reuso
-        setGeneratedQuiz(null); // Opcional: limpa visualização anterior
+        // REMOVED EARLY RESET: setCurrentActivity(null); setGeneratedQuiz(null); -> Moved to after interceptors
+
         // *** INTERCEPTOR: Comando "ENVIAR" direto (sem gerar novo) ***
         // Se o usuário diz "Envie esse quiz", "Mande o resumo", etc.
         // E já temos uma atividade na tela (currentActivity)
         if (command) {
-            const isSendIntent = /(envi|mand|aplic|lanç|disponibiliz)/i.test(command);
-            const isGenerateIntent = /(ger|cri|faz|mont)/i.test(command);
+            const lowerCmd = command.toLowerCase();
+            const isSendIntent = /(envi|mand|aplic|lanç|disponibiliz)/i.test(lowerCmd);
+            const isGenerateIntent = /(ger|cri|faz|mont)/i.test(lowerCmd);
+
+            // 0. Enviar para APRESENTAÇÃO (Tela/Projetor)
+            if (/(apresent|projet|tel|mostr.*tel)/i.test(lowerCmd)) {
+                console.log('[AI INTERCEPTOR] Comando de apresentação detectado');
+
+                if (!presentationCodeRef.current) {
+                    setFredCommand('Inicie uma apresentação primeiro!');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                }
+
+                if (currentActivity && currentActivity.status !== 'ended') {
+                    setFredCommand('Enviando para a tela...');
+                    setIsGenerating(false);
+
+                    setTimeout(() => {
+                        handleSendToScreen('fred');
+                    }, 500);
+                    return;
+                }
+            }
+
+            // 1. Alternar Respostas do Quiz
+            if (/(mostr|exib|ver).*(respost|gabarit|correç)/i.test(lowerCmd)) {
+                console.log('[AI INTERCEPTOR] Mostrar respostas');
+                setFredCommand('Exibindo respostas...');
+                setShowAnswerKey(true);
+                setIsGenerating(false);
+                setTimeout(() => setFredCommand(null), 2000);
+                return;
+            }
+            if (/(escond|ocult|tira).*(respost|gabarit|correç)/i.test(lowerCmd)) {
+                console.log('[AI INTERCEPTOR] Ocultar respostas');
+                setFredCommand('Ocultando respostas...');
+                setShowAnswerKey(false);
+                setIsGenerating(false);
+                setTimeout(() => setFredCommand(null), 2000);
+                return;
+            }
+
+            // 2. Enviar Atividade Atual (Quiz ou Resumo)
+
 
             // Se quer enviar, MAS NÃO quer gerar, E temos atividade salva
+            // 2. Enviar Atividade Atual (Quiz ou Resumo) (IMPLEMENTAÇÃO ATUALIZADA)
             if (isSendIntent && !isGenerateIntent && currentActivity && currentActivity.status !== 'ended') {
                 console.log('[AI INTERCEPTOR] Comando de envio direto detectado:', command);
-                console.log('[AI INTERCEPTOR] Atividade atual:', currentActivity.id, currentActivity.title);
+                console.log('[AI INTERCEPTOR] Atividade atual:', currentActivity.id, currentActivity.title, currentActivity.activity_type);
 
+                const act = currentActivity;
                 // Feedback visual
-                setFredCommand('Enviando atividade atual...');
+                setFredCommand(`Enviando ${act.activity_type === 'quiz' ? 'quiz' : 'resumo'}...`);
 
                 // Simula delay de "processamento"
                 setTimeout(() => {
-                    performStartActivity(currentActivity.id, currentActivity.title || 'Atividade');
+                    if (act.activity_type === 'quiz') {
+                        performStartActivity(act.id, act.title || 'Quiz');
+                    } else if (act.activity_type === 'summary') {
+                        performShareSummary(act.title || 'Resumo da Aula');
+                    }
                     setIsGenerating(false);
                     setFredCommand(null);
                 }, 1000);
 
                 return; // INTERROMPE O FLUXO (Não chama N8N)
             }
+
+
         }
+
+        // SE PASSOU PELOS INTERCEPTORES -> VAI GERAR NOVO CONTEÚDO
+        setCurrentActivity(null); // RESET: Agora sim limpamos, pois vamos gerar algo novo
+        setGeneratedQuiz(null);   // Limpa visualização anterior
+
         // Não definimos displayMode ainda, esperamos a resposta
         try {
             // Forçar salvamento antes de gerar
@@ -1137,6 +1260,10 @@ export default function TranscriptionScreen() {
                 });
 
                 if (saveResult.success && saveResult.activity) {
+                    // ATUALIZAÇÃO CRÍTICA: Garantir que currentActivity seja o novo objeto salvo (Quiz ou Summary)
+                    setCurrentActivity(saveResult.activity);
+                    console.log(`[AI] Atividade atualizada: ${saveResult.activity.id} (${saveResult.activity.activity_type})`);
+
                     // *** NOVA LÓGICA: Auto-enviar quiz se o comando de voz pedir ***
                     if (command && activityType === 'quiz') {
                         const intentRegex = /(envi|mand|aplic|lanç|disponibiliz)/i;
@@ -2192,6 +2319,18 @@ export default function TranscriptionScreen() {
 
                                     {currentActivity && (
                                         <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
+                                            {/* Botão Enviar para Tela de Apresentação */}
+                                            {presentationActive && (
+                                                <TouchableOpacity
+                                                    style={styles.sendToScreenButton}
+                                                    onPress={() => handleSendToScreen('alert')}
+                                                >
+                                                    <MaterialIcons name="tv" size={20} color={colors.white} />
+                                                </TouchableOpacity>
+                                            )}
+
+                                            <View style={styles.sidebarDividerVertical} />
+
                                             <TouchableOpacity
                                                 style={[styles.deleteButton, { width: 48, height: 48, paddingHorizontal: 0, paddingVertical: 0 }]}
                                                 onPress={handleDeleteQuiz}
@@ -3901,5 +4040,11 @@ const styles = StyleSheet.create({
         color: colors.white,
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
+    },
+    sidebarDividerVertical: {
+        width: 1,
+        height: 24,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        marginHorizontal: spacing.xs,
     },
 });
