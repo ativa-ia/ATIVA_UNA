@@ -16,11 +16,20 @@ document_bp = Blueprint('document', __name__)
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_ANON_KEY') or os.getenv('SUPABASE_SERVICE_KEY')
 
+logger.info(f"Inicializando Supabase client...")
+logger.info(f"SUPABASE_URL: {SUPABASE_URL}")
+logger.info(f"SUPABASE_KEY presente: {bool(SUPABASE_KEY)}")
+
 if not SUPABASE_URL or not SUPABASE_KEY:
     logger.error("Supabase credentials not configured!")
     supabase = None
 else:
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+    try:
+        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+        logger.info("✅ Supabase client criado com sucesso!")
+    except Exception as e:
+        logger.error(f"❌ Erro ao criar cliente Supabase: {type(e).__name__}: {str(e)}")
+        supabase = None
 
 
 @document_bp.route('/retrieve', methods=['GET'])
@@ -235,22 +244,29 @@ def send_to_presentation(current_user):
         
         logger.info(f"Buscando documento {document_id} para enviar para apresentação {presentation_code}")
         
-        # Buscar documento da temp_documents
-        response = supabase.table('temp_documents') \
-            .select('*') \
-            .eq('id', document_id) \
-            .execute()
+        # Buscar documento da temp_documents usando SQLAlchemy (não Supabase client)
+        from app.models.temp_document import TempDocument
         
-        if not response.data or len(response.data) == 0:
+        try:
+            logger.info(f"Consultando temp_documents com ID: {document_id}")
+            temp_doc = TempDocument.query.filter_by(id=document_id).first()
+            
+            if not temp_doc:
+                logger.warning(f"Documento {document_id} não encontrado")
+                return jsonify({
+                    'success': False,
+                    'error': f'Documento {document_id} não encontrado'
+                }), 404
+            
+            logger.info(f"Documento encontrado: {temp_doc.filename}")
+            document_data = temp_doc.document_data
+            
+        except Exception as db_error:
+            logger.error(f"Erro ao consultar banco de dados: {type(db_error).__name__}: {str(db_error)}")
             return jsonify({
                 'success': False,
-                'error': f'Documento {document_id} não encontrado'
-            }), 404
-        
-        temp_doc = response.data[0]
-        document_data = temp_doc.get('document_data', {})
-        
-        logger.info(f"Documento encontrado: {temp_doc.get('filename')}")
+                'error': f'Erro ao acessar banco de dados: {str(db_error)}'
+            }), 500
         
         # Importar modelo de apresentação
         from app.models.presentation import PresentationSession
@@ -278,10 +294,45 @@ def send_to_presentation(current_user):
                 'error': 'Apresentação não está ativa'
             }), 400
         
+        
+        # PROCESSAMENTO DE SEÇÕES NO BACKEND
+        # Aqui podemos melhorar, filtrar ou dividir as seções que vieram do n8n
+        raw_sections = document_data.get('sections', [])
+        processed_sections = []
+        
+        for section in raw_sections:
+            content = section.get('content', '').strip()
+            title = section.get('title', '').strip()
+            
+            # 1. Filtrar seções vazias ou muito pequenas (redundância de segurança)
+            if len(content) < 20: 
+                continue
+                
+            # 2. (Futuro) Aqui podemos dividir seções muito grandes (> 2000 chars)
+            # if len(content) > 3000:
+            #    sub_sections = split_large_section(section)
+            #    processed_sections.extend(sub_sections)
+            # else:
+            
+            processed_sections.append({
+                'section_id': len(processed_sections) + 1,
+                'title': title,
+                'content': content
+            })
+            
+        # Se por algum motivo não sobrou nada, usar o original (fallback)
+        if not processed_sections and raw_sections:
+            processed_sections = raw_sections
+            
+        # Atualizar document_data com as seções processadas
+        final_document_data = document_data.copy()
+        final_document_data['sections'] = processed_sections
+        final_document_data['total_sections'] = len(processed_sections)
+
         # Atualizar conteúdo da apresentação
         session.current_content = {
             'type': 'document',
-            'data': document_data,
+            'data': final_document_data,
             'timestamp': datetime.utcnow().isoformat()
         }
         db.session.commit()
@@ -296,9 +347,9 @@ def send_to_presentation(current_user):
         
         return jsonify({
             'success': True,
-            'message': f'Documento "{temp_doc.get("filename")}" enviado para apresentação',
+            'message': f'Documento "{temp_doc.filename}" enviado para apresentação',
             'document': {
-                'filename': temp_doc.get('filename'),
+                'filename': temp_doc.filename,
                 'total_chunks': document_data.get('total_chunks', 0),
                 'total_sections': document_data.get('total_sections', 0)
             }
