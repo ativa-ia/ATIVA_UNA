@@ -1,13 +1,18 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Image, Animated, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Image, Animated, LayoutAnimation, Platform, UIManager, useWindowDimensions } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const TRACK_WIDTH = SCREEN_WIDTH - 200;
-const CAR_SIZE = 80; // Aumentado de 60 para 80
+const SIDEBAR_WIDTH = 350;
+const CAR_SIZE = 80;
+
+if (Platform.OS === 'android') {
+    if (UIManager.setLayoutAnimationEnabledExperimental) {
+        UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+}
 
 interface RankingStudent {
     position: number;
@@ -62,20 +67,32 @@ const getMedalEmoji = (position: number) => {
     }
 };
 
-function RaceCar({ student, index }: { student: RankingStudent; index: number }) {
+const TRACK_HEIGHT = 600;
+const LANE_HEIGHT = 100;
+
+function RaceCar({ student, index, trackWidth }: { student: RankingStudent; index: number; trackWidth: number }) {
     const progressAnim = useRef(new Animated.Value(0)).current;
     const bounceAnim = useRef(new Animated.Value(0)).current;
+    const laneAnim = useRef(new Animated.Value(index * LANE_HEIGHT)).current; // Animação vertical
 
     useEffect(() => {
         const progress = student.total > 0 ? (student.answered / student.total) : 0;
-        const targetPosition = progress * (TRACK_WIDTH - CAR_SIZE);
+        const targetPosition = progress * (trackWidth - CAR_SIZE);
 
-        // Animação de movimento
+        // Animação de movimento horizontal
         Animated.spring(progressAnim, {
             toValue: targetPosition,
             useNativeDriver: true,
             tension: 40,
             friction: 8,
+        }).start();
+
+        // Animação de troca de posição (vertical)
+        Animated.spring(laneAnim, {
+            toValue: index * LANE_HEIGHT,
+            useNativeDriver: true,
+            tension: 50,
+            friction: 9,
         }).start();
 
         // Animação de bounce contínua
@@ -93,7 +110,7 @@ function RaceCar({ student, index }: { student: RankingStudent; index: number })
                 }),
             ])
         ).start();
-    }, [student.answered, student.total]);
+    }, [student.answered, student.total, index, trackWidth]);
 
     // Cor fixa por aluno
     const carColor = getCarColorForStudent(student.student_name, student.student_id);
@@ -101,7 +118,15 @@ function RaceCar({ student, index }: { student: RankingStudent; index: number })
     const medal = getMedalEmoji(student.position);
 
     return (
-        <View style={[styles.carLane, { top: index * 120 }]}>
+        <Animated.View
+            style={[
+                styles.carLane,
+                {
+                    transform: [{ translateY: laneAnim }],
+                    zIndex: 50 - index // Elementos superiores ficam acima
+                }
+            ]}
+        >
             {/* Carro Animado */}
             <Animated.View
                 style={[
@@ -137,13 +162,25 @@ function RaceCar({ student, index }: { student: RankingStudent; index: number })
             <Text style={styles.progressText}>
                 {student.answered}/{student.total}
             </Text>
-        </View>
+        </Animated.View>
     );
 }
 
 export default function LiveRankingSlide({ data }: Props) {
     const { title = '🏁 CORRIDA DO CONHECIMENTO', ranking, total_students } = data;
     const topRacers = ranking.slice(0, 5); // Top 5 na pista
+    const { width } = useWindowDimensions();
+    const trackWidth = Math.max(300, width - SIDEBAR_WIDTH - 60);
+
+    useEffect(() => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    }, [ranking]);
+
+    // Função para verificar se está "On Fire"
+    const isOnFire = (student: RankingStudent) => {
+        if (student.total === 0) return false;
+        return student.answered >= 3 && (student.points / student.answered) >= 10;
+    };
 
     return (
         <View style={styles.container}>
@@ -156,65 +193,125 @@ export default function LiveRankingSlide({ data }: Props) {
                 </View>
             </View>
 
-            {/* Pista de Corrida */}
-            <View style={styles.trackContainer}>
-                {/* Linha de Largada */}
-                <View style={styles.startLine}>
-                    <MaterialIcons name="flag" size={32} color="#10b981" />
-                    <Text style={styles.lineLabel}>LARGADA</Text>
-                </View>
+            <View style={styles.contentContainer}>
+                {/* Pista de Corrida (Esquerda) */}
+                <View style={styles.trackArea}>
+                    <View style={styles.trackContainer}>
+                        {/* Bordas da Pista (Zebra) */}
+                        <View style={styles.trackBorderTop} />
+                        <View style={styles.trackBorderBottom} />
 
-                {/* Linha de Chegada */}
-                <View style={styles.finishLine}>
-                    <MaterialIcons name="sports-score" size={32} color="#ef4444" />
-                    <Text style={styles.lineLabel}>CHEGADA</Text>
-                </View>
-
-                {/* Marcações de Progresso */}
-                <View style={styles.progressMarkers}>
-                    {[25, 50, 75].map((percent) => (
-                        <View
-                            key={percent}
-                            style={[styles.marker, { left: (TRACK_WIDTH * percent) / 100 }]}
-                        >
-                            <View style={styles.markerLine} />
-                            <Text style={styles.markerText}>{percent}%</Text>
+                        {/* Linha de Largada */}
+                        <View style={styles.startLine}>
+                            <MaterialIcons name="flag" size={32} color="#10b981" />
+                            <Text style={styles.lineLabel}>LARGADA</Text>
                         </View>
-                    ))}
-                </View>
 
-                {/* Pista com Carros */}
-                <View style={styles.track}>
-                    {topRacers.length === 0 ? (
-                        <View style={styles.emptyTrack}>
-                            <MaterialIcons name="hourglass-empty" size={64} color="rgba(255,255,255,0.3)" />
-                            <Text style={styles.emptyText}>Aguardando largada...</Text>
+                        {/* Linha de Chegada (Checkered Flag) - Posicionada no container para não ser cortada */}
+                        <View style={styles.finishLineContainer}>
+                            <View style={styles.checkeredLine}>
+                                {Array.from({ length: 20 }).map((_, i) => (
+                                    <View key={i} style={{ width: 10, height: '100%' }}>
+                                        {Array.from({ length: 60 }).map((_, j) => (
+                                            <View
+                                                key={j}
+                                                style={{
+                                                    width: 10,
+                                                    height: 10,
+                                                    backgroundColor: (i + j) % 2 === 0 ? '#000' : '#fff'
+                                                }}
+                                            />
+                                        ))}
+                                    </View>
+                                ))}
+                            </View>
+                            <View style={styles.finishLabelContainer}>
+                                <MaterialIcons name="sports-score" size={32} color="#ef4444" />
+                                <Text style={styles.lineLabel}>CHEGADA</Text>
+                            </View>
                         </View>
-                    ) : (
-                        topRacers.map((student, index) => (
-                            <RaceCar key={student.student_name} student={student} index={index} />
-                        ))
-                    )}
-                </View>
-            </View>
 
-            {/* Placar Lateral */}
-            <View style={styles.scoreboard}>
-                <Text style={styles.scoreboardTitle}>🏆 PLACAR</Text>
-                {ranking.slice(0, 10).map((student, index) => (
-                    <View
-                        key={student.student_name}
-                        style={[styles.scoreItem, index < 3 && styles.topThreeScore]}
-                    >
-                        <Text style={styles.scorePosition}>
-                            {getMedalEmoji(student.position) || `${student.position}º`}
-                        </Text>
-                        <Text style={styles.scoreName} numberOfLines={1}>
-                            {student.student_name}
-                        </Text>
-                        <Text style={styles.scorePoints}>{student.points}</Text>
+                        {/* Pista com Carros */}
+                        <View style={styles.track}>
+                            {/* Surface Texture (Asfalto + Faixas + Grid + Arrows) */}
+                            <View style={styles.asphaltSurface}>
+                                {/* Faixas */}
+                                {Array.from({ length: 5 }).map((_, i) => (
+                                    <View key={`lane-${i}`} style={[styles.laneDivider, { top: (i + 1) * 100 }]} />
+                                ))}
+
+                                {/* Setas de Direção */}
+                                {Array.from({ length: 3 }).map((_, col) => (
+                                    Array.from({ length: 5 }).map((__, row) => (
+                                        <View
+                                            key={`arrow-${col}-${row}`}
+                                            style={[
+                                                styles.trackArrow,
+                                                {
+                                                    top: row * 100 + 40,
+                                                    left: 300 + (col * 200),
+                                                }
+                                            ]}
+                                        >
+                                            <MaterialIcons name="keyboard-arrow-right" size={40} color="rgba(255,255,255,0.05)" />
+                                            <MaterialIcons name="keyboard-arrow-right" size={40} color="rgba(255,255,255,0.05)" style={{ marginLeft: -25 }} />
+                                        </View>
+                                    ))
+                                ))}
+                            </View>
+
+                            {topRacers.length === 0 ? (
+                                <View style={styles.emptyTrack}>
+                                    <MaterialIcons name="hourglass-empty" size={64} color="rgba(255,255,255,0.3)" />
+                                    <Text style={styles.emptyText}>Aguardando largada...</Text>
+                                </View>
+                            ) : (
+                                topRacers.map((student, index) => (
+                                    <RaceCar
+                                        key={student.student_name}
+                                        student={student}
+                                        index={index}
+                                        trackWidth={trackWidth}
+                                    />
+                                ))
+                            )}
+                        </View>
                     </View>
-                ))}
+                </View>
+
+                {/* Placar Lateral (Direita) */}
+                <View style={styles.sidebar}>
+                    <View style={styles.scoreboard}>
+                        <Text style={styles.scoreboardTitle}>🏆 PLACAR</Text>
+                        <Animated.ScrollView
+                            style={styles.scoreboardList}
+                            showsVerticalScrollIndicator={false}
+                        >
+                            {ranking.map((student, index) => {
+                                // Lógica para "On Fire"
+                                const showFire = student.answered >= 3 && student.position <= 3;
+
+                                return (
+                                    <View
+                                        key={student.student_name}
+                                        style={[styles.scoreItem, index < 3 && styles.topThreeScore]}
+                                    >
+                                        <Text style={styles.scorePosition}>
+                                            {getMedalEmoji(student.position) || `${student.position}º`}
+                                        </Text>
+                                        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                            <Text style={styles.scoreName} numberOfLines={1}>
+                                                {student.student_name}
+                                            </Text>
+                                            {showFire && <Text style={{ fontSize: 14 }}>🔥</Text>}
+                                        </View>
+                                        <Text style={styles.scorePoints}>{student.points}</Text>
+                                    </View>
+                                );
+                            })}
+                        </Animated.ScrollView>
+                    </View>
+                </View>
             </View>
         </View>
     );
@@ -230,7 +327,22 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         marginBottom: spacing.lg,
+        height: 60,
     },
+    contentContainer: {
+        flex: 1,
+        flexDirection: 'row',
+        gap: spacing.lg,
+    },
+    trackArea: {
+        flex: 1,
+        // Ocupa o espaço restante
+    },
+    sidebar: {
+        width: SIDEBAR_WIDTH,
+        height: '100%',
+    },
+    // ... (Keep existing header styles properly)
     title: {
         fontSize: typography.fontSize['3xl'],
         fontWeight: typography.fontWeight.bold,
@@ -240,6 +352,7 @@ const styles = StyleSheet.create({
         textShadowRadius: 4,
     },
     liveIndicator: {
+        // ... (same as before)
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: 'rgba(239, 68, 68, 0.2)',
@@ -265,19 +378,67 @@ const styles = StyleSheet.create({
     trackContainer: {
         flex: 1,
         position: 'relative',
-        marginBottom: spacing.lg,
+        paddingVertical: 10,
+        // Remover marginBottom se não for necessário dentro do flex
+    },
+    // ... (Track specific styles)
+    trackBorderTop: {
+        position: 'absolute',
+        top: 60,
+        left: 80,
+        right: 0,
+        height: 10,
+        backgroundColor: '#ef4444',
+        borderStyle: 'dashed',
+        borderWidth: 2,
+        borderColor: '#fff',
+        zIndex: 5,
+    },
+    trackBorderBottom: {
+        position: 'absolute',
+        top: 670,
+        left: 80,
+        right: 0,
+        height: 10,
+        backgroundColor: '#ef4444',
+        borderStyle: 'dashed',
+        borderWidth: 2,
+        borderColor: '#fff',
+        zIndex: 5,
     },
     startLine: {
         position: 'absolute',
-        left: 0,
+        left: 20,
         top: 0,
         alignItems: 'center',
         zIndex: 10,
+        height: '100%',
+        justifyContent: 'center',
     },
-    finishLine: {
+    finishLineContainer: {
+        position: 'absolute',
+        right: 0, // Alinhado à direita do container
+        top: 80, // Mesmo offset do track (marginTop do track)
+        height: 600, // Mesma altura do track
+        width: 40,
+        zIndex: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    checkeredLine: {
         position: 'absolute',
         right: 0,
-        top: 0,
+        width: 30,
+        height: '100%', // Usar 100% para evitar desalinhamento se a pista mudar de tamanho
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        zIndex: 1,
+        opacity: 0.8,
+        overflow: 'hidden', // Cortar excesso
+    },
+    finishLabelContainer: {
+        position: 'absolute',
+        right: -30,
         alignItems: 'center',
         zIndex: 10,
     },
@@ -286,41 +447,56 @@ const styles = StyleSheet.create({
         color: colors.white,
         fontWeight: typography.fontWeight.bold,
         marginTop: 4,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        paddingHorizontal: 4,
+        borderRadius: 4,
     },
-    progressMarkers: {
-        position: 'absolute',
-        top: 60,
-        left: 80,
-        width: TRACK_WIDTH - 100,
-        height: 600,
-    },
-    marker: {
-        position: 'absolute',
-        alignItems: 'center',
-    },
-    markerLine: {
-        width: 2,
-        height: 600,
-        backgroundColor: 'rgba(255,255,255,0.1)',
-    },
-    markerText: {
-        fontSize: typography.fontSize.xs,
-        color: 'rgba(255,255,255,0.5)',
-        marginTop: 4,
-    },
+    // Removidos progressMarkers, marker, markerLine, markerText
     track: {
         marginTop: 80,
         marginLeft: 80,
         height: 600,
         position: 'relative',
+        backgroundColor: '#2d3748',
+        borderRadius: borderRadius.lg,
+        overflow: 'hidden',
+        borderWidth: 4,
+        borderColor: '#4a5568',
+    },
+    asphaltSurface: {
+        ...StyleSheet.absoluteFillObject,
+        opacity: 1, // Aumentado para ver melhor o asfalto escuro
+    },
+    laneDivider: {
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        height: 2,
+        backgroundColor: 'rgba(255,255,255,0.2)', // Levemente mais visível
+        borderStyle: 'dashed',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
+    },
+    gridSlot: {
+        position: 'absolute',
+        width: 80,
+        height: 70,
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.3)',
+        borderRadius: 4,
+        transform: [{ skewX: '-20deg' }], // Efeito de perspectiva no chão
+    },
+    trackArrow: {
+        position: 'absolute',
+        flexDirection: 'row',
+        transform: [{ scaleX: 1.5 }], // Esticar horizontalmente
     },
     carLane: {
         position: 'absolute',
         left: 0,
-        width: TRACK_WIDTH,
+        width: '100%', // Atualizado para usar 100% do container
         height: 100,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(255,255,255,0.1)',
+        justifyContent: 'center',
     },
     carContainer: {
         position: 'absolute',
@@ -380,6 +556,7 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.sm,
         color: 'rgba(255,255,255,0.8)',
         fontWeight: typography.fontWeight.semibold,
+        zIndex: 10, // Garantir visibilidade
     },
     emptyTrack: {
         flex: 1,
@@ -391,12 +568,15 @@ const styles = StyleSheet.create({
         color: 'rgba(255,255,255,0.5)',
         marginTop: spacing.md,
     },
+    // Sidebar styles
     scoreboard: {
+        flex: 1,
         backgroundColor: 'rgba(0,0,0,0.4)',
         padding: spacing.md,
         borderRadius: borderRadius.lg,
         borderWidth: 1,
         borderColor: 'rgba(255,255,255,0.3)',
+        overflow: 'hidden', // Contain scrolling
     },
     scoreboardTitle: {
         fontSize: typography.fontSize.lg,
@@ -404,23 +584,33 @@ const styles = StyleSheet.create({
         color: colors.white,
         marginBottom: spacing.sm,
         textAlign: 'center',
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(255,255,255,0.1)',
+        paddingBottom: spacing.sm,
+    },
+    scoreboardList: {
+        flex: 1,
     },
     scoreItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: spacing.xs,
+        paddingVertical: spacing.sm,
         gap: spacing.sm,
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(255,255,255,0.05)',
     },
     topThreeScore: {
         backgroundColor: 'rgba(255,215,0,0.15)',
         paddingHorizontal: spacing.sm,
         borderRadius: borderRadius.md,
+        marginHorizontal: -spacing.xs, // Expand background slightly
     },
     scorePosition: {
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.bold,
         color: colors.white,
-        width: 40,
+        width: 30, // Reduzido
+        textAlign: 'center',
     },
     scoreName: {
         flex: 1,
@@ -431,5 +621,7 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.semibold,
         color: '#10b981',
+        minWidth: 50,
+        textAlign: 'right',
     },
 });

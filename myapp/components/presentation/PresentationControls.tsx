@@ -10,6 +10,8 @@ interface Props {
     onEnd: () => void;
 }
 
+//export default function PresentationControls({ code, onEnd }: Props) {
+//const presentationURL = `https://ativa-una.vercel.app/presentation?code=${code}`;
 export default function PresentationControls({ code, onEnd }: Props) {
     // Buscar URL base do .env (você pode trocar entre localhost e vercel.app de lá)
     const baseURL = process.env.EXPO_PUBLIC_PRESENTATION_BASE_URL || 'http://localhost:8081';
