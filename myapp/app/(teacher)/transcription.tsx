@@ -848,6 +848,33 @@ export default function TranscriptionScreen() {
         }
 
         setIsGenerating(true);
+        setCurrentActivity(null); // RESET: Força limpeza do ID anterior para evitar reuso
+        setGeneratedQuiz(null); // Opcional: limpa visualização anterior
+        // *** INTERCEPTOR: Comando "ENVIAR" direto (sem gerar novo) ***
+        // Se o usuário diz "Envie esse quiz", "Mande o resumo", etc.
+        // E já temos uma atividade na tela (currentActivity)
+        if (command) {
+            const isSendIntent = /(envi|mand|aplic|lanç|disponibiliz)/i.test(command);
+            const isGenerateIntent = /(ger|cri|faz|mont)/i.test(command);
+
+            // Se quer enviar, MAS NÃO quer gerar, E temos atividade salva
+            if (isSendIntent && !isGenerateIntent && currentActivity && currentActivity.status !== 'ended') {
+                console.log('[AI INTERCEPTOR] Comando de envio direto detectado:', command);
+                console.log('[AI INTERCEPTOR] Atividade atual:', currentActivity.id, currentActivity.title);
+
+                // Feedback visual
+                setFredCommand('Enviando atividade atual...');
+
+                // Simula delay de "processamento"
+                setTimeout(() => {
+                    performStartActivity(currentActivity.id, currentActivity.title || 'Atividade');
+                    setIsGenerating(false);
+                    setFredCommand(null);
+                }, 1000);
+
+                return; // INTERROMPE O FLUXO (Não chama N8N)
+            }
+        }
         // Não definimos displayMode ainda, esperamos a resposta
         try {
             // Forçar salvamento antes de gerar
@@ -1110,8 +1137,19 @@ export default function TranscriptionScreen() {
                 });
 
                 if (saveResult.success && saveResult.activity) {
-                    setCurrentActivity(saveResult.activity);
-                    console.log(`[AI] Atividade salva no backend: ${saveResult.activity.id}`);
+                    // *** NOVA LÓGICA: Auto-enviar quiz se o comando de voz pedir ***
+                    if (command && activityType === 'quiz') {
+                        const intentRegex = /(envi|mand|aplic|lanç|disponibiliz)/i;
+                        if (intentRegex.test(command)) {
+                            console.log('[AI AUTO-SEND] Intenção de envio detectada:', command);
+                            setTimeout(() => {
+                                performStartActivity(saveResult.activity!.id, title);
+                                setFredCommand('Enviando Quiz...');
+                                setTimeout(() => setFredCommand(null), 3000);
+                            }, 500);
+                        }
+                    }
+
                 } else {
                     console.error('[AI] Erro ao salvar atividade:', saveResult);
                     // Fallback visual (mas botões de edição falharão)
@@ -1156,6 +1194,8 @@ export default function TranscriptionScreen() {
             }
 
             console.log(`[AI] Atividade gerada: ${activityType}`);
+
+
 
         } catch (error: any) {
             console.error('Erro ao enviar para IA:', error);
