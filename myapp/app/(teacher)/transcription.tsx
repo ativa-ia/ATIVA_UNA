@@ -199,6 +199,9 @@ export default function TranscriptionScreen() {
     const pulseAnim = useRef(new Animated.Value(1)).current;
     const animationRef = useRef<Animated.CompositeAnimation | null>(null);
 
+    // FIX: Ref para garantir acesso à versão mais recente do handleSendToAI dentro do callback do SpeechRecognition
+    const handleSendToAIRef = useRef<any>(null);
+
     // Inicializar sessão
     useEffect(() => {
         initSession();
@@ -517,7 +520,9 @@ export default function TranscriptionScreen() {
 
                                         // Enviar para IA e limpar popup depois
                                         setTimeout(() => {
-                                            handleSendToAI(commandContent);
+                                            if (handleSendToAIRef.current) {
+                                                handleSendToAIRef.current(commandContent);
+                                            }
                                             // Limpar popup após um tempo se a IA não responder rápido
                                             setTimeout(() => setFredCommand(null), 4000);
                                         }, 100);
@@ -1364,7 +1369,13 @@ export default function TranscriptionScreen() {
             setDisplayMode('none');
         }
         setIsGenerating(false);
+        setIsGenerating(false);
     };
+
+    // FIX: Manter handleSendToAIRef atualizado
+    useEffect(() => {
+        handleSendToAIRef.current = handleSendToAI;
+    });
 
     // Excluir questão do quiz
     const handleDeleteQuestion = async (questionIndex: number) => {

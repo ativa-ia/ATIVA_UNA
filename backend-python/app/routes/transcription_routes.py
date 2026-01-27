@@ -9,6 +9,7 @@ from app.models.transcription_session import (
     LiveActivity,
     LiveActivityResponse
 )
+from app.models.presentation import PresentationSession
 from app.models.enrollment import Enrollment
 from app.models.subject import Subject
 from app.models.user import User
@@ -554,6 +555,49 @@ def broadcast_activity(current_user, activity_id):
     enrolled_count = Enrollment.query.filter_by(
         subject_id=activity.session.subject_id
     ).count()
+
+    # --- ATIVA-IA FIX: Sincronizar com a tela de apresentação ---
+    # Quando o professor dá "broadcast", deve aparecer na tela automaticamente
+    try:
+        presentation_session = PresentationSession.query.filter_by(
+            teacher_id=current_user.id,
+            status='active'
+        ).first()
+
+        if presentation_session:
+            # Preparar dados para o formato que a Presentation espera
+            content_type = activity.activity_type # 'quiz' or 'summary'
+            
+            # Ajuste de payload conforme presentation_routes espera
+            presentation_data = activity.content
+            if content_type == 'quiz':
+                 # Envia o objeto questions direto se estiver dentro de content
+                 if 'questions' in activity.content:
+                     presentation_data = activity.content # Já tem {questions: [...]}
+                 else:
+                     # Caso estrutura seja diferente, garantir formato esperado pelo frontend
+                     presentation_data = {'questions': activity.content} if isinstance(activity.content, list) else activity.content
+            
+            # Adicionar timestamp da atividade para forçar update
+            presentation_session.current_content = {
+                'type': content_type,
+                'data': presentation_data,
+                'timestamp': datetime.utcnow().isoformat(),
+                'activity_id': activity.id # Referência útil
+            }
+            db.session.commit()
+
+            # Emitir socket presentation
+            try:
+                from app.services.websocket_service import emit_presentation_content
+                emit_presentation_content(presentation_session.code, presentation_session.current_content)
+                print(f"[AUTO-SYNC] Atividade {activity.id} enviada para apresentação {presentation_session.code}")
+            except Exception as e:
+                print(f"[AUTO-SYNC] Erro socket: {e}")
+
+    except Exception as e:
+        print(f"[AUTO-SYNC] Falha ao sincronizar com apresentação: {e}")
+    # -------------------------------------------------------------
     
     return jsonify({
         'success': True,
@@ -590,6 +634,35 @@ def share_summary(current_user, activity_id):
     activity.starts_at = datetime.utcnow()
     
     db.session.commit()
+
+    # --- ATIVA-IA FIX: Sincronizar Resumo com a tela de apresentação ---
+    try:
+        presentation_session = PresentationSession.query.filter_by(
+            teacher_id=current_user.id,
+            status='active'
+        ).first()
+
+        if presentation_session:
+            # Atualizar presentation state
+            presentation_session.current_content = {
+                'type': 'summary',
+                'data': activity.content, # Esperado {summary_text: ...}
+                'timestamp': datetime.utcnow().isoformat(),
+                'activity_id': activity.id
+            }
+            db.session.commit()
+
+            # Emitir socket presentation
+            try:
+                from app.services.websocket_service import emit_presentation_content
+                emit_presentation_content(presentation_session.code, presentation_session.current_content)
+                print(f"[AUTO-SYNC] Resumo {activity.id} enviado para apresentação {presentation_session.code}")
+            except Exception as e:
+                print(f"[AUTO-SYNC] Erro socket: {e}")
+                
+    except Exception as e:
+        print(f"[AUTO-SYNC] Falha ao sincronizar resumo: {e}")
+    # -------------------------------------------------------------
     
     return jsonify({
         'success': True,

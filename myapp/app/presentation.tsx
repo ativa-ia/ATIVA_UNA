@@ -112,8 +112,43 @@ export default function PresentationScreen() {
 
     // ... (rest of code)
 
+    // Estado de interação do usuário (para autoplay)
+    const [hasInteracted, setHasInteracted] = useState(false);
+
+    const handleInteraction = () => {
+        setHasInteracted(true);
+    };
+
+    // ... (rest of code)
+
     // Renderizar conteúdo baseado no tipo
     const renderContent = () => {
+        // 0. Interaction Overlay (Force click for autoplay)
+        if (!hasInteracted && !loading && !error) {
+            return (
+                <View style={styles.overlayContainer}>
+                    <LinearGradient
+                        colors={['rgba(0,0,0,0.8)', 'rgba(0,0,0,0.9)']}
+                        style={StyleSheet.absoluteFill}
+                    />
+                    <View style={styles.overlayContent}>
+                        <MaterialIcons name="play-circle-outline" size={100} color={colors.white} />
+                        <Text style={styles.overlayTitle}>Clique para Iniciar</Text>
+                        <Text style={styles.overlaySubtitle}>Necessário para ativar o áudio</Text>
+
+                        <View style={styles.startButtonContainer}>
+                            <Text
+                                style={styles.startButton}
+                                onPress={handleInteraction}
+                            >
+                                INICIAR APRESENTAÇÃO
+                            </Text>
+                        </View>
+                    </View>
+                </View>
+            );
+        }
+
         // 1. Verificar se a sessão foi encerrada
         if (!sessionActive) {
             return (
@@ -364,6 +399,57 @@ const styles = StyleSheet.create({
     errorText: {
         fontSize: typography.fontSize.xl,
         color: colors.error,
+        textAlign: 'center',
+    },
+
+    // Overlay Styles
+    overlayContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 999,
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+    },
+    overlayContent: {
+        alignItems: 'center',
+        padding: spacing.xl,
+    },
+    overlayTitle: {
+        fontSize: typography.fontSize['4xl'],
+        fontWeight: typography.fontWeight.bold,
+        color: colors.white,
+        marginTop: spacing.lg,
+        fontFamily: typography.fontFamily.display,
+        textAlign: 'center',
+    },
+    overlaySubtitle: {
+        fontSize: typography.fontSize.xl,
+        color: colors.white,
+        opacity: 0.8,
+        marginTop: spacing.sm,
+        marginBottom: spacing['2xl'],
+        textAlign: 'center',
+    },
+    startButtonContainer: {
+        backgroundColor: colors.primary,
+        borderRadius: 50,
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.xl,
+        elevation: 10,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.5,
+        shadowRadius: 12,
+    },
+    startButton: {
+        color: colors.white,
+        fontWeight: typography.fontWeight.bold,
+        fontSize: typography.fontSize.xl,
+        letterSpacing: 1,
         textAlign: 'center',
     },
 });
