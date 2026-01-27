@@ -10,7 +10,7 @@ interface Props {
         caption?: string;
     };
     controlState?: {
-        command: 'play' | 'pause' | 'seek';
+        command: 'play' | 'pause' | 'seek' | 'mute' | 'unmute' | 'seek_relative';
         value?: number;
         timestamp: number;
     };
@@ -46,6 +46,29 @@ export default function MediaSlide({ type, data, controlState }: Props) {
                     // Seek continua imperativo pois não é um "estado" contínuo
                     if (value !== undefined && playerControlRef.current) {
                         playerControlRef.current.seekTo(value);
+                    }
+                    break;
+                case 'mute':
+                    if (playerControlRef.current) playerControlRef.current.mute();
+                    break;
+                case 'unmute':
+                    if (playerControlRef.current) playerControlRef.current.unMute();
+                    break;
+                case 'seek_relative':
+                    if (value !== undefined && playerControlRef.current) {
+                        // Obter tempo atual e somar/subtrair
+                        try {
+                            const currentTime = playerControlRef.current.getCurrentTime();
+                            // Promise ou valor direto? A lib geralmente retorna promise se for bridge, mas aqui parece direto
+                            // Se for promise, precisaria de async/await, mas useEffect não é async.
+                            // Assumindo síncrono ou promise handled
+                            Promise.resolve(currentTime).then((t: number) => {
+                                const newTime = Math.max(0, t + value);
+                                playerControlRef.current.seekTo(newTime);
+                            });
+                        } catch (e) {
+                            console.warn("Error relative seek:", e);
+                        }
                     }
                     break;
             }

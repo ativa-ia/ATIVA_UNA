@@ -24,7 +24,7 @@ export default function PresentationScreen() {
     const [content, setContent] = useState<PresentationContent | null>(null);
     const [sessionActive, setSessionActive] = useState(true);
 
-    const { socket } = useWebSocket({ quizId: null, enabled: false });
+    const { socket } = useWebSocket({ quizId: null, enabled: true });
 
     // Carregar conteúdo inicial
     useEffect(() => {

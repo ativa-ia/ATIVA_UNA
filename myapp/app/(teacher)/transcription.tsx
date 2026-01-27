@@ -950,6 +950,114 @@ export default function TranscriptionScreen() {
             const isSendIntent = /(envi|mand|aplic|lanç|disponibiliz)/i.test(lowerCmd);
             const isGenerateIntent = /(ger|cri|faz|mont)/i.test(lowerCmd);
 
+            // 0.1 Controle de Vídeo (Mute/Unmute/Restart) - Prioridade sobre Play/Pause
+            // Regex melhorado para MUTE: sem som, mudo, silenciar, tira o som
+            if (/(sem.*som|mudo|silenci(ar|o)|cala.*boca|tira.*som|desliga.*som)/i.test(lowerCmd)) {
+                console.log('[AI INTERCEPTOR] Video Mute Command');
+                if (presentationCodeRef.current) {
+                    controlPresentationVideo(presentationCodeRef.current, 'mute');
+                    setFredCommand('Vídeo no mudo...');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                }
+            }
+
+            // Regex melhorado para UNMUTE: com som, ativar som, ligar som, volta o som, aumenta o som
+            if (/(com.*som|ativa(r?|ndo).*som|ligar.*som|voltar.*som|fala.*fred|bota.*som|aumenta.*som)/i.test(lowerCmd)) {
+                console.log('[AI INTERCEPTOR] Video Unmute Command');
+                if (presentationCodeRef.current) {
+                    controlPresentationVideo(presentationCodeRef.current, 'unmute');
+                    setFredCommand('Ativando som...');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                }
+            }
+
+            // SKIP FORWARD (Pular/Avançar)
+            // Ex: "Pular 10 segundos", "Avançar 30 segundos", "Vai 15 pra frente"
+            const skipMatch = lowerCmd.match(/(pular|avançar|frente|adiantar)\s+(\d+)/i);
+            if (skipMatch) {
+                const seconds = parseInt(skipMatch[2], 10);
+                if (!isNaN(seconds)) {
+                    console.log(`[AI INTERCEPTOR] Video Skip Command: +${seconds}s`);
+                    if (presentationCodeRef.current) {
+                        controlPresentationVideo(presentationCodeRef.current, 'seek_relative', seconds);
+                        setFredCommand(`Avançando ${seconds}s...`);
+                        setTimeout(() => setFredCommand(null), 3000);
+                        setIsGenerating(false);
+                        return;
+                    }
+                }
+            }
+
+            // REWIND (Voltar/Retroceder)
+            // Ex: "Voltar 10 segundos", "Retroceder 20", "Volta 5"
+            const rewindMatch = lowerCmd.match(/(voltar|retroceder|trás|atrás|recuar)\s+(\d+)/i);
+            if (rewindMatch) {
+                const seconds = parseInt(rewindMatch[2], 10);
+                if (!isNaN(seconds)) {
+                    console.log(`[AI INTERCEPTOR] Video Rewind Command: -${seconds}s`);
+                    if (presentationCodeRef.current) {
+                        controlPresentationVideo(presentationCodeRef.current, 'seek_relative', -seconds);
+                        setFredCommand(`Voltando ${seconds}s...`);
+                        setTimeout(() => setFredCommand(null), 3000);
+                        setIsGenerating(false);
+                        return;
+                    }
+                }
+            }
+
+            // Regex melhorado para RESTART: reiniciar, resetar, do inicio, voltar tudo, começar de novo
+            if (/(reinicia(r?|l)|reset(ar?|e)|come[çc]ar.*(denovo|de.*novo)|do.*in[íi]cio|volta(r?|e).*tudo|(re?)come[çc]a)/i.test(lowerCmd)) {
+                console.log('[AI INTERCEPTOR] Video Restart Command');
+                if (presentationCodeRef.current) {
+                    controlPresentationVideo(presentationCodeRef.current, 'seek', 0);
+                    // Pequeno delay para garantir que o seek processe antes do play (se necessário)
+                    setTimeout(() => {
+                        controlPresentationVideo(presentationCodeRef.current!, 'play');
+                    }, 100);
+
+                    setFredCommand('Reiniciando vídeo...');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                }
+            }
+
+            // 0.2 Controle de Vídeo (Play/Pause)
+            // Regex melhorado para variações: continua/continuar/continue, inicia/iniciar, toca/tocar, video/vídeo
+            if (/(play|tocar?|continu(ar?|e)|inici(ar?|e)|retom(ar?|e)).*v[íi]deo/i.test(lowerCmd) || /\bplay\b/i.test(lowerCmd)) {
+                console.log('[AI INTERCEPTOR] Video Play Command');
+                if (presentationCodeRef.current) {
+                    controlPresentationVideo(presentationCodeRef.current, 'play');
+                    setFredCommand('Iniciando vídeo...');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                } else {
+                    setFredCommand('Sem apresentação ativa');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    return;
+                }
+            }
+
+            if (/(paus(ar?|e)|parar?|trav(ar?|e)).*v[íi]deo/i.test(lowerCmd) || /\bpause\b/i.test(lowerCmd)) {
+                console.log('[AI INTERCEPTOR] Video Pause Command');
+                if (presentationCodeRef.current) {
+                    controlPresentationVideo(presentationCodeRef.current, 'pause');
+                    setFredCommand('Pausando vídeo...');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                } else {
+                    setFredCommand('Sem apresentação ativa');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    return;
+                }
+            }
+
             // 0. Enviar para APRESENTAÇÃO (Tela/Projetor)
             if (/(apresent|projet|tel|mostr.*tel)/i.test(lowerCmd)) {
                 console.log('[AI INTERCEPTOR] Comando de apresentação detectado');

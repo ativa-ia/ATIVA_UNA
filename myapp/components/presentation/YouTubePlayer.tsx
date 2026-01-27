@@ -98,7 +98,7 @@ export default function YouTubePlayer({ videoId, playing, onReady, onStateChange
                                         }
                                     }
                                 }, 300); // Dá um tempo para os eventos do hack dispararem
-                            }, 1000);
+                            }, 500);
                         }
                     },
                 },
@@ -113,7 +113,9 @@ export default function YouTubePlayer({ videoId, playing, onReady, onStateChange
                 play: () => playerRef.current.playVideo(),
                 pause: () => playerRef.current.pauseVideo(),
                 seekTo: (seconds: number) => playerRef.current.seekTo(seconds, true),
-                unMute: () => playerRef.current.unMute(), // Expor unMute
+                unMute: () => playerRef.current.unMute(),
+                mute: () => playerRef.current.mute(),
+                getCurrentTime: () => playerRef.current.getCurrentTime(),
             };
         }
     }, [isReady, controlRef]);
