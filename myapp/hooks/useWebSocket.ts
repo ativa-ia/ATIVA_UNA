@@ -30,7 +30,7 @@ export function useWebSocket({ quizId, enabled = true }: UseWebSocketOptions) {
     const socketRef = useRef<Socket | null>(null);
 
     useEffect(() => {
-        if (!enabled || !quizId) {
+        if (!enabled) {
             return;
         }
 
@@ -51,14 +51,22 @@ export function useWebSocket({ quizId, enabled = true }: UseWebSocketOptions) {
             console.log('[WebSocket] ========================================');
             setIsConnected(true);
 
-            // Entrar na room do quiz
-            console.log('[WebSocket] Tentando entrar na room do quiz:', quizId);
-            socket.emit('join_quiz', { quiz_id: quizId });
+            // Entrar na room do quiz (se houver ID)
+            if (quizId) {
+                console.log('[WebSocket] Tentando entrar na room do quiz:', quizId);
+                socket.emit('join_quiz', { quiz_id: quizId });
+            }
         });
 
-        socket.on('disconnect', () => {
+        socket.on('connect_error', (err) => {
+            console.error('[WebSocket] Erro de conexão:', err.message);
+            console.log('[WebSocket] Detalhes:', err);
+        });
+
+        socket.on('disconnect', (reason) => {
             console.log('[WebSocket] ========================================');
             console.log('[WebSocket] DESCONECTADO DO SERVIDOR');
+            console.log('[WebSocket] Razão:', reason);
             console.log('[WebSocket] ========================================');
             setIsConnected(false);
         });
@@ -88,7 +96,9 @@ export function useWebSocket({ quizId, enabled = true }: UseWebSocketOptions) {
 
         return () => {
             if (socket) {
-                socket.emit('leave_quiz', { quiz_id: quizId });
+                if (quizId) {
+                    socket.emit('leave_quiz', { quiz_id: quizId });
+                }
                 socket.disconnect();
             }
         };

@@ -15,6 +15,7 @@ import QuizSlide from '@/components/presentation/QuizSlide';
 import PodiumDisplay from '@/components/quiz/PodiumDisplay';
 import MediaSlide from '@/components/presentation/MediaSlide';
 import LiveRankingSlide from '@/components/presentation/LiveRankingSlide';
+import DocumentSlide from '@/components/presentation/DocumentSlide';
 
 export default function PresentationScreen() {
     const { code } = useLocalSearchParams<{ code: string }>();
@@ -23,7 +24,7 @@ export default function PresentationScreen() {
     const [content, setContent] = useState<PresentationContent | null>(null);
     const [sessionActive, setSessionActive] = useState(true);
 
-    const { socket } = useWebSocket({ quizId: null, enabled: false });
+    const { socket } = useWebSocket({ quizId: null, enabled: true });
 
     // Carregar conteúdo inicial
     useEffect(() => {
@@ -55,6 +56,9 @@ export default function PresentationScreen() {
         }
     };
 
+    // Estado de controle de vídeo
+    const [videoControl, setVideoControl] = useState<{ command: 'play' | 'pause' | 'seek', value?: number, timestamp: number } | undefined>(undefined);
+
     // WebSocket - Entrar na sala
     useEffect(() => {
         if (socket && code) {
@@ -68,6 +72,16 @@ export default function PresentationScreen() {
                 setContent({ type: 'blank', data: {}, timestamp: new Date().toISOString() });
             });
 
+            // Listen for Video Controls
+            socket.on('video_control', (data: any) => {
+                console.log('[Presentation] Video Control Received:', data);
+                setVideoControl({
+                    command: data.command,
+                    value: data.value,
+                    timestamp: Date.now() // Force update even if command is same
+                });
+            });
+
             socket.on('presentation_ended', () => {
                 setSessionActive(false);
             });
@@ -77,6 +91,7 @@ export default function PresentationScreen() {
                 socket.off('presentation_content');
                 socket.off('presentation_clear');
                 socket.off('presentation_ended');
+                socket.off('video_control');
             };
         }
     }, [socket, code]);
@@ -95,68 +110,58 @@ export default function PresentationScreen() {
         return () => clearInterval(interval);
     }, [socket, code, sessionActive]);
 
-    if (loading) {
-        return (
-            <LinearGradient
-                colors={['#0f172a', '#1e293b', '#334155']}
-                style={styles.gradientContainer}
-            >
-                <View style={styles.loadingContent}>
-                    <View style={styles.iconContainer}>
-                        <MaterialIcons name="cast-connected" size={64} color={colors.primary} />
-                    </View>
-                    <ActivityIndicator size="large" color={colors.primary} style={styles.spinner} />
-                    <Text style={styles.loadingText}>Conectando à apresentação</Text>
-                    <View style={styles.dotsContainer}>
-                        <View style={[styles.dot, styles.dotPulse1]} />
-                        <View style={[styles.dot, styles.dotPulse2]} />
-                        <View style={[styles.dot, styles.dotPulse3]} />
-                    </View>
-                </View>
-            </LinearGradient>
-        );
-    }
+    // ... (rest of code)
 
-    if (error) {
-        return (
-            <LinearGradient
-                colors={['#450a0a', '#7f1d1d', '#991b1b']}
-                style={styles.gradientContainer}
-            >
-                <View style={styles.errorContent}>
-                    <View style={styles.errorIconContainer}>
-                        <MaterialIcons name="error-outline" size={80} color={colors.error} />
-                    </View>
-                    <Text style={styles.errorTitle}>Erro de Conexão</Text>
-                    <Text style={styles.errorMessage}>{error}</Text>
-                    <View style={styles.codeBox}>
-                        <Text style={styles.codeLabel}>Código fornecido:</Text>
-                        <Text style={styles.codeValue}>{code}</Text>
-                    </View>
-                </View>
-            </LinearGradient>
-        );
-    }
+    // Estado de interação do usuário (para autoplay)
+    const [hasInteracted, setHasInteracted] = useState(false);
 
-    if (!sessionActive) {
-        return (
-            <LinearGradient
-                colors={['#1e1b4b', '#312e81', '#3730a3']}
-                style={styles.gradientContainer}
-            >
-                <View style={styles.endedContent}>
-                    <View style={styles.endedIconContainer}>
-                        <MaterialIcons name="check-circle" size={80} color={colors.success} />
-                    </View>
-                    <Text style={styles.endedTitle}>Apresentação Encerrada</Text>
-                    <Text style={styles.endedSubtitle}>Obrigado por participar!</Text>
-                </View>
-            </LinearGradient>
-        );
-    }
+    const handleInteraction = () => {
+        setHasInteracted(true);
+    };
+
+    // ... (rest of code)
 
     // Renderizar conteúdo baseado no tipo
     const renderContent = () => {
+        // 0. Interaction Overlay (Force click for autoplay)
+        if (!hasInteracted && !loading && !error) {
+            return (
+                <View style={styles.overlayContainer}>
+                    <LinearGradient
+                        colors={['rgba(0,0,0,0.8)', 'rgba(0,0,0,0.9)']}
+                        style={StyleSheet.absoluteFill}
+                    />
+                    <View style={styles.overlayContent}>
+                        <MaterialIcons name="play-circle-outline" size={100} color={colors.white} />
+                        <Text style={styles.overlayTitle}>Clique para Iniciar</Text>
+                        <Text style={styles.overlaySubtitle}>Necessário para ativar o áudio</Text>
+
+                        <View style={styles.startButtonContainer}>
+                            <Text
+                                style={styles.startButton}
+                                onPress={handleInteraction}
+                            >
+                                INICIAR APRESENTAÇÃO
+                            </Text>
+                        </View>
+                    </View>
+                </View>
+            );
+        }
+
+        // 1. Verificar se a sessão foi encerrada
+        if (!sessionActive) {
+            return (
+                <View style={styles.endedContent}>
+                    <View style={styles.endedIconContainer}>
+                        <MaterialIcons name="cancel-presentation" size={80} color={colors.white} />
+                    </View>
+                    <Text style={styles.endedTitle}>Apresentação Encerrada</Text>
+                    <Text style={styles.endedSubtitle}>O professor finalizou esta sessão.</Text>
+                </View>
+            );
+        }
+
         if (!content || content.type === 'blank') {
             return (
                 <LinearGradient
@@ -190,11 +195,14 @@ export default function PresentationScreen() {
                 return <LiveRankingSlide data={content.data} />;
             case 'image':
             case 'video':
-                return <MediaSlide type={content.type} data={content.data} />;
+                // Pass video control state
+                return <MediaSlide type={content.type} data={content.data} controlState={content.type === 'video' ? videoControl : undefined} />;
+            case 'document':
+                return <DocumentSlide data={content.data} />;
             default:
                 return (
                     <View style={styles.centerContainer}>
-                        <Text style={styles.errorText}>Tipo de conteúdo desconhecido</Text>
+                        <Text style={styles.errorText}>Tipo de conteúdo desconhecido: {content.type}</Text>
                     </View>
                 );
         }
@@ -391,6 +399,57 @@ const styles = StyleSheet.create({
     errorText: {
         fontSize: typography.fontSize.xl,
         color: colors.error,
+        textAlign: 'center',
+    },
+
+    // Overlay Styles
+    overlayContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 999,
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+    },
+    overlayContent: {
+        alignItems: 'center',
+        padding: spacing.xl,
+    },
+    overlayTitle: {
+        fontSize: typography.fontSize['4xl'],
+        fontWeight: typography.fontWeight.bold,
+        color: colors.white,
+        marginTop: spacing.lg,
+        fontFamily: typography.fontFamily.display,
+        textAlign: 'center',
+    },
+    overlaySubtitle: {
+        fontSize: typography.fontSize.xl,
+        color: colors.white,
+        opacity: 0.8,
+        marginTop: spacing.sm,
+        marginBottom: spacing['2xl'],
+        textAlign: 'center',
+    },
+    startButtonContainer: {
+        backgroundColor: colors.primary,
+        borderRadius: 50,
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.xl,
+        elevation: 10,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.5,
+        shadowRadius: 12,
+    },
+    startButton: {
+        color: colors.white,
+        fontWeight: typography.fontWeight.bold,
+        fontSize: typography.fontSize.xl,
+        letterSpacing: 1,
         textAlign: 'center',
     },
 });

@@ -79,6 +79,39 @@ interface RaceTrackProps {
     isTop3: boolean;
 }
 
+function ProgressBarShine() {
+    const shineAnim = useRef(new Animated.Value(-100)).current;
+
+    useEffect(() => {
+        Animated.loop(
+            Animated.sequence([
+                Animated.timing(shineAnim, {
+                    toValue: 200, // Largura suficiente para cobrir
+                    duration: 1500,
+                    useNativeDriver: false, // Animando left/translateX dentro de view
+                }),
+                Animated.delay(1000),
+            ])
+        ).start();
+    }, []);
+
+    return (
+        <Animated.View
+            style={{
+                position: 'absolute',
+                top: 0,
+                bottom: 0,
+                width: 30,
+                backgroundColor: 'rgba(255,255,255,0.3)',
+                transform: [
+                    { translateX: shineAnim },
+                    { skewX: '-20deg' }
+                ]
+            }}
+        />
+    );
+}
+
 function RaceTrack({ student, maxPoints, isTop3 }: RaceTrackProps) {
     const progressAnim = useRef(new Animated.Value(0)).current;
     const progress = (student.points / maxPoints) * 100;
@@ -146,7 +179,9 @@ function RaceTrack({ student, maxPoints, isTop3 }: RaceTrackProps) {
                                 backgroundColor: isTop3 ? '#8b5cf6' : '#6366f1',
                             },
                         ]}
-                    />
+                    >
+                        <ProgressBarShine />
+                    </Animated.View>
                 </View>
                 <Text style={styles.pointsText}>{student.points} pts</Text>
             </View>
@@ -178,15 +213,18 @@ const styles = StyleSheet.create({
         elevation: 2,
     },
     statNumber: {
-        fontSize: typography.fontSize['2xl'],
-        fontWeight: typography.fontWeight.bold,
+        fontSize: 32, // Aumentado
+        fontWeight: '900', // Extra bold
         color: colors.primary,
         marginTop: spacing.xs,
+        letterSpacing: -1,
     },
     statLabel: {
         fontSize: typography.fontSize.xs,
         color: colors.textSecondary,
         marginTop: 4,
+        fontWeight: '600',
+        textTransform: 'uppercase',
     },
     raceContainer: {
         gap: spacing.sm,
@@ -241,14 +279,14 @@ const styles = StyleSheet.create({
         marginTop: 2,
     },
     trackRight: {
-        width: 120,
+        width: 140, // Aumentado um pouco
         alignItems: 'flex-end',
     },
     progressBar: {
         width: '100%',
-        height: 8,
+        height: 12, // Um pouco mais grossa
         backgroundColor: colors.slate100,
-        borderRadius: 4,
+        borderRadius: 6,
         overflow: 'hidden',
         marginBottom: 4,
         borderWidth: 1,
@@ -256,12 +294,14 @@ const styles = StyleSheet.create({
     },
     progressFill: {
         height: '100%',
-        borderRadius: 4,
+        borderRadius: 6,
+        overflow: 'hidden', // Importante para o shine
     },
     pointsText: {
-        fontSize: typography.fontSize.sm,
-        fontWeight: typography.fontWeight.bold,
+        fontSize: typography.fontSize.base, // Aumentado
+        fontWeight: '800', // Mais bold
         color: colors.primary,
+        letterSpacing: -0.5,
     },
     waitingSection: {
         padding: spacing.lg,

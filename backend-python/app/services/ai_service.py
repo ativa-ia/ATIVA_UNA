@@ -7,29 +7,49 @@ from dotenv import load_dotenv
 import openai
 from app import db
 from app.models.ai_session import AISession, AIMessage
+from app.models.system_setting import SystemSetting
 from datetime import datetime
 import json
 
 # Carregar .env
 load_dotenv()
 
-# Configurar API key
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
-client = None
+# Configuração Padrão (Fallback)
+DEFAULT_MODEL = "gpt-4o-mini"
 
-if OPENAI_API_KEY:
-    client = openai.OpenAI(api_key=OPENAI_API_KEY)
+def get_ai_config():
+    """Retorna a configuração atual de IA (Banco de Dados ou Env)"""
+    # Tentar buscar do banco
+    try:
+        api_key_setting = SystemSetting.query.get('openai_api_key')
+        model_setting = SystemSetting.query.get('ai_model')
+        
+        api_key = api_key_setting.value if api_key_setting else os.getenv('OPENAI_API_KEY', '')
+        model = model_setting.value if model_setting else DEFAULT_MODEL
+        
+        return api_key, model
+    except Exception:
+        # Fallback caso dê erro no banco (ex: durante migrações)
+        return os.getenv('OPENAI_API_KEY', ''), DEFAULT_MODEL
 
-MODEL_NAME = "gpt-4o-mini" # Modelo rápido e eficiente
+def get_client():
+    """Retorna uma instância do client OpenAI configurada"""
+    api_key, _ = get_ai_config()
+    if not api_key:
+        return None
+    return openai.OpenAI(api_key=api_key)
 
 def generate_content_with_prompt(system_instruction: str, prompt: str, json_mode: bool = False) -> str:
     """Gera conteúdo genérico com prompts personalizados via OpenAI"""
+    api_key, model_name = get_ai_config()
+    client = get_client()
+    
     if not client:
         return "Erro: OPENAI_API_KEY não configurada."
         
     try:
         kwargs = {
-            "model": MODEL_NAME,
+            "model": model_name,
             "messages": [
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": prompt}
@@ -50,6 +70,9 @@ def generate_summary(text: str, subject_name: str = "Aula") -> str:
     """
     Gera um resumo do texto transcrito usando OpenAI
     """
+    api_key, model_name = get_ai_config()
+    client = get_client()
+
     if not client:
         return "Erro: OPENAI_API_KEY não configurada."
     
@@ -98,7 +121,7 @@ Texto da Transcrição:
 Resumo:"""
         
         response = client.chat.completions.create(
-            model=MODEL_NAME,
+            model=model_name,
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": prompt}
@@ -116,6 +139,9 @@ def generate_quiz(text: str, subject_name: str = "Aula", num_questions: int = 20
     """
     Gera um quiz baseado no texto transcrito usando OpenAI
     """
+    api_key, model_name = get_ai_config()
+    client = get_client()
+
     if not client:
         return "Erro: OPENAI_API_KEY não configurada."
     
@@ -158,7 +184,7 @@ TRANSCRIÇÃO DA AULA:
 Retorne apenas o JSON com as questões sobre o conteúdo educacional."""
 
         response = client.chat.completions.create(
-            model=MODEL_NAME,
+            model=model_name,
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": prompt}
@@ -177,6 +203,9 @@ def format_to_quiz_json(text: str) -> str:
     """
     Formata um texto que JÁ É um quiz para JSON, sem alterar o conteúdo.
     """
+    api_key, model_name = get_ai_config()
+    client = get_client()
+
     if not client:
         return "Erro: OPENAI_API_KEY não configurada."
     
@@ -208,7 +237,7 @@ Formato de Saída (JSON puro):
 JSON:"""
         
         response = client.chat.completions.create(
-            model=MODEL_NAME,
+            model=model_name,
             messages=[
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": prompt}
@@ -244,7 +273,9 @@ def create_or_get_session(teacher_id: int, subject_id: int) -> AISession:
 
 def _prepare_ai_context(teacher_id: int, subject_id: int):
     """Prepara a sessão e o contexto para o chat"""
-    if not OPENAI_API_KEY:
+    api_key, _ = get_ai_config()
+    
+    if not api_key:
         raise Exception("API Key não configurada")
         
     session = create_or_get_session(teacher_id, subject_id)
@@ -297,6 +328,9 @@ ATENÇÃO - REGRA CRÍTICA:
 
 def chat_with_ai(teacher_id: int, subject_id: int, message: str) -> str:
     """Processa mensagem no chat e retorna resposta completa usando OpenAI"""
+    api_key, model_name = get_ai_config()
+    client = get_client()
+
     try:
         from app.models.ai_session import AIMessage
         session, messages, context_files = _prepare_ai_context(teacher_id, subject_id)
@@ -319,7 +353,7 @@ def chat_with_ai(teacher_id: int, subject_id: int, message: str) -> str:
         messages.append({"role": "user", "content": message_to_send})
         
         response = client.chat.completions.create(
-            model=MODEL_NAME,
+            model=model_name,
             messages=messages,
             temperature=0.7
         )
@@ -339,6 +373,9 @@ chat_with_gemini = chat_with_ai
 
 def chat_stream(teacher_id: int, subject_id: int, message: str):
     """Gera resposta em stream usando OpenAI"""
+    api_key, model_name = get_ai_config()
+    client = get_client()
+
     try:
         from app.models.ai_session import AIMessage
         session, messages, context_files = _prepare_ai_context(teacher_id, subject_id)
@@ -361,7 +398,7 @@ def chat_stream(teacher_id: int, subject_id: int, message: str):
         messages.append({"role": "user", "content": message_to_send})
 
         response = client.chat.completions.create(
-            model=MODEL_NAME,
+            model=model_name,
             messages=messages,
             temperature=0.7,
             stream=True
@@ -388,6 +425,9 @@ def generate_study_questions(text: str) -> list[str]:
     """
     Gera 3 sugestões de perguntas baseadas no texto fornecido.
     """
+    api_key, model_name = get_ai_config()
+    client = get_client()
+    
     if not client:
         return []
 
@@ -401,7 +441,7 @@ Texto:
 Perguntas:"""
         
         response = client.chat.completions.create(
-            model=MODEL_NAME,
+            model=model_name,
             messages=[
                 {"role": "user", "content": prompt}
             ],

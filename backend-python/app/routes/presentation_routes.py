@@ -121,7 +121,7 @@ def send_content(current_user, code):
     content_data = data.get('data', {})
     
     # Validar tipo de conteúdo
-    valid_types = ['summary', 'quiz', 'podium', 'ranking', 'image', 'video', 'question', 'blank']
+    valid_types = ['summary', 'quiz', 'podium', 'ranking', 'image', 'video', 'question', 'document', 'blank']
     if content_type not in valid_types:
         return jsonify({'success': False, 'error': 'Tipo de conteúdo inválido'}), 400
     
@@ -232,9 +232,54 @@ def get_active_presentation(current_user):
             'active': False,
             'session': None
         })
-    
+
     return jsonify({
         'success': True,
         'active': True,
-        'session': session.to_dict()
+        'session': session.to_dict(),
+        'code': session.code,
+        'url': f'http://localhost:8081/presentation?code={session.code}'
     })
+    
+
+@presentation_bp.route('/<code_or_id>/control', methods=['POST'])
+@token_required
+def control_content(current_user, code_or_id):
+    """
+    Controla o conteúdo da apresentação (ex: Play/Pause vídeo)
+    """
+    data = request.json
+    command = data.get('command')
+    value = data.get('value')
+    
+    if not command:
+        return jsonify({'error': 'Command invalid'}), 400
+        
+    session = None
+    if code_or_id.isdigit() and len(code_or_id) < 5: 
+        session = PresentationSession.query.get(int(code_or_id))
+    else:
+        session = PresentationSession.query.filter_by(code=code_or_id, status='active').first()
+        
+    if not session:
+        return jsonify({'error': 'Presentation session not found'}), 404
+    
+    # Validation (optional: check ownership)
+    if session.teacher_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+        
+    # Emitir evento socket direto
+    room = f'presentation_{session.code}'
+    
+    try:
+        from app.services.websocket_service import socketio
+        socketio.emit('video_control', {
+            'command': command,
+            'value': value
+        }, room=room)
+        logger.info(f"Comando de vídeo enviado para {room}: {command}")
+    except Exception as e:
+        logger.error(f"Erro ao emitir socket vídeo: {e}")
+        return jsonify({'error': str(e)}), 500
+    
+    return jsonify({'success': True, 'message': f'Command {command} sent'})
