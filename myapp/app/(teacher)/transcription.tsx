@@ -930,14 +930,8 @@ export default function TranscriptionScreen() {
         // Verificar se tem texto
         // Usar savedTextRef para evitar closure stale quando chamado via onresult
         const currentText = savedTextRef.current;
-        if (!currentText || currentText.trim().length === 0) {
-            if (Platform.OS === 'web') {
-                window.alert('Grave ou digite algum conteúdo antes de enviar para a IA.');
-            } else {
-                Alert.alert('Sem Texto', 'Grave ou digite algum conteúdo antes de enviar para a IA.');
-            }
-            return;
-        }
+        // Removed blocking check for empty text to allow voice commands with empty transcript
+
 
         setIsGenerating(true);
         // REMOVED EARLY RESET: setCurrentActivity(null); setGeneratedQuiz(null); -> Moved to after interceptors
@@ -1140,7 +1134,7 @@ export default function TranscriptionScreen() {
             console.log('[AI] Enviando texto para N8N...');
             // Envia APENAS o texto, sem instrução extra, conforme pedido
             // Agora enviando também classroom_id e comando
-            const n8nResponse = await processText(currentText, undefined, {
+            const n8nResponse = await processText(currentText && currentText.trim().length > 0 ? currentText : null, undefined, {
                 classroom_id: subjectName,
                 comando: command || null
             });

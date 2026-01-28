@@ -587,13 +587,12 @@ def broadcast_activity(current_user, activity_id):
             }
             db.session.commit()
 
-            # Emitir socket presentation
-            try:
-                from app.services.websocket_service import emit_presentation_content
-                emit_presentation_content(presentation_session.code, presentation_session.current_content)
-                print(f"[AUTO-SYNC] Atividade {activity.id} enviada para apresentação {presentation_session.code}")
-            except Exception as e:
-                print(f"[AUTO-SYNC] Erro socket: {e}")
+            # Polling: Polling detectará a mudança via timestamp
+            # try:
+            #     from app.services.websocket_service import emit_presentation_content
+            #     emit_presentation_content(presentation_session.code, presentation_session.current_content)
+            # except Exception as e:
+            #     pass
 
     except Exception as e:
         print(f"[AUTO-SYNC] Falha ao sincronizar com apresentação: {e}")
@@ -652,13 +651,12 @@ def share_summary(current_user, activity_id):
             }
             db.session.commit()
 
-            # Emitir socket presentation
-            try:
-                from app.services.websocket_service import emit_presentation_content
-                emit_presentation_content(presentation_session.code, presentation_session.current_content)
-                print(f"[AUTO-SYNC] Resumo {activity.id} enviado para apresentação {presentation_session.code}")
-            except Exception as e:
-                print(f"[AUTO-SYNC] Erro socket: {e}")
+            # Polling: Polling detectará a mudança via timestamp
+            # try:
+            #     from app.services.websocket_service import emit_presentation_content
+            #     emit_presentation_content(presentation_session.code, presentation_session.current_content)
+            # except Exception as e:
+            #     pass
                 
     except Exception as e:
         print(f"[AUTO-SYNC] Falha ao sincronizar resumo: {e}")
