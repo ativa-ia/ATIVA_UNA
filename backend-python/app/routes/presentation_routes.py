@@ -93,6 +93,30 @@ def get_presentation(code):
     })
 
 
+@presentation_bp.route('/<string:code>/status', methods=['GET'])
+def get_presentation_status(code):
+    """
+    Endpoint leve para Polling
+    Retorna apenas timestamp e tipo do conteúdo atual
+    """
+    session = PresentationSession.query.filter_by(code=code).first()
+    
+    if not session or session.status != 'active':
+        return jsonify({
+            'success': False,
+            'active': False
+        })
+    
+    current = session.current_content or {}
+    
+    return jsonify({
+        'success': True,
+        'active': True,
+        'timestamp': current.get('timestamp'),
+        'type': current.get('type')
+    })
+
+
 @presentation_bp.route('/<string:code>/send', methods=['POST'])
 @token_required
 def send_content(current_user, code):
@@ -134,12 +158,13 @@ def send_content(current_user, code):
     db.session.commit()
     
     # Emitir via WebSocket para todas as telas conectadas
-    try:
-        from app.services.websocket_service import emit_presentation_content
-        emit_presentation_content(code, session.current_content)
-        logger.info(f"Conteúdo enviado para apresentação {code}: {content_type}")
-    except Exception as e:
-        logger.error(f"Erro ao emitir WebSocket: {e}")
+    # (Removido para Polling Strategy)
+    # try:
+    #     from app.services.websocket_service import emit_presentation_content
+    #     emit_presentation_content(code, session.current_content)
+    #     logger.info(f"Conteúdo enviado para apresentação {code}: {content_type}")
+    # except Exception as e:
+    #     logger.error(f"Erro ao emitir WebSocket: {e}")
     
     return jsonify({
         'success': True,
@@ -171,11 +196,12 @@ def clear_presentation(current_user, code):
     db.session.commit()
     
     # Emitir via WebSocket
-    try:
-        from app.services.websocket_service import emit_presentation_clear
-        emit_presentation_clear(code)
-    except Exception as e:
-        logger.error(f"Erro ao emitir WebSocket: {e}")
+    # (Removido para Polling Strategy)
+    # try:
+    #     from app.services.websocket_service import emit_presentation_clear
+    #     emit_presentation_clear(code)
+    # except Exception as e:
+    #     logger.error(f"Erro ao emitir WebSocket: {e}")
     
     return jsonify({
         'success': True,
@@ -200,11 +226,12 @@ def end_presentation(current_user, code):
     session.end_session()
     
     # Emitir via WebSocket para desconectar telas
-    try:
-        from app.services.websocket_service import emit_presentation_ended
-        emit_presentation_ended(code)
-    except Exception as e:
-        logger.error(f"Erro ao emitir WebSocket: {e}")
+    # (Removido para Polling Strategy)
+    # try:
+    #     from app.services.websocket_service import emit_presentation_ended
+    #     emit_presentation_ended(code)
+    # except Exception as e:
+    #     logger.error(f"Erro ao emitir WebSocket: {e}")
     
     logger.info(f"Apresentação encerrada: {code}")
     
@@ -268,18 +295,27 @@ def control_content(current_user, code_or_id):
     if session.teacher_id != current_user.id:
         return jsonify({'error': 'Unauthorized'}), 403
         
-    # Emitir evento socket direto
-    room = f'presentation_{session.code}'
-    
-    try:
-        from app.services.websocket_service import socketio
-        socketio.emit('video_control', {
+    # Persistir estado do vídeo
+    if not session.current_content:
+        session.current_content = {}
+        
+    session.current_content.update({
+        'video_control': {
             'command': command,
-            'value': value
-        }, room=room)
-        logger.info(f"Comando de vídeo enviado para {room}: {command}")
-    except Exception as e:
-        logger.error(f"Erro ao emitir socket vídeo: {e}")
-        return jsonify({'error': str(e)}), 500
+            'value': value,
+        'timestamp': datetime.utcnow().isoformat()
+        }
+    })
     
-    return jsonify({'success': True, 'message': f'Command {command} sent'})
+    # IMPORTANTE: Atualizar timestamp principal para o Polling detectar mudança
+    session.current_content['timestamp'] = datetime.utcnow().isoformat()
+    
+    # Forçar detecção de mudança pelo SQLAlchemy (JSON mutable)
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(session, "current_content")
+    
+    db.session.commit()
+    
+    logger.info(f"Comando de vídeo persistido para {session.code}: {command}")
+    
+    return jsonify({'success': True, 'message': f'Command {command} saved'})
