@@ -122,7 +122,7 @@ export const endPresentation = async (code: string): Promise<{
 /**
  * Controlar vídeo da apresentação (Professor)
  */
-export const controlPresentationVideo = async (code: string, command: 'play' | 'pause' | 'seek', value?: number): Promise<{
+export const controlPresentationVideo = async (code: string, command: 'play' | 'pause' | 'seek' | 'mute' | 'unmute' | 'seek_relative', value?: number): Promise<{
     success: boolean;
     message?: string;
     error?: string;
