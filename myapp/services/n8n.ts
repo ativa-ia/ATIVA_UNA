@@ -8,10 +8,10 @@ if (!N8N_WEBHOOK_URL) {
 }
 
 // Generic text processing via N8N Webhook
-export const processText = async (text: string, instruction?: string, extraParams?: Record<string, any>) => {
+export const processText = async (text: string | null, instruction?: string, extraParams?: Record<string, any>) => {
     try {
-        const payload = instruction ? `${text}\n\n[INSTRUCTION]: ${instruction}` : text;
-        console.log('Sending text to N8N:', payload.substring(0, 50) + '...', 'Extra:', extraParams);
+        const payload = (text && instruction) ? `${text}\n\n[INSTRUCTION]: ${instruction}` : text;
+        console.log('Sending text to N8N:', (payload ? payload.substring(0, 50) : 'null') + '...', 'Extra:', extraParams);
 
         const response = await fetch(N8N_WEBHOOK_URL, {
             method: 'POST',
