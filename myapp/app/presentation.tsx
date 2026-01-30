@@ -4,7 +4,8 @@ import { useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import { getPresentation, PresentationContent } from '@/services/presentation';
-import { useWebSocket } from '@/hooks/useWebSocket';
+// import { useWebSocket } from '@/hooks/useWebSocket';
+import { usePresentationPolling } from '@/hooks/usePresentationPolling';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing } from '@/constants/spacing';
@@ -24,7 +25,10 @@ export default function PresentationScreen() {
     const [content, setContent] = useState<PresentationContent | null>(null);
     const [sessionActive, setSessionActive] = useState(true);
 
-    const { socket } = useWebSocket({ quizId: null, enabled: true });
+    const { content: polledContent, videoControl: polledVideoControl, sessionActive: isSessionActive } = usePresentationPolling({
+        code: code as string,
+        enabled: true
+    });
 
     // Carregar conteúdo inicial
     useEffect(() => {
@@ -60,55 +64,22 @@ export default function PresentationScreen() {
     const [videoControl, setVideoControl] = useState<{ command: 'play' | 'pause' | 'seek', value?: number, timestamp: number } | undefined>(undefined);
 
     // WebSocket - Entrar na sala
+    // Sincronizar estado com o polling
     useEffect(() => {
-        if (socket && code) {
-            socket.emit('join_presentation', { code });
-
-            socket.on('presentation_content', (newContent: PresentationContent) => {
-                setContent(newContent);
-            });
-
-            socket.on('presentation_clear', () => {
-                setContent({ type: 'blank', data: {}, timestamp: new Date().toISOString() });
-            });
-
-            // Listen for Video Controls
-            socket.on('video_control', (data: any) => {
-                console.log('[Presentation] Video Control Received:', data);
-                setVideoControl({
-                    command: data.command,
-                    value: data.value,
-                    timestamp: Date.now() // Force update even if command is same
-                });
-            });
-
-            socket.on('presentation_ended', () => {
-                setSessionActive(false);
-            });
-
-            return () => {
-                socket.emit('leave_presentation', { code });
-                socket.off('presentation_content');
-                socket.off('presentation_clear');
-                socket.off('presentation_ended');
-                socket.off('video_control');
-            };
+        if (polledContent) {
+            setContent(polledContent);
         }
-    }, [socket, code]);
 
-    // Polling como fallback
-    useEffect(() => {
-        const interval = setInterval(async () => {
-            if (!socket && code && sessionActive) {
-                const response = await getPresentation(code as string);
-                if (response.success && response.current_content) {
-                    setContent(response.current_content);
-                }
-            }
-        }, 3000);
+        if (polledVideoControl) {
+            setVideoControl(polledVideoControl);
+        }
 
-        return () => clearInterval(interval);
-    }, [socket, code, sessionActive]);
+        if (!isSessionActive) {
+            setSessionActive(false);
+        }
+    }, [polledContent, polledVideoControl, isSessionActive]);
+
+    // Polling handled by usePresentationPolling hook
 
     // ... (rest of code)
 

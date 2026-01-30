@@ -27,7 +27,7 @@ import TimeAnalysisDashboard from '@/components/quiz/TimeAnalysisDashboard';
 import QuestionDifficultyChart from '@/components/quiz/QuestionDifficultyChart';
 import ComparativeStatsPanel from '@/components/quiz/ComparativeStatsPanel';
 
-import { useWebSocket } from '@/hooks/useWebSocket';
+// import { useWebSocket } from '@/hooks/useWebSocket';
 import ConfirmationModal from '@/components/modals/ConfirmationModal';
 import { sendToPresentation, getActivePresentation } from '@/services/presentation';
 
@@ -59,11 +59,9 @@ export default function QuizResultsScreen() {
     const [presentationCode, setPresentationCode] = useState<string | null>(null);
 
 
-    // WebSocket para atualizações em tempo real
-    const { isConnected, ranking: wsRanking } = useWebSocket({
-        quizId: activityId > 0 ? activityId : quizId,
-        enabled: true
-    });
+    // WebSocket deprecated in favor of polling
+    const isConnected = true;
+    const wsRanking = null; // Removed socket ranking logic
 
     // Log connection status
     useEffect(() => {
@@ -73,29 +71,8 @@ export default function QuizResultsScreen() {
         console.log('[QUIZ-RESULTS] ========================================');
     }, [isConnected]);
 
-    // Atualizar ranking quando receber dados do WebSocket
-    useEffect(() => {
-        console.log('[QUIZ-RESULTS] ========================================');
-        console.log('[QUIZ-RESULTS] wsRanking mudou!');
-        console.log('[QUIZ-RESULTS] wsRanking:', wsRanking);
-
-        if (wsRanking && wsRanking.ranking) {
-            console.log('[QUIZ-RESULTS] ✅ Ranking recebido do WebSocket!');
-            console.log('[QUIZ-RESULTS] Número de alunos:', wsRanking.ranking.length);
-            console.log('[QUIZ-RESULTS] Dados:', wsRanking.ranking);
-
-            const updatedRanking = wsRanking.ranking.map((r: any) => ({
-                ...r,
-                status: 'submitted'
-            }));
-
-            console.log('[QUIZ-RESULTS] Atualizando state do ranking...');
-            setRanking(updatedRanking);
-        } else {
-            console.log('[QUIZ-RESULTS] ⚠️ wsRanking vazio ou sem ranking');
-        }
-        console.log('[QUIZ-RESULTS] ========================================');
-    }, [wsRanking]);
+    // WebSocket ranking logic removed
+    // useEffect(() => { ... }, [wsRanking]);
 
     // Fallback: Polling a cada 5s caso WebSocket não esteja funcionando
     useEffect(() => {
@@ -132,7 +109,7 @@ export default function QuizResultsScreen() {
                     console.log('[FALLBACK POLLING] Erro:', error);
                 }
             }
-        }, 5000);
+        }, 3000);
 
         return () => clearInterval(pollingRef);
     }, [quizId, activityId, showPodium]);

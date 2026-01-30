@@ -14,6 +14,11 @@ export interface PresentationContent {
     type: 'summary' | 'quiz' | 'podium' | 'ranking' | 'image' | 'video' | 'question' | 'document' | 'blank';
     data: any;
     timestamp: string;
+    video_control?: {
+        command: 'play' | 'pause' | 'seek' | 'mute' | 'unmute' | 'seek_relative';
+        value?: number;
+        timestamp: string;
+    };
 }
 
 /**

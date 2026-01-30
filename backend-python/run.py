@@ -1,10 +1,10 @@
 import os
-from app import create_app, socketio
+from app import create_app
 
 app = create_app()
 
 # Importar websocket handlers
-from app.services import websocket_service
+# from app.services import websocket_service
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 3000))
@@ -13,13 +13,11 @@ if __name__ == '__main__':
     print(f'>> http://localhost:{port}')
     print(f'>> WebSocket habilitado\n')
     
-    print(f'>> Mode: {socketio.server.async_mode}')
+    # print(f'>> Mode: {socketio.server.async_mode}')
 
-    socketio.run(
-        app,
+    app.run(
         host='0.0.0.0',
         port=port,
         debug=True,
-        use_reloader=False, # Reloader sometimes breaks socket connections in dev
-        allow_unsafe_werkzeug=True 
+        use_reloader=False 
     )
