@@ -10,7 +10,7 @@ interface Props {
         caption?: string;
     };
     controlState?: {
-        command: 'play' | 'pause' | 'seek' | 'mute' | 'unmute' | 'seek_relative';
+        command: 'play' | 'pause' | 'seek' | 'mute' | 'unmute' | 'seek_relative' | 'restart';
         value?: number;
         timestamp: number;
     };
@@ -69,6 +69,13 @@ export default function MediaSlide({ type, data, controlState }: Props) {
                         } catch (e) {
                             console.warn("Error relative seek:", e);
                         }
+                    }
+                    break;
+                case 'restart':
+                    if (playerControlRef.current) {
+                        playerControlRef.current.seekTo(0);
+                        playerControlRef.current.playVideo();
+                        setIsPlaying(true);
                     }
                     break;
             }

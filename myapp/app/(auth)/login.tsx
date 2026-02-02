@@ -6,6 +6,7 @@ import {
     ScrollView,
     SafeAreaView,
     ActivityIndicator,
+    TouchableOpacity,
 } from 'react-native';
 import { router } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -85,6 +86,12 @@ export default function LoginScreen() {
                 end={{ x: 1, y: 1 }}
             >
                 <SafeAreaView style={styles.safeArea}>
+                    <TouchableOpacity
+                        style={styles.castButton}
+                        onPress={() => router.push('/presentation')}
+                    >
+                        <MaterialIcons name="cast" size={24} color="rgba(255,255,255,0.7)" />
+                    </TouchableOpacity>
                     <ScrollView
                         contentContainerStyle={styles.contentContainer}
                         showsVerticalScrollIndicator={false}
@@ -239,5 +246,12 @@ const styles = StyleSheet.create({
         marginTop: spacing.xl,
         fontSize: 12,
         lineHeight: 18,
+    },
+    castButton: {
+        position: 'absolute',
+        top: spacing.md,
+        right: spacing.md,
+        padding: spacing.sm,
+        zIndex: 10,
     }
 });

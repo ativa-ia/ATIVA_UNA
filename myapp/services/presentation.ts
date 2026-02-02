@@ -15,7 +15,7 @@ export interface PresentationContent {
     data: any;
     timestamp: string;
     video_control?: {
-        command: 'play' | 'pause' | 'seek' | 'mute' | 'unmute' | 'seek_relative';
+        command: 'play' | 'pause' | 'seek' | 'mute' | 'unmute' | 'seek_relative' | 'restart';
         value?: number;
         timestamp: string;
     };
@@ -127,7 +127,7 @@ export const endPresentation = async (code: string): Promise<{
 /**
  * Controlar vídeo da apresentação (Professor)
  */
-export const controlPresentationVideo = async (code: string, command: 'play' | 'pause' | 'seek' | 'mute' | 'unmute' | 'seek_relative', value?: number): Promise<{
+export const controlPresentationVideo = async (code: string, command: 'play' | 'pause' | 'seek' | 'mute' | 'unmute' | 'seek_relative' | 'restart', value?: number): Promise<{
     success: boolean;
     message?: string;
     error?: string;
