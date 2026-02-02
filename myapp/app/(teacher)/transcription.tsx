@@ -52,7 +52,7 @@ import PresentationControls from '@/components/presentation/PresentationControls
 import { useRouter } from 'expo-router';
 import ConfirmationModal from '@/components/modals/ConfirmationModal';
 import InputModal from '@/components/modals/InputModal';
-import TutorialOverlay, { TargetLayout } from '@/components/tutorial/TutorialOverlay';
+// Tutorial removido - import TutorialOverlay
 
 /**
  * TranscriptionScreen - Tela de transcrição com sessões persistentes e atividades
@@ -153,57 +153,8 @@ export default function TranscriptionScreen() {
     const [presentationCode, setPresentationCode] = useState<string | null>(null);
     const [presentationActive, setPresentationActive] = useState(false);
 
-    // Tutorial State
-    const [showTutorial, setShowTutorial] = useState(false);
-
-    // Refs para Coach Marks
-    const micButtonRef = useRef<View>(null);
-    const presentationButtonRef = useRef<View>(null);
-    const [currentStepIndex, setCurrentStepIndex] = useState(0);
-    const [targetLayout, setTargetLayout] = useState<TargetLayout | null>(null);
-
     // Ref para garantir acesso ao código atualizado dentro de callbacks (Stale Closure fix)
     const presentationCodeRef = useRef<string | null>(null);
-
-    // Medir elemento alvo do passo atual
-    const measureStepTarget = (index: number) => {
-        const step = tutorialSteps[index];
-        let ref: any = null;
-
-        if (step.targetRef === 'mic') ref = micButtonRef;
-        if (step.targetRef === 'presentation') ref = presentationButtonRef;
-
-        console.log(`[TUTORIAL] Measuring step ${index} (target: ${step.targetRef})`);
-
-        if (ref?.current) {
-            ref.current.measureInWindow((x: number, y: number, width: number, height: number) => {
-                console.log(`[TUTORIAL] Got layout:`, { x, y, width, height });
-                setTargetLayout({ x, y, width, height });
-            });
-        } else {
-            console.log(`[TUTORIAL] Ref not found for target: ${step.targetRef}`);
-            // Tenta medir novamente em breve se falhar (pode não estar montado)
-            if (step.targetRef) {
-                setTimeout(() => {
-                    if (ref?.current) {
-                        ref.current.measureInWindow((x: number, y: number, width: number, height: number) => {
-                            setTargetLayout({ x, y, width, height });
-                        });
-                    }
-                }, 500);
-            } else {
-                setTargetLayout(null);
-            }
-        }
-    };
-
-    useEffect(() => {
-        if (showTutorial) {
-            // Pequeno delay para garantir layout
-            setTimeout(() => measureStepTarget(currentStepIndex), 100);
-        }
-    }, [showTutorial, currentStepIndex]);
-
 
     useEffect(() => {
         presentationCodeRef.current = presentationCode;
@@ -212,23 +163,7 @@ export default function TranscriptionScreen() {
     const [triggerWord, setTriggerWord] = useState('Fred'); // Default
     const [fredCommand, setFredCommand] = useState<string | null>(null); // State for Fred Popup
 
-    const tutorialSteps = [
-        {
-            title: 'Botão de Transcrição',
-            description: 'Toque aqui para iniciar ou pausar a gravação da sua aula. O áudio será transcrito em tempo real.',
-            targetRef: 'mic',
-        },
-        {
-            title: `Assistente ${triggerWord}`,
-            description: `Diga "${triggerWord}" para ativar comandos de voz. Ex: "${triggerWord}, crie um quiz" ou "${triggerWord}, faça um resumo".`,
-            targetRef: 'mic', // Aponta para o mic pois é comando de voz
-        },
-        {
-            title: 'Apresentação',
-            description: 'Toque aqui para iniciar o modo de apresentação e enviar conteúdo para o projetor/tela.',
-            targetRef: 'presentation',
-        }
-    ];
+    // Tutorial removido - tutorialSteps
 
     // History / Checkpoints
     const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -689,23 +624,7 @@ export default function TranscriptionScreen() {
         };
     }, [triggerAutoSave, triggerWord]); // Dependencia de triggerWord para recriar se mudar
 
-    const handleNextStep = () => {
-        if (currentStepIndex < tutorialSteps.length - 1) {
-            setCurrentStepIndex(prev => prev + 1);
-        } else {
-            setShowTutorial(false);
-        }
-    };
-
-    const handlePrevStep = () => {
-        if (currentStepIndex > 0) {
-            setCurrentStepIndex(prev => prev - 1);
-        }
-    };
-
-    const handleSkipTutorial = () => {
-        setShowTutorial(false);
-    };
+    // Tutorial removido - handler functions
 
     const toggleRecording = async () => {
         if (Platform.OS !== 'web') {
@@ -2112,30 +2031,7 @@ export default function TranscriptionScreen() {
     };
 
     // Tutorial Logic
-    useEffect(() => {
-        checkTutorialStatus();
-    }, []);
-
-    const checkTutorialStatus = async () => {
-        try {
-            const hasSeen = await AsyncStorage.getItem('tutorial_seen_transcription');
-            if (!hasSeen) {
-                // Delay slightly to allow screen to settle
-                setTimeout(() => setShowTutorial(true), 1000);
-            }
-        } catch (error) {
-            console.log('Error checking tutorial status:', error);
-        }
-    };
-
-    const handleTutorialComplete = async () => {
-        setShowTutorial(false);
-        try {
-            await AsyncStorage.setItem('tutorial_seen_transcription', 'true');
-        } catch (error) {
-            console.log('Error saving tutorial status:', error);
-        }
-    };
+    // Tutorial removido - checkTutorialStatus functions and useEffect
 
     const wordCount = transcribedText.split(/\s+/).filter(w => w).length;
 
@@ -2258,19 +2154,7 @@ export default function TranscriptionScreen() {
                                 <Text style={styles.sidebarLabel}>Atividades e Quizzes</Text>
                             </TouchableOpacity>
 
-                            <TouchableOpacity
-                                style={styles.sidebarItem}
-                                onPress={() => {
-                                    setSidebarVisible(false);
-                                    AsyncStorage.removeItem('tutorial_seen_transcription');
-                                    setShowTutorial(true);
-                                }}
-                            >
-                                <View style={[styles.sidebarIcon, { backgroundColor: '#f0fdf4' }]}>
-                                    <MaterialIcons name="school" size={20} color="#16a34a" />
-                                </View>
-                                <Text style={styles.sidebarLabel}>Ver Tutorial Novamente</Text>
-                            </TouchableOpacity>
+
 
                             <TouchableOpacity
                                 style={styles.sidebarItem}
@@ -2866,7 +2750,6 @@ Pressione o botão do microfone para começar a falar."
                     {/* Botão de Gravação (Centralizado e Maior) */}
                     <Animated.View style={[{ transform: [{ scale: pulseAnim }] }, styles.recordButtonWrapper]}>
                         <TouchableOpacity
-                            ref={micButtonRef}
                             style={[styles.recordButton, isRecording && styles.recordButtonActive]}
                             onPress={toggleRecording}
                             activeOpacity={0.8}
@@ -2904,16 +2787,7 @@ Pressione o botão do microfone para começar a falar."
                 onCancel={closeConfirmModal}
             />
             <FredCommandOverlay />
-            <TutorialOverlay
-                visible={showTutorial}
-                steps={tutorialSteps}
-                currentStepIndex={currentStepIndex}
-                targetLayout={targetLayout}
-                onNext={handleNextStep}
-                onPrev={handlePrevStep}
-                onSkip={handleSkipTutorial}
-                isLastStep={currentStepIndex === tutorialSteps.length - 1}
-            />
+            {/* Tutorial removido */}
         </View >
     );
 }
