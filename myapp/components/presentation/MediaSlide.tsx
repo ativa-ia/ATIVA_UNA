@@ -74,7 +74,7 @@ export default function MediaSlide({ type, data, controlState }: Props) {
                 case 'restart':
                     if (playerControlRef.current) {
                         playerControlRef.current.seekTo(0);
-                        playerControlRef.current.playVideo();
+                        playerControlRef.current.play(); // Corrigido: usar play() ao invés de playVideo()
                         setIsPlaying(true);
                     }
                     break;
