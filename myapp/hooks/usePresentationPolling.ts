@@ -13,7 +13,7 @@ export function usePresentationPolling({ code, enabled = true, pollingInterval =
     const [content, setContent] = useState<PresentationContent | null>(null);
     const [isConnected, setIsConnected] = useState(false);
     const [sessionActive, setSessionActive] = useState(true);
-    const [videoControl, setVideoControl] = useState<{ command: 'play' | 'pause' | 'seek' | 'mute' | 'unmute' | 'seek_relative', value?: number, timestamp: number } | undefined>(undefined);
+    const [videoControl, setVideoControl] = useState<{ command: 'play' | 'pause' | 'seek' | 'mute' | 'unmute' | 'seek_relative' | 'restart', value?: number, timestamp: number } | undefined>(undefined);
 
     // Armazenar último timestamp para evitar re-renders desnecessários
     const lastTimestampRef = useRef<string | null>(null);

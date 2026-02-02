@@ -14,6 +14,7 @@ import {
     ActivityIndicator,
     useWindowDimensions,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -51,6 +52,7 @@ import PresentationControls from '@/components/presentation/PresentationControls
 import { useRouter } from 'expo-router';
 import ConfirmationModal from '@/components/modals/ConfirmationModal';
 import InputModal from '@/components/modals/InputModal';
+import TutorialOverlay, { TargetLayout } from '@/components/tutorial/TutorialOverlay';
 
 /**
  * TranscriptionScreen - Tela de transcrição com sessões persistentes e atividades
@@ -103,6 +105,8 @@ export default function TranscriptionScreen() {
         );
     };
 
+
+
     const mainContentWrapperProps = isMobile
         ? {
             style: { flex: 1 },
@@ -149,8 +153,57 @@ export default function TranscriptionScreen() {
     const [presentationCode, setPresentationCode] = useState<string | null>(null);
     const [presentationActive, setPresentationActive] = useState(false);
 
+    // Tutorial State
+    const [showTutorial, setShowTutorial] = useState(false);
+
+    // Refs para Coach Marks
+    const micButtonRef = useRef<View>(null);
+    const presentationButtonRef = useRef<View>(null);
+    const [currentStepIndex, setCurrentStepIndex] = useState(0);
+    const [targetLayout, setTargetLayout] = useState<TargetLayout | null>(null);
+
     // Ref para garantir acesso ao código atualizado dentro de callbacks (Stale Closure fix)
     const presentationCodeRef = useRef<string | null>(null);
+
+    // Medir elemento alvo do passo atual
+    const measureStepTarget = (index: number) => {
+        const step = tutorialSteps[index];
+        let ref: any = null;
+
+        if (step.targetRef === 'mic') ref = micButtonRef;
+        if (step.targetRef === 'presentation') ref = presentationButtonRef;
+
+        console.log(`[TUTORIAL] Measuring step ${index} (target: ${step.targetRef})`);
+
+        if (ref?.current) {
+            ref.current.measureInWindow((x: number, y: number, width: number, height: number) => {
+                console.log(`[TUTORIAL] Got layout:`, { x, y, width, height });
+                setTargetLayout({ x, y, width, height });
+            });
+        } else {
+            console.log(`[TUTORIAL] Ref not found for target: ${step.targetRef}`);
+            // Tenta medir novamente em breve se falhar (pode não estar montado)
+            if (step.targetRef) {
+                setTimeout(() => {
+                    if (ref?.current) {
+                        ref.current.measureInWindow((x: number, y: number, width: number, height: number) => {
+                            setTargetLayout({ x, y, width, height });
+                        });
+                    }
+                }, 500);
+            } else {
+                setTargetLayout(null);
+            }
+        }
+    };
+
+    useEffect(() => {
+        if (showTutorial) {
+            // Pequeno delay para garantir layout
+            setTimeout(() => measureStepTarget(currentStepIndex), 100);
+        }
+    }, [showTutorial, currentStepIndex]);
+
 
     useEffect(() => {
         presentationCodeRef.current = presentationCode;
@@ -158,6 +211,24 @@ export default function TranscriptionScreen() {
 
     const [triggerWord, setTriggerWord] = useState('Fred'); // Default
     const [fredCommand, setFredCommand] = useState<string | null>(null); // State for Fred Popup
+
+    const tutorialSteps = [
+        {
+            title: 'Botão de Transcrição',
+            description: 'Toque aqui para iniciar ou pausar a gravação da sua aula. O áudio será transcrito em tempo real.',
+            targetRef: 'mic',
+        },
+        {
+            title: `Assistente ${triggerWord}`,
+            description: `Diga "${triggerWord}" para ativar comandos de voz. Ex: "${triggerWord}, crie um quiz" ou "${triggerWord}, faça um resumo".`,
+            targetRef: 'mic', // Aponta para o mic pois é comando de voz
+        },
+        {
+            title: 'Apresentação',
+            description: 'Toque aqui para iniciar o modo de apresentação e enviar conteúdo para o projetor/tela.',
+            targetRef: 'presentation',
+        }
+    ];
 
     // History / Checkpoints
     const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -618,7 +689,25 @@ export default function TranscriptionScreen() {
         };
     }, [triggerAutoSave, triggerWord]); // Dependencia de triggerWord para recriar se mudar
 
-    const toggleRecording = () => {
+    const handleNextStep = () => {
+        if (currentStepIndex < tutorialSteps.length - 1) {
+            setCurrentStepIndex(prev => prev + 1);
+        } else {
+            setShowTutorial(false);
+        }
+    };
+
+    const handlePrevStep = () => {
+        if (currentStepIndex > 0) {
+            setCurrentStepIndex(prev => prev - 1);
+        }
+    };
+
+    const handleSkipTutorial = () => {
+        setShowTutorial(false);
+    };
+
+    const toggleRecording = async () => {
         if (Platform.OS !== 'web') {
             Alert.alert("Em breve", "Reconhecimento de voz no celular em breve.");
             return;
@@ -946,7 +1035,8 @@ export default function TranscriptionScreen() {
 
             // 0.1 Controle de Vídeo (Mute/Unmute/Restart) - Prioridade sobre Play/Pause
             // Regex melhorado para MUTE: sem som, mudo, silenciar, tira o som
-            if (/(sem.*som|mudo|silenci(ar|o)|cala.*boca|tira.*som|desliga.*som)/i.test(lowerCmd)) {
+            // Regex melhorado para MUTE: sem som, mudo, silenciar, tira o som
+            if (/\b(sem som|mudo|mutar|silenciar|tira(r?|ndo)\s*(o\s*)?som|desliga(r?|ndo)\s*(o\s*)?som)\b/i.test(lowerCmd)) {
                 console.log('[AI INTERCEPTOR] Video Mute Command');
                 if (presentationCodeRef.current) {
                     controlPresentationVideo(presentationCodeRef.current, 'mute');
@@ -958,7 +1048,8 @@ export default function TranscriptionScreen() {
             }
 
             // Regex melhorado para UNMUTE: com som, ativar som, ligar som, volta o som, aumenta o som
-            if (/(com.*som|ativa(r?|ndo).*som|ligar.*som|voltar.*som|fala.*fred|bota.*som|aumenta.*som)/i.test(lowerCmd)) {
+            // Regex melhorado para UNMUTE: com som, ativar som, ligar som, volta o som, aumenta o som
+            if (/\b(com som|desmutar|ativa(r?|ndo)\s*(o\s*)?som|liga(r?|ndo)\s*(o\s*)?som|volta(r?|ndo)\s*(o\s*)?som|aumenta(r?|ndo)\s*(o\s*)?som)\b/i.test(lowerCmd)) {
                 console.log('[AI INTERCEPTOR] Video Unmute Command');
                 if (presentationCodeRef.current) {
                     controlPresentationVideo(presentationCodeRef.current, 'unmute');
@@ -1004,14 +1095,11 @@ export default function TranscriptionScreen() {
             }
 
             // Regex melhorado para RESTART: reiniciar, resetar, do inicio, voltar tudo, começar de novo
-            if (/(reinicia(r?|l)|reset(ar?|e)|come[çc]ar.*(denovo|de.*novo)|do.*in[íi]cio|volta(r?|e).*tudo|(re?)come[çc]a)/i.test(lowerCmd)) {
+            // Regex melhorado para RESTART: reiniciar, resetar, do inicio, voltar tudo, começar de novo
+            if (/\b(reinici(ar?|ando)|reset(ar?|ando)|recomeç(ar?|ando)|(começ(ar?|ando)|ir)\s*(do\s*)?in[íi]cio|volt(ar?|ando)\s*(tudo|ao\s*in[íi]cio))\b/i.test(lowerCmd)) {
                 console.log('[AI INTERCEPTOR] Video Restart Command');
                 if (presentationCodeRef.current) {
-                    controlPresentationVideo(presentationCodeRef.current, 'seek', 0);
-                    // Pequeno delay para garantir que o seek processe antes do play (se necessário)
-                    setTimeout(() => {
-                        controlPresentationVideo(presentationCodeRef.current!, 'play');
-                    }, 100);
+                    controlPresentationVideo(presentationCodeRef.current, 'restart');
 
                     setFredCommand('Reiniciando vídeo...');
                     setTimeout(() => setFredCommand(null), 3000);
@@ -1022,7 +1110,7 @@ export default function TranscriptionScreen() {
 
             // 0.2 Controle de Vídeo (Play/Pause)
             // Regex melhorado para variações: continua/continuar/continue, inicia/iniciar, toca/tocar, video/vídeo
-            if (/(play|tocar?|continu(ar?|e)|inici(ar?|e)|retom(ar?|e)).*v[íi]deo/i.test(lowerCmd) || /\bplay\b/i.test(lowerCmd)) {
+            if (/\b(play|tocar?|continu(ar?|e)|inici(ar?|e)|retom(ar?|e))\b.*\bv[íi]deo\b|\bplay\b/i.test(lowerCmd)) {
                 console.log('[AI INTERCEPTOR] Video Play Command');
                 if (presentationCodeRef.current) {
                     controlPresentationVideo(presentationCodeRef.current, 'play');
@@ -1037,7 +1125,7 @@ export default function TranscriptionScreen() {
                 }
             }
 
-            if (/(paus(ar?|e)|parar?|trav(ar?|e)).*v[íi]deo/i.test(lowerCmd) || /\bpause\b/i.test(lowerCmd)) {
+            if (/\b(paus(ar?|e)|parar?|trav(ar?|e))\b.*\bv[íi]deo\b|\bpause\b/i.test(lowerCmd)) {
                 console.log('[AI INTERCEPTOR] Video Pause Command');
                 if (presentationCodeRef.current) {
                     controlPresentationVideo(presentationCodeRef.current, 'pause');
@@ -1053,7 +1141,7 @@ export default function TranscriptionScreen() {
             }
 
             // 0. Enviar para APRESENTAÇÃO (Tela/Projetor)
-            if (/(apresent|projet|tel|mostr.*tel)/i.test(lowerCmd)) {
+            if (/\b(apresent(ar?|ação)|projet(ar?|or)|na tela|mostr(ar?|e)\s*na\s*tela)\b/i.test(lowerCmd)) {
                 console.log('[AI INTERCEPTOR] Comando de apresentação detectado');
 
                 if (!presentationCodeRef.current) {
@@ -1075,7 +1163,7 @@ export default function TranscriptionScreen() {
             }
 
             // 1. Alternar Respostas do Quiz
-            if (/(mostr|exib|ver).*(respost|gabarit|correç)/i.test(lowerCmd)) {
+            if (/\b(mostr(ar?|e)|exib(ir?|a)|ver)\b.*\b(respostas?|gabarito|correç(ão|ões))\b/i.test(lowerCmd)) {
                 console.log('[AI INTERCEPTOR] Mostrar respostas');
                 setFredCommand('Exibindo respostas...');
                 setShowAnswerKey(true);
@@ -1083,7 +1171,7 @@ export default function TranscriptionScreen() {
                 setTimeout(() => setFredCommand(null), 2000);
                 return;
             }
-            if (/(escond|ocult|tira).*(respost|gabarit|correç)/i.test(lowerCmd)) {
+            if (/\b(escond(er?|e)|ocult(ar?|e)|tir(ar?|e))\b.*\b(respostas?|gabarito|correç(ão|ões))\b/i.test(lowerCmd)) {
                 console.log('[AI INTERCEPTOR] Ocultar respostas');
                 setFredCommand('Ocultando respostas...');
                 setShowAnswerKey(false);
@@ -2023,6 +2111,32 @@ export default function TranscriptionScreen() {
         }
     };
 
+    // Tutorial Logic
+    useEffect(() => {
+        checkTutorialStatus();
+    }, []);
+
+    const checkTutorialStatus = async () => {
+        try {
+            const hasSeen = await AsyncStorage.getItem('tutorial_seen_transcription');
+            if (!hasSeen) {
+                // Delay slightly to allow screen to settle
+                setTimeout(() => setShowTutorial(true), 1000);
+            }
+        } catch (error) {
+            console.log('Error checking tutorial status:', error);
+        }
+    };
+
+    const handleTutorialComplete = async () => {
+        setShowTutorial(false);
+        try {
+            await AsyncStorage.setItem('tutorial_seen_transcription', 'true');
+        } catch (error) {
+            console.log('Error saving tutorial status:', error);
+        }
+    };
+
     const wordCount = transcribedText.split(/\s+/).filter(w => w).length;
 
     if (isLoading) {
@@ -2142,6 +2256,20 @@ export default function TranscriptionScreen() {
                                     <MaterialIcons name="assignment" size={20} color="#9333ea" />
                                 </View>
                                 <Text style={styles.sidebarLabel}>Atividades e Quizzes</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.sidebarItem}
+                                onPress={() => {
+                                    setSidebarVisible(false);
+                                    AsyncStorage.removeItem('tutorial_seen_transcription');
+                                    setShowTutorial(true);
+                                }}
+                            >
+                                <View style={[styles.sidebarIcon, { backgroundColor: '#f0fdf4' }]}>
+                                    <MaterialIcons name="school" size={20} color="#16a34a" />
+                                </View>
+                                <Text style={styles.sidebarLabel}>Ver Tutorial Novamente</Text>
                             </TouchableOpacity>
 
                             <TouchableOpacity
@@ -2738,6 +2866,7 @@ Pressione o botão do microfone para começar a falar."
                     {/* Botão de Gravação (Centralizado e Maior) */}
                     <Animated.View style={[{ transform: [{ scale: pulseAnim }] }, styles.recordButtonWrapper]}>
                         <TouchableOpacity
+                            ref={micButtonRef}
                             style={[styles.recordButton, isRecording && styles.recordButtonActive]}
                             onPress={toggleRecording}
                             activeOpacity={0.8}
@@ -2775,6 +2904,16 @@ Pressione o botão do microfone para começar a falar."
                 onCancel={closeConfirmModal}
             />
             <FredCommandOverlay />
+            <TutorialOverlay
+                visible={showTutorial}
+                steps={tutorialSteps}
+                currentStepIndex={currentStepIndex}
+                targetLayout={targetLayout}
+                onNext={handleNextStep}
+                onPrev={handlePrevStep}
+                onSkip={handleSkipTutorial}
+                isLastStep={currentStepIndex === tutorialSteps.length - 1}
+            />
         </View >
     );
 }

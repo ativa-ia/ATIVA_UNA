@@ -2,14 +2,8 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
 
-// URL da API (mude para seu IP local se testar em dispositivo físico)
-// Para desenvolvimento local, use localhost
-//export const API_URL = 'http://localhost:3000/api';
-
-// Para produção/Vercel, use:
-//export const API_URL = 'https://ativa-ia-9rkb.vercel.app/api';
-
-export const API_URL = 'https://ativa2.vercel.app/api';
+// URL da API
+export const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export interface LoginData {
     email: string;

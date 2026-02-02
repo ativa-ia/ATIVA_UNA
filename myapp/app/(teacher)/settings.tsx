@@ -57,6 +57,28 @@ export default function SettingsScreen() {
                     contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
                 >
+                    {/* Ferramentas */}
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Ferramentas</Text>
+
+                        <TouchableOpacity
+                            style={styles.settingItem}
+                            activeOpacity={0.7}
+                            onPress={() => router.push('/presentation')}
+                        >
+                            <View style={styles.settingInfo}>
+                                <MaterialIcons name="cast-connected" size={24} color={colors.primary} />
+                                <View style={styles.settingText}>
+                                    <Text style={styles.settingLabel}>Tela de Transmissão</Text>
+                                    <Text style={styles.settingDescription}>
+                                        Conectar este dispositivo como tela
+                                    </Text>
+                                </View>
+                            </View>
+                            <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                    </View>
+
                     {/* Aparência */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Aparência</Text>

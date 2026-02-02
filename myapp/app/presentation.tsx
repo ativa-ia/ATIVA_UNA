@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import { useLocalSearchParams } from 'expo-router';
+import { View, Text, StyleSheet, ActivityIndicator, TextInput, TouchableOpacity, SafeAreaView } from 'react-native';
+import { useLocalSearchParams, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import { getPresentation, PresentationContent } from '@/services/presentation';
@@ -8,7 +8,7 @@ import { getPresentation, PresentationContent } from '@/services/presentation';
 import { usePresentationPolling } from '@/hooks/usePresentationPolling';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
-import { spacing } from '@/constants/spacing';
+import { spacing, borderRadius } from '@/constants/spacing';
 
 // Componentes de exibição
 import SummarySlide from '@/components/presentation/SummarySlide';
@@ -61,7 +61,7 @@ export default function PresentationScreen() {
     };
 
     // Estado de controle de vídeo
-    const [videoControl, setVideoControl] = useState<{ command: 'play' | 'pause' | 'seek', value?: number, timestamp: number } | undefined>(undefined);
+    const [videoControl, setVideoControl] = useState<{ command: 'play' | 'pause' | 'seek' | 'mute' | 'unmute' | 'seek_relative' | 'restart', value?: number, timestamp: number } | undefined>(undefined);
 
     // WebSocket - Entrar na sala
     // Sincronizar estado com o polling
@@ -83,8 +83,69 @@ export default function PresentationScreen() {
 
     // ... (rest of code)
 
+    // State for manual code entry
+    const [inputCode, setInputCode] = useState('');
+
     // Estado de interação do usuário (para autoplay)
     const [hasInteracted, setHasInteracted] = useState(false);
+
+    // Se não tiver código na URL e não estiver carregando, mostrar tela de input
+    if (!code && !loading) {
+        return (
+            <View style={styles.entryContainer}>
+                <LinearGradient
+                    colors={['#1e1b4b', '#312e81']}
+                    style={styles.entryBackground}
+                >
+                    <SafeAreaView style={styles.safeArea}>
+                        <View style={styles.entryContent}>
+                            <View style={styles.entryHeader}>
+                                <MaterialIcons name="cast-connected" size={64} color={colors.primary} />
+                                <Text style={styles.entryTitle}>Conectar à Tela</Text>
+                                <Text style={styles.entrySubtitle}>
+                                    Digite o código da apresentação para conectar este dispositivo como uma tela secundária.
+                                </Text>
+                            </View>
+
+                            <View style={styles.inputContainer}>
+                                <TextInput
+                                    style={styles.codeInput}
+                                    placeholder="000000"
+                                    placeholderTextColor="rgba(255,255,255,0.3)"
+                                    value={inputCode}
+                                    onChangeText={setInputCode}
+                                    keyboardType="numeric"
+                                    maxLength={6}
+                                    autoFocus
+                                />
+                                <TouchableOpacity
+                                    style={[styles.connectButton, !inputCode && styles.connectButtonDisabled]}
+                                    onPress={() => {
+                                        if (inputCode.length >= 5) {
+                                            router.replace(`/presentation?code=${inputCode}`);
+                                        }
+                                    }}
+                                    disabled={!inputCode}
+                                >
+                                    <Text style={styles.connectButtonText}>CONECTAR</Text>
+                                    <MaterialIcons name="arrow-forward" size={24} color={colors.white} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <TouchableOpacity
+                                style={styles.backButton}
+                                onPress={() => router.canGoBack() ? router.back() : router.replace('/(auth)/login')}
+                            >
+                                <Text style={styles.backButtonText}>Voltar</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </SafeAreaView>
+                </LinearGradient>
+            </View>
+        );
+    }
+
+
 
     const handleInteraction = () => {
         setHasInteracted(true);
@@ -422,5 +483,92 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.xl,
         letterSpacing: 1,
         textAlign: 'center',
+    },
+
+    // Styles for Code Entry Screen
+    entryContainer: {
+        flex: 1,
+    },
+    entryBackground: {
+        flex: 1,
+    },
+    safeArea: {
+        flex: 1,
+    },
+    entryContent: {
+        flex: 1,
+        justifyContent: 'center',
+        padding: spacing.xl,
+        maxWidth: 500,
+        width: '100%',
+        alignSelf: 'center',
+    },
+    entryHeader: {
+        alignItems: 'center',
+        marginBottom: spacing['2xl'],
+    },
+    entryTitle: {
+        fontSize: typography.fontSize['3xl'],
+        fontWeight: typography.fontWeight.bold,
+        color: colors.white,
+        fontFamily: typography.fontFamily.display,
+        marginTop: spacing.md,
+        marginBottom: spacing.sm,
+        textAlign: 'center',
+    },
+    entrySubtitle: {
+        fontSize: typography.fontSize.base,
+        color: 'rgba(255,255,255,0.7)',
+        fontFamily: typography.fontFamily.body,
+        textAlign: 'center',
+        lineHeight: 24,
+    },
+    inputContainer: {
+        gap: spacing.lg,
+    },
+    codeInput: {
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
+        borderRadius: borderRadius.xl,
+        padding: spacing.lg,
+        fontSize: 32,
+        color: colors.white,
+        textAlign: 'center',
+        fontFamily: 'monospace',
+        letterSpacing: 8,
+    },
+    connectButton: {
+        flexDirection: 'row',
+        backgroundColor: colors.primary,
+        padding: spacing.lg,
+        borderRadius: borderRadius.xl,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: spacing.md,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+        elevation: 8,
+    },
+    connectButtonDisabled: {
+        backgroundColor: colors.slate600,
+        opacity: 0.7,
+        shadowOpacity: 0,
+    },
+    connectButtonText: {
+        color: colors.white,
+        fontSize: typography.fontSize.lg,
+        fontWeight: typography.fontWeight.bold,
+        fontFamily: typography.fontFamily.display,
+    },
+    backButton: {
+        marginTop: spacing['2xl'],
+        alignItems: 'center',
+    },
+    backButtonText: {
+        color: 'rgba(255,255,255,0.5)',
+        fontSize: typography.fontSize.base,
     },
 });
