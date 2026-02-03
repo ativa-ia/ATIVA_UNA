@@ -76,7 +76,11 @@ export default function TranscriptionScreen() {
 
     // Fred Command Overlay Component
     const FredCommandOverlay = () => {
-        if (!fredCommand) return null;
+        // Show if there is a command OR if generating (loading)
+        if (!fredCommand && !isGenerating) return null;
+
+        const displayText = fredCommand || loadingTitle;
+        const showSpinner = isGenerating || fredCommand === 'Ouvindo...';
 
         return (
             <Animated.View style={styles.fredOverlay}>
@@ -93,10 +97,10 @@ export default function TranscriptionScreen() {
                         <View style={{ flex: 1 }}>
                             <Text style={styles.fredLabel}>Assistente Fred</Text>
                             <Text style={styles.fredText}>
-                                {fredCommand === 'Ouvindo...' ? 'Ouvindo...' : fredCommand}
+                                {displayText}
                             </Text>
                         </View>
-                        {fredCommand === 'Ouvindo...' && (
+                        {showSpinner && (
                             <ActivityIndicator size="small" color="#FFF" />
                         )}
                     </View>
@@ -152,6 +156,9 @@ export default function TranscriptionScreen() {
     // Estados de Apresentação
     const [presentationCode, setPresentationCode] = useState<string | null>(null);
     const [presentationActive, setPresentationActive] = useState(false);
+
+    // Loading State with Title
+    const [loadingTitle, setLoadingTitle] = useState('Gerando com IA...');
 
     // Ref para garantir acesso ao código atualizado dentro de callbacks (Stale Closure fix)
     const presentationCodeRef = useRef<string | null>(null);
@@ -940,6 +947,14 @@ export default function TranscriptionScreen() {
         const currentText = savedTextRef.current;
         // Removed blocking check for empty text to allow voice commands with empty transcript
 
+
+        // Determine Intent for Loading Title
+        const promptText = (command || currentText || '').toLowerCase();
+        if (/(v[ií]deo|assistir|ver|youtube|busca(r|ndo)|procur(a|ando))/.test(promptText)) {
+            setLoadingTitle('Buscando vídeo...');
+        } else {
+            setLoadingTitle('Gerando com IA...');
+        }
 
         setIsGenerating(true);
         // REMOVED EARLY RESET: setCurrentActivity(null); setGeneratedQuiz(null); -> Moved to after interceptors
@@ -2008,6 +2023,7 @@ export default function TranscriptionScreen() {
                         try { window.navigator.vibrate([100, 50, 100]); } catch (e) { }
                     }
                     setFredCommand('Conteúdo enviado!');
+                    setTimeout(() => setFredCommand(null), 3000);
                 } else {
                     Alert.alert('Erro', 'Falha ao enviar conteúdo para a TV: ' + (result.error || 'Erro desconhecido'));
                 }
@@ -2243,12 +2259,7 @@ export default function TranscriptionScreen() {
                             style={styles.panelScroll}
                             contentContainerStyle={styles.panelScrollContent}
                         >
-                            {isGenerating && displayMode !== 'none' ? (
-                                <View style={styles.loadingContainer}>
-                                    <ActivityIndicator size="large" color={displayMode === 'quiz' ? colors.primary : colors.secondary} />
-                                    <Text style={styles.loadingText}>Gerando com IA...</Text>
-                                </View>
-                            ) : displayMode === 'summary' && generatedSummary ? (
+                            {displayMode === 'summary' && generatedSummary ? (
                                 <View style={styles.summaryContent}>
                                     {isEditingSummary ? (
                                         <View>
