@@ -467,6 +467,20 @@ export const generateSuggestions = async (subjectId: number) => {
     }
 };
 
+export const getSubjectDocuments = async (subjectId: number) => {
+    const token = await AsyncStorage.getItem('authToken');
+    try {
+        const response = await fetch(`${API_URL}/ai/documents/${subjectId}`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+        return response.json();
+    } catch (error) {
+        return { success: false, error: 'Erro ao buscar documentos' };
+    }
+};
+
 export const getContextFiles = async (subjectId: number, sessionId?: number) => {
     const token = await AsyncStorage.getItem('authToken');
     try {
@@ -1260,14 +1274,13 @@ export const sendDocumentToPresentation = async (documentId: string, presentatio
 }> => {
     try {
         const token = await AsyncStorage.getItem('authToken');
-        const response = await fetch(`${API_URL}/documents/send_to_presentation`, {
+        const response = await fetch(`${API_URL}/ai/documents/${documentId}/send-to-presentation`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`,
             },
             body: JSON.stringify({
-                document_id: documentId,
                 presentation_code: presentationCode
             }),
         });
