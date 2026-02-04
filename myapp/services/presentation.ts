@@ -11,7 +11,7 @@ export interface PresentationSession {
 }
 
 export interface PresentationContent {
-    type: 'summary' | 'quiz' | 'podium' | 'ranking' | 'image' | 'video' | 'question' | 'document' | 'blank';
+    type: 'summary' | 'quiz' | 'podium' | 'ranking' | 'image' | 'video' | 'question' | 'document' | 'document_list' | 'blank';
     data: any;
     timestamp: string;
     video_control?: {
@@ -19,6 +19,8 @@ export interface PresentationContent {
         value?: number;
         timestamp: string;
     };
+    pdf_page?: number;
+    pdf_zoom?: string;
 }
 
 /**
@@ -160,5 +162,56 @@ export const getActivePresentation = async (): Promise<{
         headers: { 'Authorization': `Bearer ${token}` }
     });
 
+    return response.json();
+};
+/**
+ * Controlar PDF - Próxima Página
+ */
+export const pdfNextPage = async (code: string): Promise<any> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/ai/pdf/next-page`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ presentation_code: code })
+    });
+    return response.json();
+};
+
+/**
+ * Controlar PDF - Página Anterior
+ */
+export const pdfPreviousPage = async (code: string): Promise<any> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/ai/pdf/previous-page`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ presentation_code: code })
+    });
+    return response.json();
+};
+
+/**
+ * Controlar PDF - Ir para Página
+ */
+export const pdfGotoPage = async (code: string, page: number): Promise<any> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/ai/pdf/goto-page`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ presentation_code: code, page })
+    });
+    return response.json();
+};
+
+/**
+ * Controlar PDF - Zoom
+ */
+export const pdfZoom = async (code: string, zoom: string): Promise<any> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/ai/pdf/zoom`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ presentation_code: code, zoom })
+    });
     return response.json();
 };

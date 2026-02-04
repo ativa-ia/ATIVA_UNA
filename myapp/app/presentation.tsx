@@ -17,6 +17,8 @@ import PodiumDisplay from '@/components/quiz/PodiumDisplay';
 import MediaSlide from '@/components/presentation/MediaSlide';
 import LiveRankingSlide from '@/components/presentation/LiveRankingSlide';
 import DocumentSlide from '@/components/presentation/DocumentSlide';
+import DocumentListSlide from '@/components/presentation/DocumentListSlide';
+import PDFViewer from '@/components/presentation/PDFViewer';
 
 export default function PresentationScreen() {
     const { code } = useLocalSearchParams<{ code: string }>();
@@ -230,7 +232,21 @@ export default function PresentationScreen() {
                 // Pass video control state
                 return <MediaSlide type={content.type} data={content.data} controlState={content.type === 'video' ? videoControl : undefined} />;
             case 'document':
+                // Se tiver file_url, usar PDFViewer (arquivo original)
+                if (content.data.file_url) {
+                    return (
+                        <PDFViewer
+                            fileUrl={content.data.file_url}
+                            filename={content.data.filename || 'Documento'}
+                            page={content.pdf_page || 1}
+                            zoom={content.pdf_zoom || 'auto'}
+                        />
+                    );
+                }
+                // Fallback: usar DocumentSlide (texto em seções)
                 return <DocumentSlide data={content.data} />;
+            case 'document_list':
+                return <DocumentListSlide data={content.data} />;
             default:
                 return (
                     <View style={styles.centerContainer}>

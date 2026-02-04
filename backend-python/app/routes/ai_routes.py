@@ -282,6 +282,20 @@ def upload_context(current_user):
         session_id = data.get('session_id') # Opcional agora
         filename = data.get('filename', 'downloaded_file.pdf')
         
+        # Extrair file_path do file_url (path após o bucket)
+        file_path = None
+        if file_url:
+            try:
+                # URL formato: https://...supabase.co/storage/v1/object/public/BUCKET/path/to/file.pdf
+                # Extrair: path/to/file.pdf
+                from urllib.parse import urlparse
+                parsed = urlparse(file_url)
+                path_parts = parsed.path.split('/public/')
+                if len(path_parts) > 1:
+                    file_path = path_parts[1]
+            except:
+                file_path = None
+        
         if not file_url:
             return jsonify({'success': False, 'error': 'URL do arquivo não fornecida'}), 400
             
@@ -291,6 +305,8 @@ def upload_context(current_user):
         subject_id = request.form.get('subject_id')
         session_id = request.form.get('session_id')
         filename = file.filename
+        file_url = None  # Upload direto não tem URL ainda
+        file_path = None
         
         if not file or filename == '':
             return jsonify({'success': False, 'error': 'Arquivo inválido'}), 400
@@ -381,7 +397,9 @@ def upload_context(current_user):
             session_id=session.id, 
             filename=filename,
             content=placeholder_content,
-            file_type=file_type
+            file_type=file_type,
+            file_url=file_url,  # Salvar URL do arquivo original
+            file_path=file_path if file_url else None  # Path no Storage
         )
         db.session.add(context_file)
         db.session.commit()
@@ -395,6 +413,193 @@ def upload_context(current_user):
     except Exception as e:
         print(f"Erro no upload: {e}")
         return jsonify({'success': False, 'error': f'Erro ao processar arquivo: {str(e)}'}), 500
+
+
+@ai_bp.route('/documents/<int:subject_id>', methods=['GET'])
+@token_required
+def get_subject_documents(current_user, subject_id):
+    """
+    Lista todos os documentos da Base de Conhecimento da disciplina (para comandos de voz)
+    Returns: { "success": bool, "documents": [{ "id": str, "filename": str, "created_at": str }] }
+    """
+    from app.models.ai_session import AIContextFile
+    
+    try:
+        # Buscar todos os arquivos da disciplina (independente de sessão)
+        files = AIContextFile.query.filter_by(subject_id=subject_id)\
+            .order_by(AIContextFile.created_at.desc())\
+            .all()
+        
+        documents = [{
+            'id': str(file.id),
+            'filename': file.filename,
+            'created_at': file.created_at.isoformat() if file.created_at else None
+        } for file in files]
+        
+        return jsonify({
+            'success': True,
+            'documents': documents
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Erro ao listar documentos: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@ai_bp.route('/documents/<int:file_id>/send-to-presentation', methods=['POST'])
+@token_required
+def send_kb_document_to_presentation(current_user, file_id):
+    """
+    Envia documento da Knowledge Base (AIContextFile) para apresentação
+    Body: { "presentation_code": str }
+    """
+    from app.models.ai_session import AIContextFile
+    from app.models.presentation import PresentationSession
+    from app import db
+    from datetime import datetime
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    logger.info(f"[SEND KB DOC] Iniciando envio do documento {file_id}")
+    
+    try:
+        data = request.get_json()
+        logger.info(f"[SEND KB DOC] Request data: {data}")
+        presentation_code = data.get('presentation_code')
+        
+        if not presentation_code:
+            logger.warning("[SEND KB DOC] presentation_code não fornecido")
+            return jsonify({
+                'success': False,
+                'error': 'presentation_code é obrigatório'
+            }), 400
+        
+        # 1. Buscar arquivo da Knowledge Base
+        logger.info(f"[SEND KB DOC] Buscando arquivo ID {file_id}")
+        context_file = AIContextFile.query.filter_by(id=file_id).first()
+        
+        if not context_file:
+            logger.warning(f"[SEND KB DOC] Documento {file_id} não encontrado")
+            return jsonify({
+                'success': False,
+                'error': f'Documento {file_id} não encontrado'
+            }), 404
+        
+        logger.info(f"[SEND KB DOC] Arquivo encontrado: {context_file.filename}")
+        
+        # 2. Buscar sessão de apresentação
+        logger.info(f"[SEND KB DOC] Buscando apresentação {presentation_code}")
+        session = PresentationSession.query.filter_by(code=presentation_code).first()
+        
+        if not session:
+            logger.warning(f"[SEND KB DOC] Apresentação {presentation_code} não encontrada")
+            return jsonify({
+                'success': False,
+                'error': f'Apresentação {presentation_code} não encontrada'
+            }), 404
+        
+        if session.teacher_id != current_user.id:
+            logger.warning(f"[SEND KB DOC] Usuário {current_user.id} não autorizado para apresentação {presentation_code}")
+            return jsonify({
+                'success': False,
+                'error': 'Não autorizado'
+            }), 403
+        
+        if session.status != 'active':
+            logger.warning(f"[SEND KB DOC] Apresentação {presentation_code} não está ativa")
+            return jsonify({
+                'success': False,
+                'error': 'Apresentação não está ativa'
+            }), 400
+        
+        # 3. Preparar dados do documento para apresentação
+        logger.info(f"[SEND KB DOC] Preparando dados do documento")
+        
+        # Se tiver file_url, enviar arquivo original
+        if context_file.file_url:
+            logger.info(f"[SEND KB DOC] Enviando arquivo original: {context_file.file_url}")
+            document_data = {
+                'filename': context_file.filename,
+                'file_url': context_file.file_url,
+                'file_path': context_file.file_path,
+                'file_type': context_file.file_type,
+                'uploaded_at': context_file.created_at.isoformat() if context_file.created_at else None
+            }
+        else:
+            # Fallback: converter texto em seções
+            logger.info(f"[SEND KB DOC] Arquivo original não disponível, usando texto extraído")
+            content_text = context_file.content or ""
+            sections = []
+            
+            # Dividir por quebras duplas de linha (parágrafos)
+            paragraphs = [p.strip() for p in content_text.split('\n\n') if p.strip()]
+            
+            # Agrupar parágrafos em seções de tamanho razoável (~2000 chars)
+            current_section = ""
+            section_counter = 0
+            
+            for para in paragraphs:
+                if len(current_section) + len(para) > 2000 and current_section:
+                    # Salvar seção atual
+                    section_counter += 1
+                    sections.append({
+                        'section_id': section_counter,
+                        'title': f'Seção {section_counter}',
+                        'content': current_section.strip()
+                    })
+                    current_section = para
+                else:
+                    current_section += '\n\n' + para if current_section else para
+            
+            # Adicionar última seção
+            if current_section:
+                section_counter += 1
+                sections.append({
+                    'section_id': section_counter,
+                    'title': f'Seção {section_counter}',
+                    'content': current_section.strip()
+                })
+            
+            # Se não houver seções, criar uma única seção com todo o conteúdo
+            if not sections:
+                sections = [{
+                    'section_id': 1,
+                    'title': context_file.filename,
+                    'content': content_text
+                }]
+            
+            document_data = {
+                'filename': context_file.filename,
+                'sections': sections,
+                'total_sections': len(sections),
+                'total_chunks': len(paragraphs)
+            }
+        
+        # 4. Atualizar conteúdo da apresentação
+        logger.info(f"[SEND KB DOC] Atualizando conteúdo da apresentação")
+        session.current_content = {
+            'type': 'document',
+            'data': document_data,
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        db.session.commit()
+        
+        logger.info(f"[SEND KB DOC] ✅ Documento {context_file.filename} enviado para apresentação {presentation_code}")
+        
+        return jsonify({
+            'success': True,
+            'message': f'Documento "{context_file.filename}" enviado para apresentação',
+            'document': document_data
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"[SEND KB DOC] ❌ Erro: {type(e).__name__}: {str(e)}")
+        import traceback
+        logger.error(f"[SEND KB DOC] Traceback: {traceback.format_exc()}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 
 @ai_bp.route('/context-files/<int:subject_id>', methods=['GET'])
@@ -483,3 +688,194 @@ def share_content(current_user):
 def convert_content(current_user):
     """[DEPRECATED] Converte conteúdo"""
     return jsonify({'success': False, 'error': 'Endpoint desativado.'}), 410
+# Novos endpoints para controle de PDF via comandos de voz
+
+@ai_bp.route('/pdf/next-page', methods=['POST'])
+@token_required
+def pdf_next_page(current_user):
+    """
+    Avança para próxima página do PDF
+    Body: { "presentation_code": str }
+    """
+    from app.models.presentation import PresentationSession
+    from app import db
+    import json
+    
+    data = request.get_json()
+    presentation_code = data.get('presentation_code')
+    
+    if not presentation_code:
+        return jsonify({'success': False, 'error': 'Código da apresentação necessário'}), 400
+    
+    from datetime import datetime
+    
+    # Imports movidos para o topo em refatoração ideal, mantendo aqui por enquanto
+    
+    session = PresentationSession.query.filter_by(code=presentation_code).first()
+    if not session or session.teacher_id != current_user.id:
+        return jsonify({'success': False, 'error': 'Apresentação não encontrada'}), 404
+    
+    # Obter current_content
+    # Coluna db.JSON já retorna dict, não precisa de json.loads
+    content = dict(session.current_content) if session.current_content else {}
+    
+    # Incrementar página
+    current_page = content.get('pdf_page', 1)
+    content['pdf_page'] = current_page + 1
+    
+    # Atualizar timestamp para forçar polling refresh
+    content['timestamp'] = datetime.utcnow().isoformat()
+    
+    # Salvar
+    # Coluna db.JSON espera dict, não string JSON
+    from sqlalchemy.orm.attributes import flag_modified
+    session.current_content = content
+    flag_modified(session, "current_content") # Forçar detecção de mudança em JSON mutável
+    db.session.commit()
+    
+    return jsonify({'success': True, 'page': content['pdf_page']})
+
+
+@ai_bp.route('/pdf/previous-page', methods=['POST'])
+@token_required
+def pdf_previous_page(current_user):
+    """
+    Volta para página anterior do PDF
+    Body: { "presentation_code": str }
+    """
+    from app.models.presentation import PresentationSession
+    from app import db
+    import json
+    
+    data = request.get_json()
+    presentation_code = data.get('presentation_code')
+    
+    if not presentation_code:
+        return jsonify({'success': False, 'error': 'Código da apresentação necessário'}), 400
+    
+    session = PresentationSession.query.filter_by(code=presentation_code).first()
+    if not session or session.teacher_id != current_user.id:
+        return jsonify({'success': False, 'error': 'Apresentação não encontrada'}), 404
+    
+    # Obter current_content
+    # Coluna db.JSON já retorna dict, não precisa de json.loads
+    content = dict(session.current_content) if session.current_content else {}
+    
+    # Decrementar página (mínimo 1)
+    current_page = content.get('pdf_page', 1)
+    content['pdf_page'] = max(1, current_page - 1)
+    
+    # Atualizar timestamp para forçar polling refresh
+    content['timestamp'] = datetime.utcnow().isoformat()
+    
+    # Salvar
+    from sqlalchemy.orm.attributes import flag_modified
+    session.current_content = content
+    flag_modified(session, "current_content") # Forçar detecção de mudança
+    db.session.commit()
+    
+    return jsonify({'success': True, 'page': content['pdf_page']})
+
+
+@ai_bp.route('/pdf/goto-page', methods=['POST'])
+@token_required
+def pdf_goto_page(current_user):
+    """
+    Vai para página específica do PDF
+    Body: { "presentation_code": str, "page": int }
+    """
+    from app.models.presentation import PresentationSession
+    from app import db
+    import json
+    
+    data = request.get_json()
+    presentation_code = data.get('presentation_code')
+    page = data.get('page')
+    
+    if not presentation_code or not page:
+        return jsonify({'success': False, 'error': 'Código da apresentação e número da página necessários'}), 400
+    
+    session = PresentationSession.query.filter_by(code=presentation_code).first()
+    if not session or session.teacher_id != current_user.id:
+        return jsonify({'success': False, 'error': 'Apresentação não encontrada'}), 404
+    
+    # Obter current_content
+    # Coluna db.JSON já retorna dict
+    content = dict(session.current_content) if session.current_content else {}
+    
+    # Ir para página (mínimo 1)
+    content['pdf_page'] = max(1, int(page))
+    
+    # Atualizar timestamp para forçar polling refresh
+    content['timestamp'] = datetime.utcnow().isoformat()
+    
+    # Salvar
+    from sqlalchemy.orm.attributes import flag_modified
+    session.current_content = content
+    flag_modified(session, "current_content")
+    db.session.commit()
+    
+    return jsonify({'success': True, 'page': content['pdf_page']})
+
+
+@ai_bp.route('/pdf/zoom', methods=['POST'])
+@token_required
+def pdf_zoom(current_user):
+    """
+    Controla zoom do PDF
+    Body: { "presentation_code": str, "zoom": str }
+    zoom pode ser: "in" (aumentar), "out" (diminuir), "auto", "page-fit", "page-width", "page-actual"
+    ou um número como "150" para 150%
+    """
+    from app.models.presentation import PresentationSession
+    from app import db
+    import json
+    
+    data = request.get_json()
+    presentation_code = data.get('presentation_code')
+    zoom_action = data.get('zoom')
+    
+    if not presentation_code or not zoom_action:
+        return jsonify({'success': False, 'error': 'Código da apresentação e ação de zoom necessários'}), 400
+    
+    session = PresentationSession.query.filter_by(code=presentation_code).first()
+    if not session or session.teacher_id != current_user.id:
+        return jsonify({'success': False, 'error': 'Apresentação não encontrada'}), 404
+    
+    # Obter current_content
+    # Coluna db.JSON já retorna dict
+    content = dict(session.current_content) if session.current_content else {}
+    
+    # Processar ação de zoom
+    if zoom_action == 'in':
+        # Aumentar zoom (de 100 para 125, 150, 175, 200, etc)
+        current_zoom = content.get('pdf_zoom', 'auto')
+        if current_zoom.isdigit():
+            new_zoom = min(400, int(current_zoom) + 25)  # Máximo 400%
+            content['pdf_zoom'] = str(new_zoom)
+        else:
+            content['pdf_zoom'] = '125'  # Começar em 125%
+    elif zoom_action == 'out':
+        # Diminuir zoom
+        current_zoom = content.get('pdf_zoom', 'auto')
+        if current_zoom.isdigit():
+            new_zoom = max(50, int(current_zoom) - 25)  # Mínimo 50%
+            content['pdf_zoom'] = str(new_zoom)
+        else:
+            content['pdf_zoom'] = '75'  # Começar em 75%
+    else:
+        # Zoom direto (auto, page-fit, page-width, page-actual, ou número)
+        content['pdf_zoom'] = zoom_action
+    
+    # Atualizar timestamp para forçar polling refresh
+    content['timestamp'] = datetime.utcnow().isoformat()
+    
+    # Salvar
+    from sqlalchemy.orm.attributes import flag_modified
+    session.current_content = content
+    flag_modified(session, "current_content")
+    db.session.commit()
+    
+    return jsonify({'success': True, 'zoom': content['pdf_zoom']})
+
+

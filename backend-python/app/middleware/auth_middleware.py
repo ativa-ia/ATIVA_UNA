@@ -10,6 +10,10 @@ def token_required(f):
     def decorated(*args, **kwargs):
         token = None
         
+        # Permitir OPTIONS sem autenticação (CORS preflight)
+        if request.method == 'OPTIONS':
+            return jsonify({'success': True}), 200
+
         # Pegar token do header Authorization
         auth_header = request.headers.get('Authorization')
         print(f"[AUTH DEBUG] Header: {auth_header[:50] if auth_header else 'None'}...")
