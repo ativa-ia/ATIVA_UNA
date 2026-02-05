@@ -45,7 +45,12 @@ import {
     sendToPresentation,
     endPresentation,
     getActivePresentation,
-    controlPresentationVideo
+
+    controlPresentationVideo,
+    pdfNextPage,
+    pdfPreviousPage,
+    pdfGotoPage,
+    pdfZoom
 } from '@/services/presentation';
 import PresentationControls from '@/components/presentation/PresentationControls';
 // import { useAuth } from '@/context/AuthContext'; // Ajuste o caminho se necessário
@@ -76,7 +81,11 @@ export default function TranscriptionScreen() {
 
     // Fred Command Overlay Component
     const FredCommandOverlay = () => {
-        if (!fredCommand) return null;
+        // Show if there is a command OR if generating (loading)
+        if (!fredCommand && !isGenerating) return null;
+
+        const displayText = fredCommand || loadingTitle;
+        const showSpinner = isGenerating || fredCommand === 'Ouvindo...';
 
         return (
             <Animated.View style={styles.fredOverlay}>
@@ -93,10 +102,10 @@ export default function TranscriptionScreen() {
                         <View style={{ flex: 1 }}>
                             <Text style={styles.fredLabel}>Assistente Fred</Text>
                             <Text style={styles.fredText}>
-                                {fredCommand === 'Ouvindo...' ? 'Ouvindo...' : fredCommand}
+                                {displayText}
                             </Text>
                         </View>
-                        {fredCommand === 'Ouvindo...' && (
+                        {showSpinner && (
                             <ActivityIndicator size="small" color="#FFF" />
                         )}
                     </View>
@@ -152,6 +161,9 @@ export default function TranscriptionScreen() {
     // Estados de Apresentação
     const [presentationCode, setPresentationCode] = useState<string | null>(null);
     const [presentationActive, setPresentationActive] = useState(false);
+
+    // Loading State with Title
+    const [loadingTitle, setLoadingTitle] = useState('Gerando com IA...');
 
     // Ref para garantir acesso ao código atualizado dentro de callbacks (Stale Closure fix)
     const presentationCodeRef = useRef<string | null>(null);
@@ -941,6 +953,14 @@ export default function TranscriptionScreen() {
         // Removed blocking check for empty text to allow voice commands with empty transcript
 
 
+        // Determine Intent for Loading Title
+        const promptText = (command || currentText || '').toLowerCase();
+        if (/(v[ií]deo|assistir|ver|youtube|busca(r|ndo)|procur(a|ando))/.test(promptText)) {
+            setLoadingTitle('Buscando vídeo...');
+        } else {
+            setLoadingTitle('Gerando com IA...');
+        }
+
         setIsGenerating(true);
         // REMOVED EARLY RESET: setCurrentActivity(null); setGeneratedQuiz(null); -> Moved to after interceptors
 
@@ -1077,6 +1097,276 @@ export default function TranscriptionScreen() {
                     setTimeout(() => {
                         handleSendToScreen('fred');
                     }, 500);
+                    return;
+                }
+            }
+
+            // ========== INTERCEPTOR: Listar Documentos Disponíveis ==========
+            if (/\b(quais|lista(r)?|mostr(ar?|e)|ver)\b.*(documentos?|pdfs?|arquivos?|apresentações?)\b.*\b(dispon[íi]veis?|tem|existem?)\b/i.test(lowerCmd)) {
+                console.log('[AI INTERCEPTOR] Comando: Listar documentos');
+
+                if (!presentationCodeRef.current) {
+                    setFredCommand('Inicie uma apresentação primeiro!');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                }
+
+                setFredCommand('Buscando documentos...');
+
+                try {
+                    const { getSubjectDocuments } = require('@/services/api');
+
+                    // 1. Buscar documentos da disciplina
+                    const result = await getSubjectDocuments(subjectId);
+
+                    if (result.success && result.documents) {
+                        // 2. Enviar lista para apresentação
+                        await sendToPresentation(
+                            presentationCodeRef.current,
+                            'document_list',
+                            {
+                                documents: result.documents,
+                                title: 'Documentos Disponíveis'
+                            }
+                        );
+
+                        setFredCommand(`${result.documents.length} documento(s) na tela!`);
+                        setTimeout(() => setFredCommand(null), 3000);
+                    } else {
+                        setFredCommand('Nenhum documento encontrado');
+                        setTimeout(() => setFredCommand(null), 3000);
+                    }
+                } catch (error) {
+                    console.error('[AI] Erro ao listar documentos:', error);
+                    setFredCommand('Erro ao buscar documentos');
+                    setTimeout(() => setFredCommand(null), 3000);
+                }
+
+                setIsGenerating(false);
+                return;
+            }
+
+            // ========== INTERCEPTOR: Controle de PDF ==========
+
+            // 1. Próxima Página
+            // Aceita: "próxima página", "próximo slide", "avançar", "passa", "passar", "frente", "seguinte"
+            if (/\b(pr[óo]xim[oa]|avançar?|passar?|seguinte|frente)\b/i.test(lowerCmd) &&
+                (/\b(p[áa]gina|slide|tela|folha)\b/i.test(lowerCmd) || /\b(avançar?|passar?)\b/i.test(lowerCmd) || /\b(pr[óo]xim[oa]|seguinte)\b/i.test(lowerCmd))) {
+                console.log('[AI INTERCEPTOR] Comando: Próxima página PDF');
+                if (presentationCodeRef.current) {
+                    if (/\b(v[íi]deo|m[úu]sica)\b/i.test(lowerCmd)) return; // Evitar conflito com mídia
+
+                    pdfNextPage(presentationCodeRef.current);
+                    setFredCommand('PDF: Próxima Página');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                }
+            }
+
+            // 2. Página Anterior
+            // Aceita: "página anterior", "voltar", "volta", "trás", "anterior"
+            if (/\b(anterior|volta(r)?|tr[áa]s|recuar?)\b/i.test(lowerCmd)) {
+                console.log('[AI INTERCEPTOR] Comando: Página anterior PDF');
+                if (presentationCodeRef.current) {
+                    if (/\b(v[íi]deo|m[úu]sica)\b/i.test(lowerCmd)) return; // Evitar conflito
+
+                    pdfPreviousPage(presentationCodeRef.current);
+                    setFredCommand('PDF: Página Anterior');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                }
+            }
+
+            // 3. Ir para Página Específica
+            const gotoPageMatch = lowerCmd.match(/\b(ir\s*para|vai\s*para|p[áa]gina|slide|folha|muda\s*para)\s*(\d+|um|dois|tr[êe]s|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|treze|quatorze|quinze|vinte|trinta)\b/i);
+            if (gotoPageMatch) {
+                console.log('[AI INTERCEPTOR] Comando: Ir para página PDF');
+                if (presentationCodeRef.current) {
+                    let pageNum = 1;
+                    const numStr = gotoPageMatch[2];
+
+                    if (!isNaN(parseInt(numStr))) {
+                        pageNum = parseInt(numStr);
+                    } else {
+                        // Conversão simples de texto para número (extensível)
+                        const mapNums: { [key: string]: number } = {
+                            'um': 1, 'dois': 2, 'três': 3, 'tres': 3, 'quatro': 4, 'cinco': 5,
+                            'seis': 6, 'sete': 7, 'oito': 8, 'nove': 9, 'dez': 10,
+                            'onze': 11, 'doze': 12, 'treze': 13, 'quatorze': 14, 'quinze': 15,
+                            'vinte': 20, 'trinta': 30
+                        };
+                        pageNum = mapNums[numStr.toLowerCase()] || 1;
+                    }
+
+                    pdfGotoPage(presentationCodeRef.current, pageNum);
+                    setFredCommand(`PDF: Página ${pageNum}`);
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                }
+            }
+
+            // 4. Zoom
+            // Aceita: "aumentar zoom", "dar zoom", "aproximar", "ampliar", "letra maior"
+            if (/\b(aumentar?|dar|mais|bota(r)?)\s*zoom\b|\b(aproximar?|ampliar?)\b|\bletra\s*maior\b/i.test(lowerCmd)) {
+                if (presentationCodeRef.current) {
+                    pdfZoom(presentationCodeRef.current, 'in');
+                    setFredCommand('PDF: Aumentar Zoom');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false); return;
+                }
+            }
+            // Aceita: "diminuir zoom", "tirar zoom", "menos zoom", "afastar", "reduzir", "letra menor"
+            if (/\b(diminuir?|voltar?|menos|tirar?|sai(r)?)\s*zoom\b|\b(afastar?|reduzir?)\b|\bletra\s*menor\b/i.test(lowerCmd)) {
+                if (presentationCodeRef.current) {
+                    pdfZoom(presentationCodeRef.current, 'out');
+                    setFredCommand('PDF: Diminuir Zoom');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false); return;
+                }
+            }
+            // Aceita: "zoom automático", "ajustar tela", "caber na tela", "visão geral"
+            if (/\bzoom\s*(autom[áa]tico|auto)\b|\b(ajustar|caber)\s*(na\s*)?tela\b|\bvis[ãa]o\s*geral\b/i.test(lowerCmd)) {
+                if (presentationCodeRef.current) {
+                    pdfZoom(presentationCodeRef.current, 'auto');
+                    setFredCommand('PDF: Zoom Automático');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false); return;
+                }
+            }
+            if (/\b(tamanho\s*real|100%|cem\s*por\s*cento|zoom\s*original)\b/i.test(lowerCmd)) {
+                if (presentationCodeRef.current) {
+                    pdfZoom(presentationCodeRef.current, 'page-actual'); // 100%
+                    setFredCommand('PDF: Tamanho Real');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false); return;
+                }
+            }
+            if (/\bajustar\s*(a|à)\s*largura\b|\blargura\s*total\b/i.test(lowerCmd)) {
+                if (presentationCodeRef.current) {
+                    pdfZoom(presentationCodeRef.current, 'page-width');
+                    setFredCommand('PDF: Ajustar à Largura');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false); return;
+                }
+            }
+
+            // ========== INTERCEPTOR: Abrir Documento Específico ==========
+            if (/\b(abr(ir?|e)|mostr(ar?|e)|exib(ir?|e))\b.*(documento|pdf|arquivo|apresentação)\b/i.test(lowerCmd)) {
+                console.log('[AI INTERCEPTOR] Comando: Abrir documento');
+
+                if (!presentationCodeRef.current) {
+                    setFredCommand('Inicie uma apresentação primeiro!');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                }
+
+                // Mapa de números por extenso
+                const numberWords: { [key: string]: number } = {
+                    'um': 1, 'uma': 1,
+                    'dois': 2, 'duas': 2,
+                    'três': 3, 'tres': 3,
+                    'quatro': 4,
+                    'cinco': 5,
+                    'seis': 6,
+                    'sete': 7,
+                    'oito': 8,
+                    'nove': 9,
+                    'dez': 10
+                };
+
+                // Extrair número ou nome
+                // Ex: "abrir documento 2" ou "abrir documento um" ou "abrir apostila matemática"
+                let numberMatch = lowerCmd.match(/\b(documento|pdf|arquivo|apresentação)\s+(\d+)\b/i);
+
+                // Se não encontrou número, tentar número por extenso
+                if (!numberMatch) {
+                    const wordNumberMatch = lowerCmd.match(/\b(documento|pdf|arquivo|apresentação)\s+(um|uma|dois|duas|três|tres|quatro|cinco|seis|sete|oito|nove|dez)\b/i);
+                    if (wordNumberMatch) {
+                        const wordNumber = wordNumberMatch[2].toLowerCase();
+                        const digit = numberWords[wordNumber];
+                        if (digit) {
+                            // Criar um match fake no formato esperado
+                            numberMatch = [wordNumberMatch[0], wordNumberMatch[1], digit.toString()] as any;
+                        }
+                    }
+                }
+
+                const nameMatch = lowerCmd.match(/\b(documento|pdf|arquivo|apresentação)\s+(.+)/i);
+
+                if (numberMatch || nameMatch) {
+                    setFredCommand('Procurando documento...');
+
+                    try {
+                        const { getSubjectDocuments, sendDocumentToPresentation } = require('@/services/api');
+
+                        // 1. Buscar lista de documentos
+                        const result = await getSubjectDocuments(subjectId);
+
+                        console.log('[AI] Documentos encontrados:', result.documents?.length);
+                        console.log('[AI] numberMatch:', numberMatch);
+                        console.log('[AI] nameMatch:', nameMatch);
+
+                        if (result.success && result.documents && result.documents.length > 0) {
+                            let selectedDoc = null;
+
+                            // Buscar por número
+                            if (numberMatch) {
+                                const index = parseInt(numberMatch[2], 10) - 1; // 1-indexed
+                                console.log('[AI] Buscando por índice:', index);
+                                if (index >= 0 && index < result.documents.length) {
+                                    selectedDoc = result.documents[index];
+                                    console.log('[AI] Documento selecionado por número:', selectedDoc.filename);
+                                }
+                            }
+                            // Buscar por nome (fuzzy)
+                            else if (nameMatch) {
+                                const searchTerm = nameMatch[2].trim().toLowerCase();
+                                console.log('[AI] Buscando por nome:', searchTerm);
+                                selectedDoc = result.documents.find((doc: any) =>
+                                    doc.filename.toLowerCase().includes(searchTerm)
+                                );
+                                if (selectedDoc) {
+                                    console.log('[AI] Documento selecionado por nome:', selectedDoc.filename);
+                                }
+                            }
+
+                            if (selectedDoc) {
+                                setFredCommand(`Abrindo "${selectedDoc.filename}"...`);
+
+                                // 2. Enviar documento para apresentação
+                                const sendResult = await sendDocumentToPresentation(
+                                    selectedDoc.id,
+                                    presentationCodeRef.current
+                                );
+
+                                if (sendResult.success) {
+                                    setFredCommand(`✅ ${selectedDoc.filename} aberto!`);
+                                    setTimeout(() => setFredCommand(null), 3000);
+                                } else {
+                                    setFredCommand('Erro ao abrir documento');
+                                    setTimeout(() => setFredCommand(null), 3000);
+                                }
+                            } else {
+                                console.log('[AI] Nenhum documento correspondente encontrado');
+                                setFredCommand('Documento não encontrado');
+                                setTimeout(() => setFredCommand(null), 3000);
+                            }
+                        } else {
+                            setFredCommand('Nenhum documento disponível');
+                            setTimeout(() => setFredCommand(null), 3000);
+                        }
+                    } catch (error) {
+                        console.error('[AI] Erro ao abrir documento:', error);
+                        setFredCommand('Erro ao processar comando');
+                        setTimeout(() => setFredCommand(null), 3000);
+                    }
+
+                    setIsGenerating(false);
                     return;
                 }
             }
@@ -2008,6 +2298,7 @@ export default function TranscriptionScreen() {
                         try { window.navigator.vibrate([100, 50, 100]); } catch (e) { }
                     }
                     setFredCommand('Conteúdo enviado!');
+                    setTimeout(() => setFredCommand(null), 3000);
                 } else {
                     Alert.alert('Erro', 'Falha ao enviar conteúdo para a TV: ' + (result.error || 'Erro desconhecido'));
                 }
@@ -2243,12 +2534,7 @@ export default function TranscriptionScreen() {
                             style={styles.panelScroll}
                             contentContainerStyle={styles.panelScrollContent}
                         >
-                            {isGenerating && displayMode !== 'none' ? (
-                                <View style={styles.loadingContainer}>
-                                    <ActivityIndicator size="large" color={displayMode === 'quiz' ? colors.primary : colors.secondary} />
-                                    <Text style={styles.loadingText}>Gerando com IA...</Text>
-                                </View>
-                            ) : displayMode === 'summary' && generatedSummary ? (
+                            {displayMode === 'summary' && generatedSummary ? (
                                 <View style={styles.summaryContent}>
                                     {isEditingSummary ? (
                                         <View>

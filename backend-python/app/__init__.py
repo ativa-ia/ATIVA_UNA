@@ -2,6 +2,7 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask_migrate import Migrate
+from flask_compress import Compress
 # socketio.init_app(app)
 from app.config import config
 import os
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 # Inicializar extensões
 db = SQLAlchemy()
 migrate = Migrate()
+compress = Compress()
 # socketio = SocketIO(cors_allowed_origins="*")  # Permitir conexões do React Native
 
 
@@ -32,6 +34,7 @@ def create_app(config_name=None):
         logger.info("Inicializando extensoes...")
         db.init_app(app)
         migrate.init_app(app, db)
+        compress.init_app(app)  # Compressão Gzip automática para economizar egress
         # socketio.init_app(app)
         # CORS: supports_credentials=True não deve ser usado com origins='*'
         CORS(app, resources={r"/*": {"origins": "*"}})

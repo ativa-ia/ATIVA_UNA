@@ -63,6 +63,8 @@ class AIContextFile(db.Model):
     filename = db.Column(db.String(255), nullable=False)
     content = db.Column(db.Text, nullable=False) # Texto extraído do PDF
     file_type = db.Column(db.String(50), default='pdf') # pdf, text, etc
+    file_url = db.Column(db.String(500), nullable=True)  # URL do arquivo no Supabase Storage
+    file_path = db.Column(db.String(500), nullable=True)  # Path no Storage
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Relacionamento
