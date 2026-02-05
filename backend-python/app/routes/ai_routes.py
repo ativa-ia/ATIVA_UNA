@@ -7,6 +7,7 @@ from app.services.ai_service import chat_with_ai, chat_stream, create_or_get_ses
 from app.models.ai_session import AISession, AIMessage
 from datetime import datetime
 from app import db
+from app.services.google_drive_service import GoogleDriveService
 
 ai_bp = Blueprint('ai', __name__)
 
@@ -311,7 +312,27 @@ def upload_context(current_user):
         if not file or filename == '':
             return jsonify({'success': False, 'error': 'Arquivo inválido'}), 400
             
-        file_stream = file
+        try:
+            # Upload para Google Drive
+            print(f"Fazendo upload para Google Drive: {filename}")
+            drive_service = GoogleDriveService()
+            drive_file = drive_service.upload_file(
+                file, 
+                filename, 
+                file.content_type or 'application/octet-stream'
+            )
+            
+            # Obter URL de visualização
+            file_url = drive_file.get('webViewLink')
+            print(f"Upload concluído. URL: {file_url}")
+            
+            # Resetar stream para uso posterior (envio p/ N8N)
+            file.seek(0)
+            file_stream = file
+            
+        except Exception as e:
+            print(f"Erro no upload para Drive: {str(e)}")
+            return jsonify({'success': False, 'error': f'Erro no upload: {str(e)}'}), 500
     
     if not subject_id:
         return jsonify({'success': False, 'error': 'ID da disciplina necessário'}), 400
@@ -327,9 +348,14 @@ def upload_context(current_user):
         # 3. Preparar arquivo para envio ao N8N
         files_to_send = {}
         
-        if file_url:
-            # Baixar do Supabase para re-enviar (N8N precisa do arquivo físico para vetorizar conteúdo, não só link)
-            try:
+        if file_stream:
+             # Prioridade: Arquivo já em memória (upload recente)
+             files_to_send = {'file': (filename, file_stream, file_stream.content_type)}
+             
+        elif file_url:
+            # Baixar de URL externa (Supabase ou outro link)
+             files_to_send = {} # Initialize if needed within block logic structure
+             try:
                 print(f"Baixando arquivo de: {file_url}")
                 response = requests.get(file_url)
                 response.raise_for_status()
@@ -347,10 +373,9 @@ def upload_context(current_user):
                 print(f"File MIME Type: {mime_type}")
                 
                 files_to_send = {'file': (filename, response.content, mime_type)}
-            except Exception as e:
+             except Exception as e:
                 return jsonify({'success': False, 'error': f'Erro ao baixar arquivo do Storage: {str(e)}'}), 400
-        elif file_stream:
-             files_to_send = {'file': (filename, file_stream, file_stream.content_type)}
+
              
         # 4. Enviar para Webhook N8N
         n8n_url = os.getenv('N8N_WEBHOOK_UPLOAD')
