@@ -22,7 +22,12 @@ class GoogleDriveService:
                 import json
                 from google.oauth2.credentials import Credentials
                 info = json.loads(json_token)
-                self.creds = Credentials.from_authorized_user_info(info, self.SCOPES)
+                # O token.json já contém os escopos. Passar scopes novamente pode causar 'invalid_scope' se houver divergência.
+                # Vamos passar None para usar o que está no arquivo, ou apenas info.
+                self.creds = Credentials.from_authorized_user_info(info)
+                if self.creds.expired and self.creds.refresh_token:
+                    from google.auth.transport.requests import Request
+                    self.creds.refresh(Request())
                 self.service = build('drive', 'v3', credentials=self.creds)
                 print("Autenticado via GOOGLE_TOKEN_JSON (Env Var)")
                 return
@@ -39,7 +44,11 @@ class GoogleDriveService:
         if os.path.exists(token_path):
             try:
                 from google.oauth2.credentials import Credentials
-                self.creds = Credentials.from_authorized_user_file(token_path, self.SCOPES)
+                # Mesma lógica: token já contém scopes, não forçar override
+                self.creds = Credentials.from_authorized_user_file(token_path)
+                if self.creds.expired and self.creds.refresh_token:
+                    from google.auth.transport.requests import Request
+                    self.creds.refresh(Request())
                 self.service = build('drive', 'v3', credentials=self.creds)
                 print(f"Autenticado via Arquivo OAuth: {token_path}")
                 return
