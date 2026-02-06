@@ -59,6 +59,7 @@ import ConfirmationModal from '@/components/modals/ConfirmationModal';
 import InputModal from '@/components/modals/InputModal';
 import VideoListModal, { VideoItem } from '@/components/modals/VideoListModal';
 import DocumentListModal, { DocumentItem } from '@/components/modals/DocumentListModal';
+import FredHelpModal from '@/components/help/FredHelpModal';
 // Tutorial removido - import TutorialOverlay
 
 /**
@@ -217,6 +218,9 @@ export default function TranscriptionScreen() {
         visible: boolean;
         documents: DocumentItem[];
     }>({ visible: false, documents: [] });
+
+    // Help Modal State
+    const [showHelpModal, setShowHelpModal] = useState(false);
 
     // Refs
     const recognitionRef = useRef<any>(null);
@@ -2519,8 +2523,14 @@ export default function TranscriptionScreen() {
                     {/* <Text style={styles.headerSubtitle}>{isRecording ? 'Gravando...' : 'Pronto para ouvir'}</Text> */}
                 </View>
 
-                {/* Menu Button / Save Indicator */}
+                {/* Menu Button / Save Indicator / Help */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <TouchableOpacity
+                        style={styles.helpButton}
+                        onPress={() => setShowHelpModal(true)}
+                    >
+                        <MaterialIcons name="help-outline" size={24} color={colors.white} />
+                    </TouchableOpacity>
                     <View style={styles.saveIndicator}>
                         {isSaving ? (
                             <ActivityIndicator size="small" color={colors.white} />
@@ -3225,6 +3235,10 @@ Pressione o botão do microfone para começar a falar."
                 onSelect={handleDocumentSelect}
                 onClose={() => setDocumentListModal({ visible: false, documents: [] })}
             />
+            <FredHelpModal
+                visible={showHelpModal}
+                onClose={() => setShowHelpModal(false)}
+            />
             <FredCommandOverlay />
             {/* Tutorial removido */}
         </View >
@@ -3273,6 +3287,9 @@ const styles = StyleSheet.create({
         color: 'rgba(255,255,255,0.8)',
     },
     menuButton: {
+        padding: 4,
+    },
+    helpButton: {
         padding: 4,
     },
     saveIndicator: {
