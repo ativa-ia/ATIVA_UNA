@@ -222,51 +222,72 @@ export const createMaterial = async (subjectId: number, data: any): Promise<{ su
     }
 };
 
-// Upload file to storage (Via Backend -> Google Drive)
+// Upload file to storage (2-Step para evitar limite de 4.5MB da Vercel)
+// Etapa 1: Frontend → Supabase Storage (sem limite de tamanho)
+// Etapa 2: Backend lê URL do Supabase → Google Drive
 export const uploadFileToStorage = async (file: any, subjectId: number, options?: { sessionId?: number }) => {
     try {
         const token = await AsyncStorage.getItem('authToken');
-        const formData = new FormData();
 
-        let fileToUpload: any;
+        console.log('[API] Step 1: Uploading to Supabase Storage...', file.name);
+
+        // Etapa 1: Upload para Supabase Storage
+        const filePath = `context-files/${Date.now()}-${file.name}`;
+        let fileBlob: Blob;
+
         if (Platform.OS === 'web') {
-            // No Web, file.file é o objeto File nativo (do expo-document-picker)
-            fileToUpload = file.file || file;
+            fileBlob = file.file || file;
         } else {
-            // No Mobile, precisamos construir o objeto para FormData
-            fileToUpload = {
-                uri: file.uri,
-                name: file.name,
-                type: file.mimeType || 'application/octet-stream' // Corrigido 'type' para RN
-            };
+            // Mobile: converter URI para Blob
+            const response = await fetch(file.uri);
+            fileBlob = await response.blob();
         }
 
-        formData.append('file', fileToUpload);
-        formData.append('subject_id', subjectId.toString());
-        if (options?.sessionId) {
-            formData.append('session_id', options.sessionId.toString());
+        const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('context-documents')
+            .upload(filePath, fileBlob, {
+                contentType: file.mimeType || file.type || 'application/octet-stream',
+                upsert: false
+            });
+
+        if (uploadError) {
+            console.error('[API] Supabase Upload Error:', uploadError);
+            return { success: false, error: uploadError.message };
         }
 
-        console.log('[API] Uploading file to backend...', file.name);
+        // Obter URL pública
+        const { data: urlData } = supabase.storage
+            .from('context-documents')
+            .getPublicUrl(filePath);
 
+        const fileUrl = urlData.publicUrl;
+        console.log('[API] Step 2: Notifying backend with URL...', fileUrl);
+
+        // Etapa 2: Enviar apenas URL e metadados para o backend (sem o arquivo)
         const response = await fetch(`${API_URL}/ai/upload-context`, {
             method: 'POST',
             headers: {
+                'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`,
-                // Não definir Content-Type para multipart/form-data manualmente com fetch+FormData,
-                // o browser/RN define o boundary automaticamente.
             },
-            body: formData,
+            body: JSON.stringify({
+                file_url: fileUrl,
+                filename: file.name,
+                subject_id: subjectId,
+                session_id: options?.sessionId,
+                file_size: file.size,
+                mime_type: file.mimeType || file.type
+            }),
         });
 
         const data = await response.json();
 
         if (!response.ok) {
-            console.error('[API] Upload Error:', data);
-            return { success: false, error: data.error || 'Erro no upload' };
+            console.error('[API] Backend Processing Error:', data);
+            return { success: false, error: data.error || 'Erro ao processar no backend' };
         }
 
-        console.log('[API] Upload Success:', data);
+        console.log('[API] Upload Success (2-stage):', data);
         return {
             success: true,
             url: data.file_url,
@@ -278,6 +299,7 @@ export const uploadFileToStorage = async (file: any, subjectId: number, options?
         return { success: false, error: 'Erro no processo de upload' };
     }
 };
+
 
 // Upload text content as file (for AI summaries on Vercel)
 export const uploadTextAsFile = async (content: string, filename: string): Promise<{ success: boolean; url?: string; error?: string }> => {

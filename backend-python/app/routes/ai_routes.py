@@ -373,6 +373,22 @@ def upload_context(current_user):
                 print(f"File MIME Type: {mime_type}")
                 
                 files_to_send = {'file': (filename, response.content, mime_type)}
+                
+                # NOVO: Fazer upload para Google Drive também (para usar cota do usuário OAuth)
+                try:
+                    print(f"Fazendo upload para Google Drive: {filename}")
+                    drive_service = GoogleDriveService()
+                    # Criar stream de bytes a partir do conteúdo baixado
+                    file_bytes = io.BytesIO(response.content)
+                    drive_file = drive_service.upload_file(file_bytes, filename, mime_type)
+                    # Atualizar file_url para apontar para Google Drive
+                    file_url = drive_file.get('webViewLink')
+                    file_path = drive_file.get('id')
+                    print(f"Arquivo salvo no Google Drive: {file_url}")
+                except Exception as drive_error:
+                    print(f"Aviso: Falha ao fazer upload para Google Drive: {drive_error}")
+                    # Não vamos bloquear o processo, mantém URL do Supabase
+                    
              except Exception as e:
                 return jsonify({'success': False, 'error': f'Erro ao baixar arquivo do Storage: {str(e)}'}), 400
 
@@ -426,11 +442,12 @@ def upload_context(current_user):
             file_url=file_url,  # Salvar URL do arquivo original
             file_path=file_path if file_url else None  # Path no Storage
         )
-        db.session.add(context_file)
         db.session.commit()
         
         return jsonify({
             'success': True,
+            'file_url': file_url,  # Frontend espera no nível raiz
+            'file_path': file_path,  # Frontend espera no nível raiz
             'file': context_file.to_dict(),
             'message': 'Arquivo enviado para processamento'
         })
