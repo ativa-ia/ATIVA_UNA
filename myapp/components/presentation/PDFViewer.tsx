@@ -18,17 +18,55 @@ const { width, height } = Dimensions.get('window');
  * Similar ao MediaSlide mas para documentos
  */
 export default function PDFViewer({ fileUrl, filename, page = 1, zoom = 'auto' }: PDFViewerProps) {
-    // Para web, usar PDF.js (Mozilla) para controle total
+    // Para web, usar PDF.js (Mozilla) ou Google Drive Embed
     if (Platform.OS === 'web') {
-        // Construir URL com parâmetros de página e zoom
-        const pdfJsUrl = `https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(fileUrl)}#page=${page}&zoom=${zoom}`;
+        const isGoogleDrive = fileUrl.includes('drive.google.com');
+        let viewerUrl = '';
+
+        if (isGoogleDrive) {
+            // Extrair ID do arquivo
+            let fileId = '';
+            const matchId = fileUrl.match(/\/d\/([a-zA-Z0-9_-]+)/);
+            if (matchId && matchId[1]) {
+                fileId = matchId[1];
+            } else {
+                const matchQuery = fileUrl.match(/id=([a-zA-Z0-9_-]+)/);
+                if (matchQuery && matchQuery[1]) {
+                    fileId = matchQuery[1];
+                }
+            }
+
+            if (fileId) {
+                if (filename.toLowerCase().endsWith('.pdf')) {
+                    // URL do Proxy no Backend
+                    // Importar API_URL de @/services/api se necessário, ou usar hardcoded relativo
+                    // Assumindo que o app roda na mesma origem ou configurado
+                    const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
+                    const proxyUrl = `${API_URL}/documents/proxy/${fileId}`;
+
+                    // Usar visualizador nativo do navegador (iframe direto)
+                    // Evita problema de Mixed Content (HTTPS mozilla.github.io x HTTP localhost)
+                    // Chrome/Edge/Firefox nativos suportam #page=N
+                    viewerUrl = `${proxyUrl}#page=${page}&zoom=${zoom}`;
+                } else {
+                    // OUTROS ARQUIVOS (PPTX, DOCX): Usar Google Drive Preview (Embed)
+                    viewerUrl = `https://drive.google.com/file/d/${fileId}/preview`;
+                }
+            } else {
+                // Fallback se não conseguir extrair ID
+                viewerUrl = fileUrl;
+            }
+        } else {
+            // Usar PDF.js para arquivos diretos (Supabase, etc)
+            viewerUrl = `https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodeURIComponent(fileUrl)}#page=${page}&zoom=${zoom}`;
+        }
 
         return (
             <View style={styles.container}>
-                {/* PDF.js Viewer - key força reload quando página/zoom mudar */}
+                {/* Iframe Viewer - key força reload quando URL/página muda */}
                 <iframe
-                    key={`pdf-${page}-${zoom}`}  // Force reload on page/zoom change
-                    src={pdfJsUrl}
+                    key={`viewer-${isGoogleDrive ? 'drive' : 'pdfjs'}-${page}-${zoom}`}
+                    src={viewerUrl}
                     style={{
                         position: 'absolute',
                         top: 0,
@@ -38,6 +76,7 @@ export default function PDFViewer({ fileUrl, filename, page = 1, zoom = 'auto' }
                         border: 'none',
                     }}
                     title={filename}
+                    allow="autoplay"
                 />
             </View>
         );

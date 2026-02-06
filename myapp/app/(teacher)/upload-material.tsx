@@ -87,8 +87,9 @@ export default function UploadMaterialScreen() {
         setUploading(true);
 
         try {
-            // 1. Upload file
-            const uploadResult = await uploadFileToStorage(selectedFile, 'materials');
+            // 1. Upload file (agora via Backend -> Google Drive)
+            // selectedClassId é garantido pelo isFormValid
+            const uploadResult = await uploadFileToStorage(selectedFile, selectedClassId!);
 
             if (!uploadResult.success) {
                 Alert.alert('Erro', uploadResult.error || 'Falha no upload do arquivo');

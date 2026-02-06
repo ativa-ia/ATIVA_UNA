@@ -25,6 +25,9 @@ wheels/
 
 # Environment
 .env
+credentials.json
+token.json
+client_secrets.json
 
 # Database
 *.sqlite

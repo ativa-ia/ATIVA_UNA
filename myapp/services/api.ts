@@ -222,45 +222,84 @@ export const createMaterial = async (subjectId: number, data: any): Promise<{ su
     }
 };
 
-// Upload file to storage (Generic)
-export const uploadFileToStorage = async (file: any, folder: string = 'materials') => {
+// Upload file to storage (2-Step para evitar limite de 4.5MB da Vercel)
+// Etapa 1: Frontend → Supabase Storage (sem limite de tamanho)
+// Etapa 2: Backend lê URL do Supabase → Google Drive
+export const uploadFileToStorage = async (file: any, subjectId: number, options?: { sessionId?: number }) => {
     try {
-        // 1. Upload to Supabase Storage
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-        const filePath = `${folder}/${fileName}`;
+        const token = await AsyncStorage.getItem('authToken');
 
-        let fileBody: any;
+        console.log('[API] Step 1: Uploading to Supabase Storage...', file.name);
+
+        // Etapa 1: Upload para Supabase Storage
+        const filePath = `context-files/${Date.now()}-${file.name}`;
+        let fileBlob: Blob;
+
         if (Platform.OS === 'web') {
-            fileBody = file.file; // Browser File object
+            fileBlob = file.file || file;
         } else {
+            // Mobile: converter URI para Blob
             const response = await fetch(file.uri);
-            fileBody = await response.blob();
+            fileBlob = await response.blob();
         }
 
         const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('context-documents') // Reuse existing bucket or change if 'materials' bucket exists
-            .upload(filePath, fileBody, {
-                contentType: file.mimeType || 'application/pdf',
+            .from('context-documents')
+            .upload(filePath, fileBlob, {
+                contentType: file.mimeType || file.type || 'application/octet-stream',
                 upsert: false
             });
 
         if (uploadError) {
-            console.error('Supabase Storage Error:', uploadError);
-            return { success: false, error: 'Erro ao enviar para Storage: ' + uploadError.message };
+            console.error('[API] Supabase Upload Error:', uploadError);
+            return { success: false, error: uploadError.message };
         }
 
-        // 2. Get Public URL
+        // Obter URL pública
         const { data: urlData } = supabase.storage
-            .from('context-documents') // CORRECT
+            .from('context-documents')
             .getPublicUrl(filePath);
 
-        return { success: true, url: urlData.publicUrl, path: filePath, size: file.size };
+        const fileUrl = urlData.publicUrl;
+        console.log('[API] Step 2: Notifying backend with URL...', fileUrl);
+
+        // Etapa 2: Enviar apenas URL e metadados para o backend (sem o arquivo)
+        const response = await fetch(`${API_URL}/ai/upload-context`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+                file_url: fileUrl,
+                filename: file.name,
+                subject_id: subjectId,
+                session_id: options?.sessionId,
+                file_size: file.size,
+                mime_type: file.mimeType || file.type
+            }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            console.error('[API] Backend Processing Error:', data);
+            return { success: false, error: data.error || 'Erro ao processar no backend' };
+        }
+
+        console.log('[API] Upload Success (2-stage):', data);
+        return {
+            success: true,
+            url: data.file_url,
+            path: data.file_path,
+            size: file.size
+        };
     } catch (error) {
         console.error('Upload flow error:', error);
         return { success: false, error: 'Erro no processo de upload' };
     }
 };
+
 
 // Upload text content as file (for AI summaries on Vercel)
 export const uploadTextAsFile = async (content: string, filename: string): Promise<{ success: boolean; url?: string; error?: string }> => {
@@ -374,79 +413,10 @@ export const changePassword = async (data: ChangePasswordData): Promise<AuthResp
 
 // ========== AI CONTEXT API ==========
 
-// Upload via Supabase Storage (Bypassing Vercel Limit)
-// Upload via Supabase Storage (Bypassing Vercel Limit)
+// Upload via Backend (Google Drive + N8N) - Refatorado
 export const uploadContextFile = async (subjectId: number, file: any, options?: { sessionId?: number }) => {
-    try {
-        const token = await AsyncStorage.getItem('authToken');
-
-        // 1. Upload to Supabase Storage
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-        const filePath = `${subjectId}/${fileName}`;
-
-        // For Expo Document Picker, we need to read the file as ArrayBuffer or Blob
-        // Since Expo < 50 might be tricky with Blob, let's try FormData to Supabase if supported, 
-        // or fetch the URI to get the blob.
-
-        let fileBody: any;
-        if (Platform.OS === 'web') {
-            fileBody = file.file; // Browser File object
-        } else {
-            const response = await fetch(file.uri);
-            fileBody = await response.blob();
-        }
-
-        const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('context-documents')
-            .upload(filePath, fileBody, {
-                contentType: file.mimeType || 'application/pdf',
-                upsert: false
-            });
-
-        if (uploadError) {
-            console.error('Supabase Storage Error:', uploadError);
-            return { success: false, error: 'Erro ao enviar para Storage: ' + uploadError.message };
-        }
-
-        // 2. Get Public URL (or Signed URL if bucket is private, assuming public for now or backend can access)
-        const { data: urlData } = supabase.storage
-            .from('context-documents')
-            .getPublicUrl(filePath);
-
-        const fileUrl = urlData.publicUrl;
-
-        // 3. Send Metadata to Backend
-        const response = await fetch(`${API_URL}/ai/upload-context`, {
-            method: 'POST',
-            body: JSON.stringify({
-                subject_id: subjectId,
-                session_id: options?.sessionId, // Pass Session ID explicitly
-                file_url: fileUrl,
-                file_path: filePath,
-                file_type: file.mimeType || 'application/pdf',
-                filename: file.name
-            }),
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-            },
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            try {
-                return JSON.parse(errorText);
-            } catch (e) {
-                return { success: false, error: `Erro no backend (${response.status})` };
-            }
-        }
-
-        return response.json();
-    } catch (error) {
-        console.error('Upload flow error:', error);
-        return { success: false, error: 'Erro no processo de upload' };
-    }
+    // Delega para a função centralizada de upload
+    return uploadFileToStorage(file, subjectId, options);
 };
 
 // Gerar sugestões de perguntas baseadas no contexto (novo arquivo)
