@@ -268,11 +268,14 @@ def upload_context(current_user):
     from app.models.subject import Subject
     from app.services.ai_service import create_or_get_session
     
+    
     file_stream = None
     filename = None
     subject_id = None
+    session_id = None  # CORREÇÃO: Inicializar aqui
     file_type = "document"
     file_url = None
+    file_path = None  # CORREÇÃO: Inicializar aqui
     
     # 1. Recuperar dados (Suporta JSON com URL ou Multipart)
     if request.is_json:
@@ -284,7 +287,6 @@ def upload_context(current_user):
         filename = data.get('filename', 'downloaded_file.pdf')
         
         # Extrair file_path do file_url (path após o bucket)
-        file_path = None
         if file_url:
             try:
                 # URL formato: https://...supabase.co/storage/v1/object/public/BUCKET/path/to/file.pdf
@@ -306,8 +308,7 @@ def upload_context(current_user):
         subject_id = request.form.get('subject_id')
         session_id = request.form.get('session_id')
         filename = file.filename
-        file_url = None  # Upload direto não tem URL ainda
-        file_path = None
+        # file_url e file_path já inicializados no topo, atualizar após upload Drive
         
         if not file or filename == '':
             return jsonify({'success': False, 'error': 'Arquivo inválido'}), 400
@@ -442,6 +443,7 @@ def upload_context(current_user):
             file_url=file_url,  # Salvar URL do arquivo original
             file_path=file_path if file_url else None  # Path no Storage
         )
+        db.session.add(context_file)  # CORREÇÃO: Estava faltando!
         db.session.commit()
         
         return jsonify({
