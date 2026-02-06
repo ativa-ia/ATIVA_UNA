@@ -57,6 +57,8 @@ import PresentationControls from '@/components/presentation/PresentationControls
 import { useRouter } from 'expo-router';
 import ConfirmationModal from '@/components/modals/ConfirmationModal';
 import InputModal from '@/components/modals/InputModal';
+import VideoListModal, { VideoItem } from '@/components/modals/VideoListModal';
+import DocumentListModal, { DocumentItem } from '@/components/modals/DocumentListModal';
 // Tutorial removido - import TutorialOverlay
 
 /**
@@ -203,6 +205,18 @@ export default function TranscriptionScreen() {
     });
 
     const closeInputModal = () => setInputModal(prev => ({ ...prev, visible: false }));
+
+    // Video List Modal State (for multiple videos from RAG)
+    const [videoListModal, setVideoListModal] = useState<{
+        visible: boolean;
+        videos: VideoItem[];
+    }>({ visible: false, videos: [] });
+
+    // Document List Modal State
+    const [documentListModal, setDocumentListModal] = useState<{
+        visible: boolean;
+        documents: DocumentItem[];
+    }>({ visible: false, documents: [] });
 
     // Refs
     const recognitionRef = useRef<any>(null);
@@ -1105,13 +1119,6 @@ export default function TranscriptionScreen() {
             if (/\b(quais|lista(r)?|mostr(ar?|e)|ver)\b.*(documentos?|pdfs?|arquivos?|apresentações?)\b.*\b(dispon[íi]veis?|tem|existem?)\b/i.test(lowerCmd)) {
                 console.log('[AI INTERCEPTOR] Comando: Listar documentos');
 
-                if (!presentationCodeRef.current) {
-                    setFredCommand('Inicie uma apresentação primeiro!');
-                    setTimeout(() => setFredCommand(null), 3000);
-                    setIsGenerating(false);
-                    return;
-                }
-
                 setFredCommand('Buscando documentos...');
 
                 try {
@@ -1120,18 +1127,26 @@ export default function TranscriptionScreen() {
                     // 1. Buscar documentos da disciplina
                     const result = await getSubjectDocuments(subjectId);
 
-                    if (result.success && result.documents) {
-                        // 2. Enviar lista para apresentação
-                        await sendToPresentation(
-                            presentationCodeRef.current,
-                            'document_list',
-                            {
-                                documents: result.documents,
-                                title: 'Documentos Disponíveis'
-                            }
-                        );
+                    if (result.success && result.documents && result.documents.length > 0) {
+                        // 2. Mostrar modal na tela do professor
+                        setDocumentListModal({
+                            visible: true,
+                            documents: result.documents
+                        });
 
-                        setFredCommand(`${result.documents.length} documento(s) na tela!`);
+                        // 3. Se tiver apresentação ativa, enviar também para a tela
+                        if (presentationCodeRef.current) {
+                            await sendToPresentation(
+                                presentationCodeRef.current,
+                                'document_list',
+                                {
+                                    documents: result.documents,
+                                    title: 'Documentos Disponíveis'
+                                }
+                            );
+                        }
+
+                        setFredCommand(`${result.documents.length} documento(s) encontrado(s)!`);
                         setTimeout(() => setFredCommand(null), 3000);
                     } else {
                         setFredCommand('Nenhum documento encontrado');
@@ -1336,6 +1351,9 @@ export default function TranscriptionScreen() {
                             }
 
                             if (selectedDoc) {
+                                // Close document list modal if open (voice command while viewing list)
+                                setDocumentListModal({ visible: false, documents: [] });
+
                                 setFredCommand(`Abrindo "${selectedDoc.filename}"...`);
 
                                 // 2. Enviar documento para apresentação
@@ -1506,17 +1524,87 @@ export default function TranscriptionScreen() {
                 const typeMatch = content.match(/^\[TYPE:(QUIZ|SUMMARY)\]/i);
 
                 if (cmdMatch) {
-                    // *** NOVO: Fluxo de COMANDO ***
+                    // *** MULTIPLE VIDEO DETECTION ***
+                    // Split content by [TYPE:CMD] to get individual command blocks
+                    const cmdBlocks = content.split(/\[TYPE:CMD\]/gi).filter(block => block.trim());
+                    const commands: Array<{ action: string; payload: any }> = [];
+
+                    for (const block of cmdBlocks) {
+                        try {
+                            // Find the JSON object in the block by looking for balanced braces
+                            const trimmedBlock = block.trim();
+                            const jsonStart = trimmedBlock.indexOf('{');
+                            if (jsonStart === -1) continue;
+
+                            // Find matching closing brace by counting braces
+                            let braceCount = 0;
+                            let jsonEnd = -1;
+                            for (let i = jsonStart; i < trimmedBlock.length; i++) {
+                                if (trimmedBlock[i] === '{') braceCount++;
+                                if (trimmedBlock[i] === '}') braceCount--;
+                                if (braceCount === 0) {
+                                    jsonEnd = i + 1;
+                                    break;
+                                }
+                            }
+
+                            if (jsonEnd > jsonStart) {
+                                const jsonStr = trimmedBlock.substring(jsonStart, jsonEnd);
+                                const parsed = JSON.parse(jsonStr);
+                                if (parsed && parsed.action) {
+                                    commands.push(parsed);
+                                }
+                            }
+                        } catch (e) {
+                            console.log('[AI] Failed to parse command block:', block.substring(0, 100));
+                        }
+                    }
+
+                    console.log(`[AI] Detected ${commands.length} command(s)`);
+
+                    // Filter only video commands
+                    const videoCommands = commands.filter(
+                        cmd => cmd.action === 'send_content' && cmd.payload?.type === 'video'
+                    );
+
+                    // If we have 2+ videos, show selection modal instead of playing
+                    if (videoCommands.length >= 2) {
+                        console.log(`[AI] Multiple videos detected (${videoCommands.length}), showing selection modal`);
+
+                        const videos: VideoItem[] = videoCommands.map((cmd, idx) => ({
+                            url: cmd.payload.url,
+                            caption: cmd.payload.caption || `Vídeo ${idx + 1}`
+                        }));
+
+                        setVideoListModal({ visible: true, videos });
+                        setFredCommand(null);
+                        setIsGenerating(false);
+                        return; // Don't process further
+                    }
+
+                    // Single command: execute immediately (existing behavior)
+                    if (commands.length === 1 && commands[0].action) {
+                        explicitType = 'command';
+                        console.log(`[AI] Tipo explícito detectado: COMMAND`);
+
+                        // Close video list modal if open (voice command while viewing list)
+                        setVideoListModal({ visible: false, videos: [] });
+
+                        processAICommand(commands[0]);
+                        setIsGenerating(false);
+                        return; // Interrompe o fluxo (não salva como atividade normal)
+                    }
+
+                    // Fallback: try old parsing method for backwards compatibility
                     explicitType = 'command';
                     content = content.replace(/^\[TYPE:CMD\]/i, '').trim();
-                    console.log(`[AI] Tipo explícito detectado: COMMAND`);
+                    console.log(`[AI] Tipo explícito detectado: COMMAND (fallback)`);
 
                     const commandJson = tryParseJSON(content);
                     if (commandJson && commandJson.action) {
-                        // Executar comando imediatamente
                         processAICommand(commandJson);
                         setIsGenerating(false);
-                        return; // Interrompe o fluxo (não salva como atividade normal)
+                        return;
                     }
                 } else if (typeMatch) {
                     explicitType = typeMatch[1].toUpperCase() === 'QUIZ' ? 'quiz' : 'summary';
@@ -2321,6 +2409,59 @@ export default function TranscriptionScreen() {
         }
     };
 
+    // Handler for selecting a video from the video list modal
+    const handleVideoSelect = async (video: VideoItem) => {
+        console.log('[VIDEO SELECT] Video chosen:', video.caption, video.url);
+        setVideoListModal({ visible: false, videos: [] });
+        setFredCommand(`Reproduzindo: ${video.caption}`);
+
+        // Send selected video to presentation using existing processAICommand logic
+        await processAICommand({
+            action: 'send_content',
+            payload: {
+                type: 'video',
+                url: video.url,
+                caption: video.caption
+            }
+        });
+
+        setTimeout(() => setFredCommand(null), 3000);
+    };
+
+    // Handler for selecting a document from the document list modal
+    const handleDocumentSelect = async (document: DocumentItem) => {
+        console.log('[DOCUMENT SELECT] Document chosen:', document.filename, document.id);
+        setDocumentListModal({ visible: false, documents: [] });
+        setFredCommand(`Abrindo: ${document.filename}...`);
+
+        try {
+            const { sendDocumentToPresentation } = require('@/services/api');
+
+            if (!presentationCodeRef.current) {
+                setFredCommand('Inicie uma apresentação primeiro!');
+                setTimeout(() => setFredCommand(null), 3000);
+                return;
+            }
+
+            // Send document to presentation
+            const result = await sendDocumentToPresentation(
+                document.id,
+                presentationCodeRef.current
+            );
+
+            if (result.success) {
+                setFredCommand(`Documento "${document.filename}" na tela!`);
+            } else {
+                setFredCommand('Erro ao abrir documento');
+            }
+        } catch (error) {
+            console.error('[DOCUMENT SELECT] Error:', error);
+            setFredCommand('Erro ao abrir documento');
+        }
+
+        setTimeout(() => setFredCommand(null), 3000);
+    };
+
     // Tutorial Logic
     // Tutorial removido - checkTutorialStatus functions and useEffect
 
@@ -3071,6 +3212,18 @@ Pressione o botão do microfone para começar a falar."
                 isDestructive={confirmModal.isDestructive}
                 onConfirm={confirmModal.onConfirm}
                 onCancel={closeConfirmModal}
+            />
+            <VideoListModal
+                visible={videoListModal.visible}
+                videos={videoListModal.videos}
+                onSelect={handleVideoSelect}
+                onClose={() => setVideoListModal({ visible: false, videos: [] })}
+            />
+            <DocumentListModal
+                visible={documentListModal.visible}
+                documents={documentListModal.documents}
+                onSelect={handleDocumentSelect}
+                onClose={() => setDocumentListModal({ visible: false, documents: [] })}
             />
             <FredCommandOverlay />
             {/* Tutorial removido */}
