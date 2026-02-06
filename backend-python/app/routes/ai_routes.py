@@ -339,10 +339,14 @@ def upload_context(current_user):
         return jsonify({'success': False, 'error': 'ID da disciplina necessário'}), 400
         
     try:
-        # 2. Obter nome da disciplina (classroom_id para o N8N)
+        # 2. SEGURANÇA: Verificar se o professor tem acesso à disciplina
         subject = Subject.query.get(subject_id)
         if not subject:
              return jsonify({'success': False, 'error': 'Disciplina não encontrada'}), 404
+        
+        # Verificar se o professor é o dono da disciplina
+        if subject.teacher_id != current_user.id:
+            return jsonify({'success': False, 'error': 'Sem permissão para fazer upload nesta disciplina'}), 403
              
         classroom_id = subject.name # Usando o NOME como ID para o fluxo
         
@@ -467,8 +471,18 @@ def get_subject_documents(current_user, subject_id):
     Returns: { "success": bool, "documents": [{ "id": str, "filename": str, "created_at": str }] }
     """
     from app.models.ai_session import AIContextFile
+    from app.models.subject import Subject
     
     try:
+        # SEGURANÇA: Verificar se o professor tem acesso à disciplina
+        subject = Subject.query.get(subject_id)
+        if not subject:
+            return jsonify({'success': False, 'error': 'Disciplina não encontrada'}), 404
+        
+        # Verificar se o professor é o dono da disciplina
+        if subject.teacher_id != current_user.id:
+            return jsonify({'success': False, 'error': 'Sem permissão para acessar esta disciplina'}), 403
+        
         # Buscar todos os arquivos da disciplina (independente de sessão)
         files = AIContextFile.query.filter_by(subject_id=subject_id)\
             .order_by(AIContextFile.created_at.desc())\

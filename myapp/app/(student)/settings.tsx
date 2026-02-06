@@ -22,8 +22,6 @@ import { clearAuth } from '@/services/api';
  */
 export default function SettingsScreen() {
     const [darkMode, setDarkMode] = useState(true);
-    const [notifications, setNotifications] = useState(true);
-    const [emailNotifications, setEmailNotifications] = useState(false);
 
     const handleLogout = async () => {
         await clearAuth();
@@ -74,47 +72,6 @@ export default function SettingsScreen() {
                             <Switch
                                 value={darkMode}
                                 onValueChange={setDarkMode}
-                                trackColor={{ false: colors.slate300, true: colors.primary }}
-                                thumbColor={colors.white}
-                            />
-                        </View>
-                    </View>
-
-                    {/* Notificações */}
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Notificações</Text>
-
-                        <View style={styles.settingItem}>
-                            <View style={styles.settingInfo}>
-                                <MaterialIcons name="notifications" size={24} color={colors.primary} />
-                                <View style={styles.settingText}>
-                                    <Text style={styles.settingLabel}>Notificações Push</Text>
-                                    <Text style={styles.settingDescription}>
-                                        Receber notificações no dispositivo
-                                    </Text>
-                                </View>
-                            </View>
-                            <Switch
-                                value={notifications}
-                                onValueChange={setNotifications}
-                                trackColor={{ false: colors.slate300, true: colors.primary }}
-                                thumbColor={colors.white}
-                            />
-                        </View>
-
-                        <View style={styles.settingItem}>
-                            <View style={styles.settingInfo}>
-                                <MaterialIcons name="email" size={24} color={colors.primary} />
-                                <View style={styles.settingText}>
-                                    <Text style={styles.settingLabel}>Notificações por E-mail</Text>
-                                    <Text style={styles.settingDescription}>
-                                        Receber atualizações por e-mail
-                                    </Text>
-                                </View>
-                            </View>
-                            <Switch
-                                value={emailNotifications}
-                                onValueChange={setEmailNotifications}
                                 trackColor={{ false: colors.slate300, true: colors.primary }}
                                 thumbColor={colors.white}
                             />
