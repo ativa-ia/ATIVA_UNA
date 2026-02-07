@@ -558,44 +558,45 @@ def broadcast_activity(current_user, activity_id):
 
     # --- ATIVA-IA FIX: Sincronizar com a tela de apresentação ---
     # Quando o professor dá "broadcast", deve aparecer na tela automaticamente
-    try:
-        presentation_session = PresentationSession.query.filter_by(
-            teacher_id=current_user.id,
-            status='active'
-        ).first()
+    # [DISABLED] Separating student broadcast from presentation display
+    # try:
+    #     presentation_session = PresentationSession.query.filter_by(
+    #         teacher_id=current_user.id,
+    #         status='active'
+    #     ).first()
 
-        if presentation_session:
-            # Preparar dados para o formato que a Presentation espera
-            content_type = activity.activity_type # 'quiz' or 'summary'
+    #     if presentation_session:
+    #         # Preparar dados para o formato que a Presentation espera
+    #         content_type = activity.activity_type # 'quiz' or 'summary'
             
-            # Ajuste de payload conforme presentation_routes espera
-            presentation_data = activity.content
-            if content_type == 'quiz':
-                 # Envia o objeto questions direto se estiver dentro de content
-                 if 'questions' in activity.content:
-                     presentation_data = activity.content # Já tem {questions: [...]}
-                 else:
-                     # Caso estrutura seja diferente, garantir formato esperado pelo frontend
-                     presentation_data = {'questions': activity.content} if isinstance(activity.content, list) else activity.content
+    #         # Ajuste de payload conforme presentation_routes espera
+    #         presentation_data = activity.content
+    #         if content_type == 'quiz':
+    #              # Envia o objeto questions direto se estiver dentro de content
+    #              if 'questions' in activity.content:
+    #                  presentation_data = activity.content # Já tem {questions: [...]}
+    #              else:
+    #                  # Caso estrutura seja diferente, garantir formato esperado pelo frontend
+    #                  presentation_data = {'questions': activity.content} if isinstance(activity.content, list) else activity.content
             
-            # Adicionar timestamp da atividade para forçar update
-            presentation_session.current_content = {
-                'type': content_type,
-                'data': presentation_data,
-                'timestamp': datetime.utcnow().isoformat(),
-                'activity_id': activity.id # Referência útil
-            }
-            db.session.commit()
+    #         # Adicionar timestamp da atividade para forçar update
+    #         presentation_session.current_content = {
+    #             'type': content_type,
+    #             'data': presentation_data,
+    #             'timestamp': datetime.utcnow().isoformat(),
+    #             'activity_id': activity.id # Referência útil
+    #         }
+    #         db.session.commit()
 
-            # Polling: Polling detectará a mudança via timestamp
-            # try:
-            #     from app.services.websocket_service import emit_presentation_content
-            #     emit_presentation_content(presentation_session.code, presentation_session.current_content)
-            # except Exception as e:
-            #     pass
+    #         # Polling: Polling detectará a mudança via timestamp
+    #         # try:
+    #         #     from app.services.websocket_service import emit_presentation_content
+    #         #     emit_presentation_content(presentation_session.code, presentation_session.current_content)
+    #         # except Exception as e:
+    #         #     pass
 
-    except Exception as e:
-        print(f"[AUTO-SYNC] Falha ao sincronizar com apresentação: {e}")
+    # except Exception as e:
+    #     print(f"[AUTO-SYNC] Falha ao sincronizar com apresentação: {e}")
     # -------------------------------------------------------------
     
     return jsonify({
