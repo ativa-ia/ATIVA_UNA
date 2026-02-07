@@ -11,13 +11,37 @@ interface Props {
 }
 
 export default function SummarySlide({ data }: Props) {
+    // Limpar texto: remover tags [TYPE:SUMMARY] e tratar JSON
+    const cleanText = React.useMemo(() => {
+        let text = data.text || '';
+
+        // 1. Remover tags [TYPE:SUMMARY] ou [TYPE: SUMMARY]
+        text = text.replace(/^\[TYPE:\s*SUMMARY\]\s*/i, '');
+
+        // 2. Tentar parsear se for JSON com campo "text"
+        if (text.trim().startsWith('{')) {
+            try {
+                const parsed = JSON.parse(text);
+                if (parsed.text) {
+                    text = parsed.text;
+                } else if (parsed.summary) {
+                    text = parsed.summary;
+                }
+            } catch (e) {
+                // Não é JSON válido, manter como está
+            }
+        }
+
+        return text.trim();
+    }, [data.text]);
+
     return (
         <ScrollView style={styles.container} contentContainerStyle={styles.content}>
             {data.title && (
                 <Text style={styles.title}>{data.title}</Text>
             )}
             <Markdown style={markdownStyles}>
-                {data.text}
+                {cleanText}
             </Markdown>
         </ScrollView>
     );
