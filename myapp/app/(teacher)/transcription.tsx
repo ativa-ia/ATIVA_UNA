@@ -222,6 +222,32 @@ export default function TranscriptionScreen() {
     // Help Modal State
     const [showHelpModal, setShowHelpModal] = useState(false);
 
+    // Helper function para limpar texto de resumo (remove tags e trata JSON)
+    const cleanSummaryText = (rawText: string | null | undefined): string | null => {
+        if (!rawText) return null;
+
+        let text = String(rawText);
+
+        // 1. Remover tags [TYPE:SUMMARY] ou [TYPE: SUMMARY]
+        text = text.replace(/^\[TYPE:\s*SUMMARY\]\s*/i, '');
+
+        // 2. Tentar parsear se for JSON com campo "text"
+        if (text.trim().startsWith('{')) {
+            try {
+                const parsed = JSON.parse(text);
+                if (parsed.text) {
+                    text = parsed.text;
+                } else if (parsed.summary) {
+                    text = parsed.summary;
+                }
+            } catch (e) {
+                // Não é JSON válido, manter como está
+            }
+        }
+
+        return text.trim();
+    };
+
     // Refs
     const recognitionRef = useRef<any>(null);
     const isRecordingRef = useRef(false);
@@ -335,7 +361,7 @@ export default function TranscriptionScreen() {
 
                     // Restaurar estados
                     if (latestSummary) {
-                        setGeneratedSummary(latestSummary.ai_generated_content || null);
+                        setGeneratedSummary(cleanSummaryText(latestSummary.ai_generated_content));
                     }
                     if (latestQuiz) {
                         setGeneratedQuiz(latestQuiz.content || null);
@@ -765,14 +791,18 @@ export default function TranscriptionScreen() {
     const handleSendSummaryToPresentation = async () => {
         if (!presentationCode || !generatedSummary) return;
 
+        setFredCommand('Enviando resumo para a tela...');
+
         try {
             await sendToPresentation(presentationCode, 'summary', {
                 text: generatedSummary,
                 title: 'Resumo da Aula'
             });
-            Alert.alert('✅ Sucesso', 'Resumo enviado para a tela de apresentação');
+            setFredCommand('✅ Resumo enviado para apresentação!');
+            setTimeout(() => setFredCommand(null), 3000);
         } catch (error) {
-            Alert.alert('Erro', 'Falha ao enviar resumo');
+            setFredCommand('❌ Erro ao enviar resumo');
+            setTimeout(() => setFredCommand(null), 3000);
         }
     };
 
@@ -1123,7 +1153,18 @@ export default function TranscriptionScreen() {
             }
 
             // ========== INTERCEPTOR: Listar Documentos Disponíveis ==========
-            if (/\b(quais|lista(r)?|mostr(ar?|e)|ver)\b.*(documentos?|pdfs?|arquivos?|apresentações?)\b.*\b(dispon[íi]veis?|tem|existem?)\b/i.test(lowerCmd)) {
+            // Variações: "quais documentos tem", "lista os arquivos", "mostra os pdfs disponíveis",
+            // "quais são os documentos", "me mostra os arquivos", "tem algum documento", "documentos que tem"
+            const isListDocsCmd =
+                // Padrão 1: verbo + documentos + disponíveis/tem
+                /\b(quais?|list(ar?|e)?|mostr(ar?|e)?|ver|exib(ir?|e)?|vej(a|o))\b.{0,15}\b(documentos?|pdfs?|arquivos?|apresentaç(ão|ões)|materiais?)\b/i.test(lowerCmd) &&
+                (/\b(dispon[íi]veis?|tem|temos|existem?|h[áa]|tiver)\b/i.test(lowerCmd) || /\bquais?\b/i.test(lowerCmd)) ||
+                // Padrão 2: "documentos disponíveis" ou "arquivos que tem"
+                /\b(documentos?|pdfs?|arquivos?)\b.{0,10}\b(dispon[íi]veis?|que\s*(tem|temos|existe))\b/i.test(lowerCmd) ||
+                // Padrão 3: "quais são os documentos"
+                /\bquais?\s*(s[ãa]o)?\s*(os?)?\s*(documentos?|pdfs?|arquivos?)\b/i.test(lowerCmd);
+
+            if (isListDocsCmd) {
                 console.log('[AI INTERCEPTOR] Comando: Listar documentos');
 
                 setFredCommand('Buscando documentos...');
@@ -1141,17 +1182,7 @@ export default function TranscriptionScreen() {
                             documents: result.documents
                         });
 
-                        // 3. Se tiver apresentação ativa, enviar também para a tela
-                        if (presentationCodeRef.current) {
-                            await sendToPresentation(
-                                presentationCodeRef.current,
-                                'document_list',
-                                {
-                                    documents: result.documents,
-                                    title: 'Documentos Disponíveis'
-                                }
-                            );
-                        }
+                        // Nota: Lista de documentos exibida apenas para o professor, não na apresentação
 
                         setFredCommand(`${result.documents.length} documento(s) encontrado(s)!`);
                         setTimeout(() => setFredCommand(null), 3000);
@@ -1172,13 +1203,26 @@ export default function TranscriptionScreen() {
             // ========== INTERCEPTOR: Controle de PDF ==========
 
             // 1. Próxima Página
-            // Aceita: "próxima página", "próximo slide", "avançar", "passa", "passar", "frente", "seguinte"
-            if (/\b(pr[óo]xim[oa]|avançar?|passar?|seguinte|frente)\b/i.test(lowerCmd) &&
-                (/\b(p[áa]gina|slide|tela|folha)\b/i.test(lowerCmd) || /\b(avançar?|passar?)\b/i.test(lowerCmd) || /\b(pr[óo]xim[oa]|seguinte)\b/i.test(lowerCmd))) {
+            // Variações: "próxima página", "passa pra próxima", "avança", "próximo slide",
+            // "passa o slide", "vai pra frente", "seguinte", "próxima", "passa"
+            const isNextPageCmd =
+                // Evitar conflito com vídeo/música
+                !/\b(v[íi]deo|m[úu]sica|som)\b/i.test(lowerCmd) && (
+                    // "próxima página", "próximo slide"
+                    /\b(pr[óo]xim[oa])\b/i.test(lowerCmd) ||
+                    // "avançar", "avança", "avance"
+                    /\b(avanç(ar?|e|a))\b/i.test(lowerCmd) ||
+                    // "passa", "passar", "passe" (sem ser "passar vídeo")
+                    /\b(pass(ar?|e|a))\b.{0,10}\b(p[áa]gina|slide|folha|pr[óo]xim)\b/i.test(lowerCmd) ||
+                    // "passa" sozinho ou "passa aí"
+                    /^\s*(pass(ar?|e|a)|p[áa]gina)\s*(a[íi])?\s*$/i.test(lowerCmd) ||
+                    // "vai pra frente", "segue", "seguinte"
+                    /\b(seguinte|segue|vai\s*(pra|para)?\s*frente)\b/i.test(lowerCmd)
+                );
+
+            if (isNextPageCmd) {
                 console.log('[AI INTERCEPTOR] Comando: Próxima página PDF');
                 if (presentationCodeRef.current) {
-                    if (/\b(v[íi]deo|m[úu]sica)\b/i.test(lowerCmd)) return; // Evitar conflito com mídia
-
                     pdfNextPage(presentationCodeRef.current);
                     setFredCommand('PDF: Próxima Página');
                     setTimeout(() => setFredCommand(null), 3000);
@@ -1188,12 +1232,22 @@ export default function TranscriptionScreen() {
             }
 
             // 2. Página Anterior
-            // Aceita: "página anterior", "voltar", "volta", "trás", "anterior"
-            if (/\b(anterior|volta(r)?|tr[áa]s|recuar?)\b/i.test(lowerCmd)) {
+            // Variações: "página anterior", "volta", "voltar página", "volta uma",
+            // "vai pra trás", "retrocede", "anterior", "volta aí"
+            const isPrevPageCmd =
+                // Evitar conflito com vídeo/música e com "voltar X segundos"
+                !/\b(v[íi]deo|m[úu]sica|som|segundos?|seg)\b/i.test(lowerCmd) && (
+                    // "página anterior", "anterior"
+                    /\b(anterior)\b/i.test(lowerCmd) ||
+                    // "volta", "voltar" (sem ser "voltar X segundos")
+                    /\b(volt(ar?|e|a))\b/i.test(lowerCmd) && !/\d/.test(lowerCmd) ||
+                    // "vai pra trás", "pra trás"
+                    /\b(tr[áa]s|retrocede(r)?|recua(r)?)\b/i.test(lowerCmd)
+                );
+
+            if (isPrevPageCmd) {
                 console.log('[AI INTERCEPTOR] Comando: Página anterior PDF');
                 if (presentationCodeRef.current) {
-                    if (/\b(v[íi]deo|m[úu]sica)\b/i.test(lowerCmd)) return; // Evitar conflito
-
                     pdfPreviousPage(presentationCodeRef.current);
                     setFredCommand('PDF: Página Anterior');
                     setTimeout(() => setFredCommand(null), 3000);
@@ -1203,24 +1257,37 @@ export default function TranscriptionScreen() {
             }
 
             // 3. Ir para Página Específica
-            const gotoPageMatch = lowerCmd.match(/\b(ir\s*para|vai\s*para|p[áa]gina|slide|folha|muda\s*para)\s*(\d+|um|dois|tr[êe]s|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|treze|quatorze|quinze|vinte|trinta)\b/i);
+            // Variações: "vai pra página 5", "página 3", "vai pro slide 2",
+            // "abre a página dois", "muda pra 10", "pula pra página 7"
+            const gotoPageMatch = lowerCmd.match(
+                /\b(ir\s*(pra|para)|vai\s*(pra|para)?|muda\s*(pra|para)?|pula\s*(pra|para)?|abre?\s*(a)?)?\s*(p[áa]gina|slide|folha)\s*(n[úu]mero)?\s*(\d+|uma?|dois|duas|tr[êe]s|quatro|cinco|seis|sete|oito|nove|dez|onze|doze|treze|quatorze|quinze|dezesseis|dezessete|dezoito|dezenove|vinte|trinta|quarenta|cinquenta)\b/i
+            );
             if (gotoPageMatch) {
                 console.log('[AI INTERCEPTOR] Comando: Ir para página PDF');
                 if (presentationCodeRef.current) {
                     let pageNum = 1;
-                    const numStr = gotoPageMatch[2];
+                    const numStr = gotoPageMatch[10]; // O número está no grupo 10
 
                     if (!isNaN(parseInt(numStr))) {
                         pageNum = parseInt(numStr);
                     } else {
-                        // Conversão simples de texto para número (extensível)
+                        // Conversão de texto para número (expandida)
                         const mapNums: { [key: string]: number } = {
-                            'um': 1, 'dois': 2, 'três': 3, 'tres': 3, 'quatro': 4, 'cinco': 5,
-                            'seis': 6, 'sete': 7, 'oito': 8, 'nove': 9, 'dez': 10,
+                            'um': 1, 'uma': 1,
+                            'dois': 2, 'duas': 2,
+                            'três': 3, 'tres': 3,
+                            'quatro': 4,
+                            'cinco': 5,
+                            'seis': 6,
+                            'sete': 7,
+                            'oito': 8,
+                            'nove': 9,
+                            'dez': 10,
                             'onze': 11, 'doze': 12, 'treze': 13, 'quatorze': 14, 'quinze': 15,
-                            'vinte': 20, 'trinta': 30
+                            'dezesseis': 16, 'dezessete': 17, 'dezoito': 18, 'dezenove': 19,
+                            'vinte': 20, 'trinta': 30, 'quarenta': 40, 'cinquenta': 50
                         };
-                        pageNum = mapNums[numStr.toLowerCase()] || 1;
+                        pageNum = mapNums[numStr?.toLowerCase()] || 1;
                     }
 
                     pdfGotoPage(presentationCodeRef.current, pageNum);
@@ -1232,8 +1299,15 @@ export default function TranscriptionScreen() {
             }
 
             // 4. Zoom
-            // Aceita: "aumentar zoom", "dar zoom", "aproximar", "ampliar", "letra maior"
-            if (/\b(aumentar?|dar|mais|bota(r)?)\s*zoom\b|\b(aproximar?|ampliar?)\b|\bletra\s*maior\b/i.test(lowerCmd)) {
+            // Variações para AUMENTAR: "aumenta o zoom", "dá zoom", "aproxima", "amplia",
+            // "letra maior", "aumenta a letra", "zoom in", "mais perto"
+            const isZoomInCmd = /\b(aumenta(r)?|d[áa]|mais|bota(r)?|coloca(r)?)\s*(o\s*)?zoom\b/i.test(lowerCmd) ||
+                /\b(aproxima(r)?|amplia(r)?)\b/i.test(lowerCmd) ||
+                /\b(letra|fonte|texto)\s*(maior|grande)\b/i.test(lowerCmd) ||
+                /\bzoom\s*in\b/i.test(lowerCmd) ||
+                /\bmais\s*(perto|grande)\b/i.test(lowerCmd);
+
+            if (isZoomInCmd) {
                 if (presentationCodeRef.current) {
                     pdfZoom(presentationCodeRef.current, 'in');
                     setFredCommand('PDF: Aumentar Zoom');
@@ -1241,8 +1315,16 @@ export default function TranscriptionScreen() {
                     setIsGenerating(false); return;
                 }
             }
-            // Aceita: "diminuir zoom", "tirar zoom", "menos zoom", "afastar", "reduzir", "letra menor"
-            if (/\b(diminuir?|voltar?|menos|tirar?|sai(r)?)\s*zoom\b|\b(afastar?|reduzir?)\b|\bletra\s*menor\b/i.test(lowerCmd)) {
+
+            // Variações para DIMINUIR: "diminui o zoom", "tira o zoom", "afasta",
+            // "letra menor", "reduz", "zoom out", "mais longe"
+            const isZoomOutCmd = /\b(diminu(ir?|i)|tira(r)?|menos|sai(r)?|volta(r)?)\s*(o\s*)?zoom\b/i.test(lowerCmd) ||
+                /\b(afasta(r)?|reduz(ir)?)\b/i.test(lowerCmd) ||
+                /\b(letra|fonte|texto)\s*(menor|pequen[oa])\b/i.test(lowerCmd) ||
+                /\bzoom\s*out\b/i.test(lowerCmd) ||
+                /\bmais\s*(longe|pequeno)\b/i.test(lowerCmd);
+
+            if (isZoomOutCmd) {
                 if (presentationCodeRef.current) {
                     pdfZoom(presentationCodeRef.current, 'out');
                     setFredCommand('PDF: Diminuir Zoom');
@@ -1250,8 +1332,15 @@ export default function TranscriptionScreen() {
                     setIsGenerating(false); return;
                 }
             }
-            // Aceita: "zoom automático", "ajustar tela", "caber na tela", "visão geral"
-            if (/\bzoom\s*(autom[áa]tico|auto)\b|\b(ajustar|caber)\s*(na\s*)?tela\b|\bvis[ãa]o\s*geral\b/i.test(lowerCmd)) {
+
+            // Variações para ZOOM AUTO: "zoom automático", "ajusta na tela", "cabe na tela",
+            // "visão geral", "encaixa", "fit"
+            const isZoomAutoCmd = /\bzoom\s*(autom[áa]tico|auto)\b/i.test(lowerCmd) ||
+                /\b(ajusta(r)?|cabe(r)?|encaixa(r)?)\s*(na\s*)?tela\b/i.test(lowerCmd) ||
+                /\bvis[ãa]o\s*geral\b/i.test(lowerCmd) ||
+                /\bfit\b/i.test(lowerCmd);
+
+            if (isZoomAutoCmd) {
                 if (presentationCodeRef.current) {
                     pdfZoom(presentationCodeRef.current, 'auto');
                     setFredCommand('PDF: Zoom Automático');
@@ -1259,15 +1348,19 @@ export default function TranscriptionScreen() {
                     setIsGenerating(false); return;
                 }
             }
-            if (/\b(tamanho\s*real|100%|cem\s*por\s*cento|zoom\s*original)\b/i.test(lowerCmd)) {
+
+            // Variações para TAMANHO REAL: "tamanho real", "100%", "cem por cento", "zoom original"
+            if (/\b(tamanho\s*(real|original)|100\s*%|cem\s*por\s*cento|zoom\s*(original|normal))\b/i.test(lowerCmd)) {
                 if (presentationCodeRef.current) {
-                    pdfZoom(presentationCodeRef.current, 'page-actual'); // 100%
+                    pdfZoom(presentationCodeRef.current, 'page-actual');
                     setFredCommand('PDF: Tamanho Real');
                     setTimeout(() => setFredCommand(null), 3000);
                     setIsGenerating(false); return;
                 }
             }
-            if (/\bajustar\s*(a|à)\s*largura\b|\blargura\s*total\b/i.test(lowerCmd)) {
+
+            // Variações para LARGURA: "ajusta à largura", "largura total", "largura da página"
+            if (/\bajusta(r)?\s*(a|à|na)?\s*largura\b|\blargura\s*(total|da\s*p[áa]gina)\b/i.test(lowerCmd)) {
                 if (presentationCodeRef.current) {
                     pdfZoom(presentationCodeRef.current, 'page-width');
                     setFredCommand('PDF: Ajustar à Largura');
@@ -1277,7 +1370,11 @@ export default function TranscriptionScreen() {
             }
 
             // ========== INTERCEPTOR: Abrir Documento Específico ==========
-            if (/\b(abr(ir?|e)|mostr(ar?|e)|exib(ir?|e))\b.*(documento|pdf|arquivo|apresentação)\b/i.test(lowerCmd)) {
+            // Variações: "abre o documento 2", "mostra o pdf 1", "exibe o arquivo três",
+            // "abre o primeiro documento", "mostra a apostila", "coloca o slide"
+            const isOpenDocCmd = /\b(abr(ir?|e|a)|mostr(ar?|e|a)|exib(ir?|e|a)|coloca(r)?|acess(ar?|e|a)|carreg(ar?|ue|a))\b.{0,10}\b(documento|pdf|arquivo|apresentaç[ãa]o|apostila|slide|material)\b/i.test(lowerCmd);
+
+            if (isOpenDocCmd) {
                 console.log('[AI INTERCEPTOR] Comando: Abrir documento');
 
                 if (!presentationCodeRef.current) {
@@ -1776,7 +1873,7 @@ export default function TranscriptionScreen() {
                 activityType = 'summary';
                 title = 'Resumo / Resposta';
                 const textContent = parsedContent.text || parsedContent.summary || (typeof parsedContent === 'string' ? parsedContent : JSON.stringify(parsedContent, null, 2));
-                setGeneratedSummary(String(textContent));
+                setGeneratedSummary(cleanSummaryText(textContent));
                 setDisplayMode('summary');
             }
 
@@ -2321,16 +2418,20 @@ export default function TranscriptionScreen() {
     };
 
     const performShareSummary = async (title: string) => {
+        setFredCommand('Enviando resumo aos alunos...');
+
         try {
             await shareSummary(currentActivity!.id, title);
-            Alert.alert('Sucesso', 'Resumo compartilhado com os alunos!');
+            setFredCommand('✅ Resumo enviado aos alunos!');
+            setTimeout(() => setFredCommand(null), 3000);
             setShowSummaryModal(false);
             // Retomar sessão
             if (session) {
                 await resumeSession(session.id);
             }
         } catch (error) {
-            Alert.alert('Erro', 'Erro ao compartilhar resumo.');
+            setFredCommand('❌ Erro ao enviar resumo');
+            setTimeout(() => setFredCommand(null), 3000);
         }
     };
 
