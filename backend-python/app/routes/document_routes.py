@@ -362,3 +362,75 @@ def send_to_presentation(current_user):
             'error': str(e)
         }), 500
 
+
+@document_bp.route('/proxy/<file_id>', methods=['GET'])
+# @token_required # Remover token se for usado direto em src de img/iframe (ou passar token na query)
+# Para PDF.js, geralmente precisamos de acesso direto. Vamos deixar sem token por enquanto ou usar token na query string.
+def proxy_document(file_id):
+    """
+    Proxy para fazer stream de arquivos do Google Drive para o Frontend.
+    Permite que o PDF.js visualize arquivos hospedados no Drive sem expor credenciais.
+    """
+    try:
+        from app.services.google_drive_service import GoogleDriveService
+        from flask import Response, stream_with_context
+
+        logger.info(f"Iniciando proxy para arquivo Drive ID: {file_id}")
+        
+        drive_service = GoogleDriveService()
+        
+        # Obter metadados para saber o MIME type
+        file_metadata = drive_service.service.files().get(fileId=file_id).execute()
+        mime_type = file_metadata.get('mimeType', 'application/pdf')
+        filename = file_metadata.get('name', 'document.pdf')
+        size = file_metadata.get('size') # Pode ser None se for doc Google (Doc, Sheet)
+        
+        # Para arquivos nativos Google (Docs, Sheets, Slides), precisamos exportar
+        # Para arquivos binários (PDF, Imagens), usamos get_media
+        
+        request_drive = drive_service.service.files().get_media(fileId=file_id)
+        
+        # Streamar resposta
+        def generate():
+            import io
+            file_stream = io.BytesIO()
+            downloader = MediaIoBaseDownload(file_stream, request_drive)
+            done = False
+            while done is False:
+                status, done = downloader.next_chunk()
+                # O downloader do google escreve no buffer.
+                # Precisamos ler o que foi escrito e enviar.
+                # IMPLEMENTAÇÃO SIMPLIFICADA: Baixar tudo na memória e enviar (mais estável para PDFs pequenos/médios)
+                # O streaming chunk a chunk do google-api-client é complexo de adaptar para gerador Flask
+            
+            # Revertendo para download completo em memória por simplicidade e estabilidade
+            file_stream.seek(0)
+            yield file_stream.read()
+
+        # Melhor abordagem para APIS do Google (Download direto)
+        # O google-api-client recomenda MediaIoBaseDownload.
+        # Vamos baixar em memória e servir (PDFs de aula < 50MB ok)
+        
+        import io
+        from googleapiclient.http import MediaIoBaseDownload
+        
+        file_buffer = io.BytesIO()
+        downloader = MediaIoBaseDownload(file_buffer, request_drive)
+        done = False
+        while done is False:
+            status, done = downloader.next_chunk()
+            # logger.info(f"Download {int(status.progress() * 100)}%")
+        
+        file_buffer.seek(0)
+        
+        return Response(
+            file_buffer,
+            mimetype=mime_type,
+            headers={
+                'Content-Disposition': f'inline; filename="{filename}"'
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Erro no proxy de documento: {e}")
+        return jsonify({'error': str(e)}), 500

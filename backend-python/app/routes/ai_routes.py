@@ -7,6 +7,7 @@ from app.services.ai_service import chat_with_ai, chat_stream, create_or_get_ses
 from app.models.ai_session import AISession, AIMessage
 from datetime import datetime
 from app import db
+from app.services.google_drive_service import GoogleDriveService
 
 ai_bp = Blueprint('ai', __name__)
 
@@ -267,11 +268,14 @@ def upload_context(current_user):
     from app.models.subject import Subject
     from app.services.ai_service import create_or_get_session
     
+    
     file_stream = None
     filename = None
     subject_id = None
+    session_id = None  # CORREÇÃO: Inicializar aqui
     file_type = "document"
     file_url = None
+    file_path = None  # CORREÇÃO: Inicializar aqui
     
     # 1. Recuperar dados (Suporta JSON com URL ou Multipart)
     if request.is_json:
@@ -283,7 +287,6 @@ def upload_context(current_user):
         filename = data.get('filename', 'downloaded_file.pdf')
         
         # Extrair file_path do file_url (path após o bucket)
-        file_path = None
         if file_url:
             try:
                 # URL formato: https://...supabase.co/storage/v1/object/public/BUCKET/path/to/file.pdf
@@ -305,31 +308,59 @@ def upload_context(current_user):
         subject_id = request.form.get('subject_id')
         session_id = request.form.get('session_id')
         filename = file.filename
-        file_url = None  # Upload direto não tem URL ainda
-        file_path = None
+        # file_url e file_path já inicializados no topo, atualizar após upload Drive
         
         if not file or filename == '':
             return jsonify({'success': False, 'error': 'Arquivo inválido'}), 400
             
-        file_stream = file
+        try:
+            # Upload para Google Drive
+            print(f"Fazendo upload para Google Drive: {filename}")
+            drive_service = GoogleDriveService()
+            drive_file = drive_service.upload_file(
+                file, 
+                filename, 
+                file.content_type or 'application/octet-stream'
+            )
+            
+            # Obter URL de visualização
+            file_url = drive_file.get('webViewLink')
+            print(f"Upload concluído. URL: {file_url}")
+            
+            # Resetar stream para uso posterior (envio p/ N8N)
+            file.seek(0)
+            file_stream = file
+            
+        except Exception as e:
+            print(f"Erro no upload para Drive: {str(e)}")
+            return jsonify({'success': False, 'error': f'Erro no upload: {str(e)}'}), 500
     
     if not subject_id:
         return jsonify({'success': False, 'error': 'ID da disciplina necessário'}), 400
         
     try:
-        # 2. Obter nome da disciplina (classroom_id para o N8N)
+        # 2. SEGURANÇA: Verificar se o professor tem acesso à disciplina
         subject = Subject.query.get(subject_id)
         if not subject:
              return jsonify({'success': False, 'error': 'Disciplina não encontrada'}), 404
+        
+        # Verificar se o professor é o dono da disciplina
+        if subject.teacher_id != current_user.id:
+            return jsonify({'success': False, 'error': 'Sem permissão para fazer upload nesta disciplina'}), 403
              
         classroom_id = subject.name # Usando o NOME como ID para o fluxo
         
         # 3. Preparar arquivo para envio ao N8N
         files_to_send = {}
         
-        if file_url:
-            # Baixar do Supabase para re-enviar (N8N precisa do arquivo físico para vetorizar conteúdo, não só link)
-            try:
+        if file_stream:
+             # Prioridade: Arquivo já em memória (upload recente)
+             files_to_send = {'file': (filename, file_stream, file_stream.content_type)}
+             
+        elif file_url:
+            # Baixar de URL externa (Supabase ou outro link)
+             files_to_send = {} # Initialize if needed within block logic structure
+             try:
                 print(f"Baixando arquivo de: {file_url}")
                 response = requests.get(file_url)
                 response.raise_for_status()
@@ -347,10 +378,25 @@ def upload_context(current_user):
                 print(f"File MIME Type: {mime_type}")
                 
                 files_to_send = {'file': (filename, response.content, mime_type)}
-            except Exception as e:
+                
+                # NOVO: Fazer upload para Google Drive também (para usar cota do usuário OAuth)
+                try:
+                    print(f"Fazendo upload para Google Drive: {filename}")
+                    drive_service = GoogleDriveService()
+                    # Criar stream de bytes a partir do conteúdo baixado
+                    file_bytes = io.BytesIO(response.content)
+                    drive_file = drive_service.upload_file(file_bytes, filename, mime_type)
+                    # Atualizar file_url para apontar para Google Drive
+                    file_url = drive_file.get('webViewLink')
+                    file_path = drive_file.get('id')
+                    print(f"Arquivo salvo no Google Drive: {file_url}")
+                except Exception as drive_error:
+                    print(f"Aviso: Falha ao fazer upload para Google Drive: {drive_error}")
+                    # Não vamos bloquear o processo, mantém URL do Supabase
+                    
+             except Exception as e:
                 return jsonify({'success': False, 'error': f'Erro ao baixar arquivo do Storage: {str(e)}'}), 400
-        elif file_stream:
-             files_to_send = {'file': (filename, file_stream, file_stream.content_type)}
+
              
         # 4. Enviar para Webhook N8N
         n8n_url = os.getenv('N8N_WEBHOOK_UPLOAD')
@@ -401,11 +447,13 @@ def upload_context(current_user):
             file_url=file_url,  # Salvar URL do arquivo original
             file_path=file_path if file_url else None  # Path no Storage
         )
-        db.session.add(context_file)
+        db.session.add(context_file)  # CORREÇÃO: Estava faltando!
         db.session.commit()
         
         return jsonify({
             'success': True,
+            'file_url': file_url,  # Frontend espera no nível raiz
+            'file_path': file_path,  # Frontend espera no nível raiz
             'file': context_file.to_dict(),
             'message': 'Arquivo enviado para processamento'
         })
@@ -423,8 +471,18 @@ def get_subject_documents(current_user, subject_id):
     Returns: { "success": bool, "documents": [{ "id": str, "filename": str, "created_at": str }] }
     """
     from app.models.ai_session import AIContextFile
+    from app.models.subject import Subject
     
     try:
+        # SEGURANÇA: Verificar se o professor tem acesso à disciplina
+        subject = Subject.query.get(subject_id)
+        if not subject:
+            return jsonify({'success': False, 'error': 'Disciplina não encontrada'}), 404
+        
+        # Verificar se o professor é o dono da disciplina
+        if subject.teacher_id != current_user.id:
+            return jsonify({'success': False, 'error': 'Sem permissão para acessar esta disciplina'}), 403
+        
         # Buscar todos os arquivos da disciplina (independente de sessão)
         files = AIContextFile.query.filter_by(subject_id=subject_id)\
             .order_by(AIContextFile.created_at.desc())\

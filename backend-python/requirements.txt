@@ -19,3 +19,7 @@ eventlet>=0.38.0
 gevent>=24.10.1
 simple-websocket
 supabase>=2.3.0
+
+google-api-python-client>=2.118.0
+google-auth-httplib2>=0.2.0
+google-auth-oauthlib>=1.2.0
