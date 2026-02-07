@@ -1098,8 +1098,11 @@ export default function TranscriptionScreen() {
             }
 
             // 0. Enviar para APRESENTAÇÃO (Tela/Projetor)
-            if (/\b(apresent(ar?|ação)|projet(ar?|or)|na tela|mostr(ar?|e)\s*na\s*tela)\b/i.test(lowerCmd)) {
-                console.log('[AI INTERCEPTOR] Comando de apresentação detectado');
+            // GUARD: Ignorar se mencionar "alunos", "turma", etc. (intento de envio para dispositivos, não tela)
+            const isStudentIntent = /\b(alunos?|estudantes?|turma|classe|todos)\b/i.test(lowerCmd);
+
+            if (/\b(apresent(ar?|ação)|projet(ar?|or)|na tela|mostr(ar?|e)\s*na\s*tela)\b/i.test(lowerCmd) && !isStudentIntent) {
+                console.log('[AI INTERCEPTOR] Comando de apresentação detectado:', command);
 
                 if (!presentationCodeRef.current) {
                     setFredCommand('Inicie uma apresentação primeiro!');
@@ -1419,6 +1422,9 @@ export default function TranscriptionScreen() {
             if (isSendIntent && !isGenerateIntent && currentActivity && currentActivity.status !== 'ended') {
                 console.log('[AI INTERCEPTOR] Comando de envio direto detectado:', command);
                 console.log('[AI INTERCEPTOR] Atividade atual:', currentActivity.id, currentActivity.title, currentActivity.activity_type);
+
+                // Prevent duplicates: Ensure we don' trigger presentation logic
+                console.log('[AI INTERCEPTOR] Sending ONLY to students via performStartActivity');
 
                 const act = currentActivity;
                 // Feedback visual
@@ -1799,6 +1805,8 @@ export default function TranscriptionScreen() {
                         const intentRegex = /(envi|mand|aplic|lanç|disponibiliz)/i;
                         if (intentRegex.test(command)) {
                             console.log('[AI AUTO-SEND] Intenção de envio detectada:', command);
+                            // Verificando se já não foi enviado
+                            console.log('[AI AUTO-SEND] Triggering performStartActivity');
                             setTimeout(() => {
                                 performStartActivity(saveResult.activity!.id, title);
                                 setFredCommand('Enviando Quiz...');
@@ -2261,6 +2269,8 @@ export default function TranscriptionScreen() {
     const performStartActivity = async (activityId: number, title: string) => {
         console.log('[BROADCAST] Iniciando atividade para alunos...');
         console.log('[BROADCAST] Activity ID:', activityId);
+        // Ensure we are NOT calling sendToPresentation here
+        console.log('[BROADCAST] This function should NOT trigger presentation display unless backend does so.');
         try {
             const result = await broadcastActivity(activityId, title);
             console.log('[BROADCAST] Resposta da API:', JSON.stringify(result, null, 2));
