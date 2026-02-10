@@ -528,6 +528,87 @@ export default function TranscriptionScreen() {
                     recognition.continuous = !isMobile;
                     recognition.interimResults = true;
                     recognition.lang = 'pt-BR';
+                    recognition.maxAlternatives = 3; // Receber até 3 hipóteses para escolher a melhor
+
+                    // ========== DICIONÁRIO DE CORREÇÕES AUTOMÁTICAS ==========
+                    // Mapa de palavras/frases frequentemente mal transcritas → correção
+                    const correctionMap: Record<string, string> = {
+                        // Trigger word e variações
+                        'fredi': 'Fred', 'frede': 'Fred', 'fredo': 'Fred',
+                        'freed': 'Fred', 'fret': 'Fred', 'fred': 'Fred', 'frete': 'Fred',
+                        // Termos educacionais
+                        'profesora': 'professora', 'profissora': 'professora',
+                        'aula de jeje': 'aula de hoje',
+                        'pra casa': 'para casa', 'procasa': 'para casa',
+                        // Matemática
+                        'piteagoras': 'Pitágoras', 'pitagora': 'Pitágoras',
+                        'equassão': 'equação', 'equasão': 'equação',
+                        'hipotenusa': 'hipotenusa', 'hipotenução': 'hipotenusa',
+                        'frasão': 'fração', 'frassão': 'fração',
+                        'divição': 'divisão', 'divisao': 'divisão',
+                        'multiplição': 'multiplicação', 'multiplicasão': 'multiplicação',
+                        'potenssia': 'potência',
+                        // Ciências
+                        'fotossinteze': 'fotossíntese', 'fotossintese': 'fotossíntese',
+                        'molécola': 'molécula', 'molecula': 'molécula',
+                        'celula': 'célula', 'celúla': 'célula',
+                        // Português / Gramática
+                        'substantibo': 'substantivo', 'subistantivo': 'substantivo',
+                        'adjetibo': 'adjetivo', 'adgetivo': 'adjetivo',
+                        'cunjunção': 'conjunção', 'conjunsão': 'conjunção',
+                        'paragrafo': 'parágrafo', 'paragrafu': 'parágrafo',
+                        // Palavras comuns mal transcritas
+                        'tá bom': 'tá bom', 'tabom': 'tá bom',
+                        'neh': 'né', 'ne': 'né',
+                        'vamo la': 'vamos lá', 'vamolá': 'vamos lá',
+                        'intão': 'então', 'intao': 'então', 'entao': 'então',
+                        'voces': 'vocês', 'voçes': 'vocês',
+                        'tambem': 'também', 'tanbem': 'também', 'tanbém': 'também',
+                    };
+
+                    // Aplicar correções num texto
+                    const applyCorrections = (text: string): { corrected: string; corrections: number } => {
+                        let corrected = text;
+                        let corrections = 0;
+                        for (const [wrong, right] of Object.entries(correctionMap)) {
+                            const regex = new RegExp(`\\b${wrong}\\b`, 'gi');
+                            const before = corrected;
+                            corrected = corrected.replace(regex, right);
+                            if (corrected !== before) corrections++;
+                        }
+                        return { corrected, corrections };
+                    };
+
+                    // Selecionar a melhor alternativa dentre as hipóteses
+                    const pickBestAlternative = (result: any): string => {
+                        // Se só tem 1 alternativa, corrigir e retornar
+                        if (result.length <= 1) {
+                            return applyCorrections(result[0].transcript.trim()).corrected;
+                        }
+
+                        let bestText = result[0].transcript.trim();
+                        let bestScore = -1;
+
+                        for (let a = 0; a < result.length; a++) {
+                            const alt = result[a];
+                            const text = alt.transcript.trim();
+                            if (!text) continue;
+
+                            const confidence = alt.confidence || 0;
+                            const { corrected, corrections } = applyCorrections(text);
+
+                            // Score = confiança base + bônus por correções aplicáveis
+                            // Se temos correções, a alternativa provavelmente faz mais sentido
+                            const score = confidence + (corrections * 0.05);
+
+                            if (score > bestScore) {
+                                bestScore = score;
+                                bestText = corrected;
+                            }
+                        }
+
+                        return bestText;
+                    };
 
                     recognition.onresult = (event: any) => {
                         let currentInterim = '';
@@ -557,7 +638,10 @@ export default function TranscriptionScreen() {
 
                         for (let i = startIndex; i < event.results.length; i++) {
                             const result = event.results[i];
-                            const transcript = result[0].transcript.trim();
+                            // Usar melhor alternativa em vez de sempre pegar a primeira
+                            const transcript = result.isFinal
+                                ? pickBestAlternative(result)
+                                : result[0].transcript.trim();
 
                             if (result.isFinal && transcript) {
                                 if (!processedResultsRef.current.has(i) && transcript !== lastFinalTextRef.current) {
