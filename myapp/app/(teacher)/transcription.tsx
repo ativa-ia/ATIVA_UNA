@@ -60,7 +60,6 @@ import InputModal from '@/components/modals/InputModal';
 import VideoListModal, { VideoItem } from '@/components/modals/VideoListModal';
 import DocumentListModal, { DocumentItem } from '@/components/modals/DocumentListModal';
 import FredHelpModal from '@/components/help/FredHelpModal';
-// Tutorial removido - import TutorialOverlay
 
 /**
  * TranscriptionScreen - Tela de transcrição com sessões persistentes e atividades

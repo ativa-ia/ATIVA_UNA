@@ -4,7 +4,6 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import { getPresentation, PresentationContent } from '@/services/presentation';
-// import { useWebSocket } from '@/hooks/useWebSocket';
 import { usePresentationPolling } from '@/hooks/usePresentationPolling';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
