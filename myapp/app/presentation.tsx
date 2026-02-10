@@ -157,8 +157,18 @@ export default function PresentationScreen() {
 
     // Renderizar conteúdo baseado no tipo
     const renderContent = () => {
-        // 0. Interaction Overlay (Force click for autoplay)
-        if (!hasInteracted && !loading && !error) {
+        // 0. Loading state - show nothing (or a spinner) while the initial fetch is in progress
+        // This prevents the "Aguardando Conteúdo" screen from flashing before the interaction overlay
+        if (loading) {
+            return (
+                <View style={[styles.gradientContainer, { backgroundColor: 'transparent' }]}>
+                    <ActivityIndicator size="large" color={colors.white} />
+                </View>
+            );
+        }
+
+        // 1. Interaction Overlay (Force click for autoplay)
+        if (!hasInteracted && !error) {
             return (
                 <View style={styles.overlayContainer}>
                     <LinearGradient
@@ -277,7 +287,7 @@ const styles = StyleSheet.create({
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
-        padding: spacing.xl,
+        padding: 4,
     },
 
     // Loading State

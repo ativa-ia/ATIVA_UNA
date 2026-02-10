@@ -53,6 +53,7 @@ import {
     pdfZoom
 } from '@/services/presentation';
 import PresentationControls from '@/components/presentation/PresentationControls';
+import MediaControlPanel from '@/components/presentation/MediaControlPanel';
 // import { useAuth } from '@/context/AuthContext'; // Ajuste o caminho se necessário
 import { useRouter } from 'expo-router';
 import ConfirmationModal from '@/components/modals/ConfirmationModal';
@@ -164,6 +165,8 @@ export default function TranscriptionScreen() {
     // Estados de Apresentação
     const [presentationCode, setPresentationCode] = useState<string | null>(null);
     const [presentationActive, setPresentationActive] = useState(false);
+    const [showMediaControls, setShowMediaControls] = useState(false);
+    const [presentationContentType, setPresentationContentType] = useState<'video' | 'document' | null>(null);
 
     // Loading State with Title
     const [loadingTitle, setLoadingTitle] = useState('Gerando com IA...');
@@ -905,6 +908,7 @@ export default function TranscriptionScreen() {
             if (response.success) {
                 setPresentationActive(false);
                 setPresentationCode(null);
+                setPresentationContentType(null);
                 Alert.alert('✅ Sucesso', 'Apresentação encerrada!');
             } else {
                 Alert.alert('Erro', response.error || 'Falha ao encerrar');
@@ -1551,6 +1555,7 @@ export default function TranscriptionScreen() {
                                 );
 
                                 if (sendResult.success) {
+                                    setPresentationContentType('document');
                                     setFredCommand(`✅ ${selectedDoc.filename} aberto!`);
                                     setTimeout(() => setFredCommand(null), 3000);
                                 } else {
@@ -2580,6 +2585,7 @@ export default function TranscriptionScreen() {
                 });
 
                 if (result.success) {
+                    if (payload.type === 'video') setPresentationContentType('video');
                     if (Platform.OS === 'web') {
                         // @ts-ignore
                         try { window.navigator.vibrate([100, 50, 100]); } catch (e) { }
@@ -2649,6 +2655,7 @@ export default function TranscriptionScreen() {
             );
 
             if (result.success) {
+                setPresentationContentType('document');
                 setFredCommand(`Documento "${document.filename}" na tela!`);
             } else {
                 setFredCommand('Erro ao abrir documento');
@@ -2803,6 +2810,35 @@ export default function TranscriptionScreen() {
                                 <Text style={styles.sidebarLabel}>Em Andamento</Text>
                             </TouchableOpacity>
 
+                            {presentationActive && (
+                                <TouchableOpacity
+                                    style={[styles.sidebarItem, !presentationContentType && { opacity: 0.4 }]}
+                                    disabled={!presentationContentType}
+                                    onPress={() => {
+                                        setSidebarVisible(false);
+                                        setShowMediaControls(true);
+                                    }}
+                                >
+                                    <View style={[styles.sidebarIcon, { backgroundColor: presentationContentType ? '#ede9fe' : '#f1f5f9' }]}>
+                                        <MaterialIcons
+                                            name={presentationContentType === 'video' ? 'play-circle-outline' : presentationContentType === 'document' ? 'description' : 'tune'}
+                                            size={20}
+                                            color={presentationContentType ? '#7c3aed' : '#94a3b8'}
+                                        />
+                                    </View>
+                                    <View>
+                                        <Text style={styles.sidebarLabel}>
+                                            {presentationContentType === 'video' ? 'Controles do Vídeo'
+                                                : presentationContentType === 'document' ? 'Controles do Documento'
+                                                    : 'Controles da Tela'}
+                                        </Text>
+                                        {!presentationContentType && (
+                                            <Text style={{ fontSize: 10, color: '#94a3b8', marginTop: 1 }}>Nenhum conteúdo ativo</Text>
+                                        )}
+                                    </View>
+                                </TouchableOpacity>
+                            )}
+
                             <View style={styles.sidebarDivider} />
 
                             <TouchableOpacity
@@ -2818,6 +2854,16 @@ export default function TranscriptionScreen() {
                     </View>
                 </TouchableOpacity>
             </Modal>
+
+            {/* Media Control Panel */}
+            {presentationActive && presentationCode && presentationContentType && (
+                <MediaControlPanel
+                    code={presentationCode}
+                    visible={showMediaControls}
+                    contentType={presentationContentType}
+                    onClose={() => setShowMediaControls(false)}
+                />
+            )}
 
             {/* Status Banner */}
             {
