@@ -27,7 +27,6 @@ import TimeAnalysisDashboard from '@/components/quiz/TimeAnalysisDashboard';
 import QuestionDifficultyChart from '@/components/quiz/QuestionDifficultyChart';
 import ComparativeStatsPanel from '@/components/quiz/ComparativeStatsPanel';
 
-// import { useWebSocket } from '@/hooks/useWebSocket';
 import ConfirmationModal from '@/components/modals/ConfirmationModal';
 import { sendToPresentation, getActivePresentation } from '@/services/presentation';
 

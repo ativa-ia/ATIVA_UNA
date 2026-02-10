@@ -157,15 +157,6 @@ def send_content(current_user, code):
     }
     db.session.commit()
     
-    # Emitir via WebSocket para todas as telas conectadas
-    # (Removido para Polling Strategy)
-    # try:
-    #     from app.services.websocket_service import emit_presentation_content
-    #     emit_presentation_content(code, session.current_content)
-    #     logger.info(f"Conteúdo enviado para apresentação {code}: {content_type}")
-    # except Exception as e:
-    #     logger.error(f"Erro ao emitir WebSocket: {e}")
-    
     return jsonify({
         'success': True,
         'message': f'Conteúdo enviado: {content_type}',
@@ -195,14 +186,6 @@ def clear_presentation(current_user, code):
     }
     db.session.commit()
     
-    # Emitir via WebSocket
-    # (Removido para Polling Strategy)
-    # try:
-    #     from app.services.websocket_service import emit_presentation_clear
-    #     emit_presentation_clear(code)
-    # except Exception as e:
-    #     logger.error(f"Erro ao emitir WebSocket: {e}")
-    
     return jsonify({
         'success': True,
         'message': 'Tela limpa'
@@ -224,14 +207,6 @@ def end_presentation(current_user, code):
         return jsonify({'success': False, 'error': 'Não autorizado'}), 403
     
     session.end_session()
-    
-    # Emitir via WebSocket para desconectar telas
-    # (Removido para Polling Strategy)
-    # try:
-    #     from app.services.websocket_service import emit_presentation_ended
-    #     emit_presentation_ended(code)
-    # except Exception as e:
-    #     logger.error(f"Erro ao emitir WebSocket: {e}")
     
     logger.info(f"Apresentação encerrada: {code}")
     

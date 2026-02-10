@@ -337,14 +337,6 @@ def send_to_presentation(current_user):
         }
         db.session.commit()
         
-        # Emitir via WebSocket
-        try:
-            from app.services.websocket_service import emit_presentation_content
-            emit_presentation_content(presentation_code, session.current_content)
-            logger.info(f"Documento enviado via WebSocket para apresentação {presentation_code}")
-        except Exception as e:
-            logger.error(f"Erro ao emitir WebSocket: {e}")
-        
         return jsonify({
             'success': True,
             'message': f'Documento "{temp_doc.filename}" enviado para apresentação',
