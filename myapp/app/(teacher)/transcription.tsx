@@ -1638,15 +1638,31 @@ export default function TranscriptionScreen() {
 
         // Não definimos displayMode ainda, esperamos a resposta
         try {
+            const buildContextSnippet = (text: string, headLen: number = 1000, tailLen: number = 3000) => {
+                if (!text) return '';
+                const normalized = text.replace(/\s+/g, ' ').trim();
+                const maxLen = headLen + tailLen + 50;
+                if (normalized.length <= maxLen) return normalized;
+
+                const head = normalized.slice(0, headLen);
+                const tail = normalized.slice(-tailLen);
+                return `${head}\n...\n${tail}`;
+            };
+
             // Forçar salvamento antes de gerar
             await updateTranscription(session.id, currentText);
 
             console.log('[AI] Enviando texto para N8N...');
             // Envia APENAS o texto, sem instrução extra, conforme pedido
             // Agora enviando também classroom_id e comando
-            const n8nResponse = await processText(currentText && currentText.trim().length > 0 ? currentText : null, undefined, {
+            const contextSnippet = buildContextSnippet(currentText || '');
+            const n8nResponse = await processText(contextSnippet && contextSnippet.trim().length > 0 ? contextSnippet : null, undefined, {
                 classroom_id: subjectName,
-                comando: command || null
+                comando: command || null,
+                summary_mode: 'head_tail',
+                summary_head_len: 1000,
+                summary_tail_len: 3000,
+                full_length: currentText?.length || 0
             });
             console.log('[AI] Resposta do N8N:', JSON.stringify(n8nResponse, null, 2));
 
