@@ -1741,15 +1741,22 @@ export default function TranscriptionScreen() {
 
         // Não definimos displayMode ainda, esperamos a resposta
         try {
-            const buildContextSnippet = (text: string, headLen: number = 1000, tailLen: number = 3000) => {
+            const buildContextSnippet = (
+                text: string,
+                headLen: number = 1000,
+                midLen: number = 1500,
+                tailLen: number = 3000
+            ) => {
                 if (!text) return '';
                 const normalized = text.replace(/\s+/g, ' ').trim();
-                const maxLen = headLen + tailLen + 50;
+                const maxLen = headLen + midLen + tailLen + 80;
                 if (normalized.length <= maxLen) return normalized;
 
                 const head = normalized.slice(0, headLen);
+                const midStart = Math.max(0, Math.floor((normalized.length - midLen) / 2));
+                const middle = normalized.slice(midStart, midStart + midLen);
                 const tail = normalized.slice(-tailLen);
-                return `${head}\n...\n${tail}`;
+                return `${head}\n...\n${middle}\n...\n${tail}`;
             };
 
             // Forçar salvamento antes de gerar
@@ -1762,8 +1769,9 @@ export default function TranscriptionScreen() {
             const n8nResponse = await processText(contextSnippet && contextSnippet.trim().length > 0 ? contextSnippet : null, undefined, {
                 classroom_id: subjectName,
                 comando: command || null,
-                summary_mode: 'head_tail',
+                summary_mode: 'head_mid_tail',
                 summary_head_len: 1000,
+                summary_mid_len: 1500,
                 summary_tail_len: 3000,
                 full_length: currentText?.length || 0
             });
@@ -1784,6 +1792,31 @@ export default function TranscriptionScreen() {
             let explicitType: 'quiz' | 'summary' | 'command' | 'document' | null = null;
 
             if (typeof content === 'string') {
+                const extractVideoList = (text: string): VideoItem[] => {
+                    const urlRegex = /(https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)[\w-]+)/gi;
+                    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+                    const videos: VideoItem[] = [];
+
+                    for (let i = 0; i < lines.length; i++) {
+                        const line = lines[i];
+                        const match = line.match(urlRegex);
+                        if (!match) continue;
+
+                        const url = match[0];
+                        let caption = line.replace(urlRegex, '').trim();
+                        if (!caption && lines[i + 1] && !urlRegex.test(lines[i + 1])) {
+                            caption = lines[i + 1];
+                        }
+
+                        videos.push({
+                            url,
+                            caption: caption || 'Video'
+                        });
+                    }
+
+                    return videos;
+                };
+
                 const cmdMatch = content.match(/^\[TYPE:CMD\]/i);
                 // Detectar [TYPE:DOCUMENT]
                 const documentMatch = content.match(/^\[TYPE:DOCUMENT\]/i);
@@ -1836,6 +1869,16 @@ export default function TranscriptionScreen() {
                 }
 
                 const typeMatch = content.match(/^\[TYPE:(QUIZ|SUMMARY)\]/i);
+
+                if (!cmdMatch) {
+                    const videos = extractVideoList(content);
+                    if (videos.length >= 2) {
+                        setVideoListModal({ visible: true, videos });
+                        setFredCommand(null);
+                        setIsGenerating(false);
+                        return;
+                    }
+                }
 
                 if (cmdMatch) {
                     // *** MULTIPLE VIDEO DETECTION ***
