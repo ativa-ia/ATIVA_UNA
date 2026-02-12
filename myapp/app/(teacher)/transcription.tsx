@@ -61,6 +61,7 @@ import InputModal from '@/components/modals/InputModal';
 import VideoListModal, { VideoItem } from '@/components/modals/VideoListModal';
 import DocumentListModal, { DocumentItem } from '@/components/modals/DocumentListModal';
 import FredHelpModal from '@/components/help/FredHelpModal';
+import { TutorialOverlay, TutorialStep } from '@/components/tutorial/TutorialOverlay';
 
 /**
  * TranscriptionScreen - Tela de transcrição com sessões persistentes e atividades
@@ -144,6 +145,62 @@ export default function TranscriptionScreen() {
     // Estado do modal de atividades
     const [showActivityModal, setShowActivityModal] = useState(false);
     const [isGenerating, setIsGenerating] = useState(false);
+
+    // Tutorial State
+    const [showTutorial, setShowTutorial] = useState(false);
+    const micButtonRef = useRef<View>(null);
+    const helpButtonRef = useRef<View>(null);
+    const presentationButtonRef = useRef<View>(null);
+
+    const tutorialSteps: TutorialStep[] = [
+        {
+            targetRef: micButtonRef,
+            title: 'Transcrição em Tempo Real',
+            description: 'Toque neste botão para iniciar a transcrição. Tudo o que você falar será transformado em texto automaticamente.',
+        },
+        {
+            targetRef: helpButtonRef,
+            title: 'Assistente Fred',
+            description: 'Toque aqui para ver exemplos de comandos. Você pode pedir: "Gere um resumo", "Crie um quiz com 5 perguntas" ou "Comece a apresentação".',
+        },
+        {
+            targetRef: presentationButtonRef,
+            title: 'Modo Apresentação',
+            description: 'Transmita o conteúdo para uma tela externa (TV ou Projetor) para que seus alunos acompanhem a aula.',
+        }
+    ];
+
+    useEffect(() => {
+        checkTutorialStatus();
+    }, []);
+
+    const checkTutorialStatus = async () => {
+        try {
+            const hasSeen = await AsyncStorage.getItem('tutorial_transcription_seen');
+            if (!hasSeen) {
+                // Delay a bit to ensure layout is ready
+                setTimeout(() => {
+                    setShowTutorial(true);
+                }, 1000);
+            }
+        } catch (e) {
+            console.error('Erro ao verificar tutorial:', e);
+        }
+    };
+
+    const handleFinishTutorial = async () => {
+        setShowTutorial(false);
+        try {
+            await AsyncStorage.setItem('tutorial_transcription_seen', 'true');
+        } catch (e) {
+            console.error('Erro ao salvar tutorial status:', e);
+        }
+    };
+
+    const handleOpenTutorial = () => {
+        setSidebarVisible(false);
+        setShowTutorial(true);
+    };
     const [currentActivity, setCurrentActivity] = useState<LiveActivity | null>(null);
     const [showAnswerKey, setShowAnswerKey] = useState(false); // Controla exibição do gabarito
     const [visibleAnswers, setVisibleAnswers] = useState<Set<number>>(new Set()); // Controla quais questões mostram resposta
@@ -535,13 +592,51 @@ export default function TranscriptionScreen() {
                     // ========== DICIONÁRIO DE CORREÇÕES AUTOMÁTICAS ==========
                     // Mapa de palavras/frases frequentemente mal transcritas → correção
                     const correctionMap: Record<string, string> = {
-                        // Trigger word e variações
+                        // ============================================================
+                        // 1. TRIGGER WORD & VARIAÇÕES
+                        // ============================================================
                         'fredi': 'Fred', 'frede': 'Fred', 'fredo': 'Fred',
                         'freed': 'Fred', 'fret': 'Fred', 'fred': 'Fred', 'frete': 'Fred',
+                        'frad': 'Fred', 'prad': 'Fred', 'friend': 'Fred',
+
+                        // ============================================================
+                        // 2. COMANDOS DE VOZ (VIDEOS, PDF, ZOOM)
+                        // ============================================================
+                        // Vídeo
+                        'vidio': 'vídeo', 'video': 'vídeo', 'videos': 'vídeos',
+                        'paly': 'play', 'plei': 'play', 'pleia': 'play', 'toca': 'tocar', 'tocah': 'tocar',
+                        'pouse': 'pause', 'pauze': 'pause', 'pausi': 'pause', 'pausa': 'pause',
+                        'reniciar': 'reiniciar', 'renicia': 'reiniciar', 'reset': 'resetar',
+                        'mute': 'mudo', 'mutar': 'mudo', 'sem som': 'sem som',
+
+                        // PDF / Apresentação
+                        'slid': 'slide', 'slaide': 'slide', 'islaide': 'slide', 'slides': 'slides',
+                        'proxima': 'próxima', 'procima': 'próxima', 'passa': 'passar',
+                        'anterior': 'anterior', 'anterio': 'anterior', 'voltar': 'voltar',
+                        'pagina': 'página', 'pg': 'página', 'pag': 'página',
+                        'apresentasão': 'apresentação', 'apresentacão': 'apresentação',
+                        'documento': 'documento', 'doc': 'documento',
+
+                        // Zoom / Visualização
+                        'zom': 'zoom', 'zum': 'zoom', 'zon': 'zoom',
+                        'aproxma': 'aproxima', 'aprosima': 'aproxima',
+                        'afasta': 'afastar', 'longe': 'longe',
+                        'fela': 'tela', 'tel': 'tela',
+
+                        // Ações Gerais
+                        'eviar': 'enviar', 'inviar': 'enviar', 'manda': 'enviar',
+                        'mosta': 'mostra', 'mustra': 'mostra', 'exibi': 'exibir',
+                        'ajuda': 'ajuda', 'help': 'ajuda', 'socorro': 'ajuda',
+                        'fecha': 'fechar', 'fexa': 'fechar', 'sai': 'sair',
+
+                        // ============================================================
+                        // 3. TERMOS EDUCACIONAIS & CORREÇÕES GERAIS
+                        // ============================================================
                         // Termos educacionais
                         'profesora': 'professora', 'profissora': 'professora',
                         'aula de jeje': 'aula de hoje',
                         'pra casa': 'para casa', 'procasa': 'para casa',
+
                         // Matemática
                         'piteagoras': 'Pitágoras', 'pitagora': 'Pitágoras',
                         'equassão': 'equação', 'equasão': 'equação',
@@ -550,15 +645,18 @@ export default function TranscriptionScreen() {
                         'divição': 'divisão', 'divisao': 'divisão',
                         'multiplição': 'multiplicação', 'multiplicasão': 'multiplicação',
                         'potenssia': 'potência',
+
                         // Ciências
                         'fotossinteze': 'fotossíntese', 'fotossintese': 'fotossíntese',
                         'molécola': 'molécula', 'molecula': 'molécula',
                         'celula': 'célula', 'celúla': 'célula',
+
                         // Português / Gramática
                         'substantibo': 'substantivo', 'subistantivo': 'substantivo',
                         'adjetibo': 'adjetivo', 'adgetivo': 'adjetivo',
                         'cunjunção': 'conjunção', 'conjunsão': 'conjunção',
                         'paragrafo': 'parágrafo', 'paragrafu': 'parágrafo',
+
                         // Palavras comuns mal transcritas
                         'tá bom': 'tá bom', 'tabom': 'tá bom',
                         'neh': 'né', 'ne': 'né',
@@ -573,10 +671,15 @@ export default function TranscriptionScreen() {
                         let corrected = text;
                         let corrections = 0;
                         for (const [wrong, right] of Object.entries(correctionMap)) {
-                            const regex = new RegExp(`\\b${wrong}\\b`, 'gi');
-                            const before = corrected;
-                            corrected = corrected.replace(regex, right);
-                            if (corrected !== before) corrections++;
+                            // OTIMIZADO: Só cria regex se a palavra estiver no texto (check simples antes)
+                            // Mesmo que regex seja rápido, criar milhares de RegExp objetos pode ser pesado em loops rápidos?
+                            // Como correctionMap é pequeno (~50 items), não é crítico, mas a verificação de substring é mais barata.
+                            if (corrected.toLowerCase().includes(wrong)) {
+                                const regex = new RegExp(`\\b${wrong}\\b`, 'gi');
+                                const before = corrected;
+                                corrected = corrected.replace(regex, right);
+                                if (corrected !== before) corrections++;
+                            }
                         }
                         return { corrected, corrections };
                     };
@@ -2743,6 +2846,7 @@ export default function TranscriptionScreen() {
                 {/* Menu Button / Save Indicator / Help */}
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <TouchableOpacity
+                        ref={helpButtonRef}
                         style={styles.helpButton}
                         onPress={() => setShowHelpModal(true)}
                     >
@@ -2865,6 +2969,18 @@ export default function TranscriptionScreen() {
                                 </View>
                                 <Text style={styles.sidebarLabel}>Voltar ao Dashboard</Text>
                             </TouchableOpacity>
+
+                            <View style={styles.sidebarDivider} />
+
+                            <TouchableOpacity
+                                style={styles.sidebarItem}
+                                onPress={handleOpenTutorial}
+                            >
+                                <View style={[styles.sidebarIcon, { backgroundColor: '#f0fdf4' }]}>
+                                    <MaterialIcons name="school" size={20} color="#16a34a" />
+                                </View>
+                                <Text style={styles.sidebarLabel}>Como usar (Tutorial)</Text>
+                            </TouchableOpacity>
                         </View>
                     </View>
                 </TouchableOpacity>
@@ -2903,6 +3019,7 @@ export default function TranscriptionScreen() {
             <View style={styles.presentationSection}>
                 {!presentationActive ? (
                     <TouchableOpacity
+                        ref={presentationButtonRef}
                         style={styles.startPresentationButton}
                         onPress={handleStartPresentation}
                     >
@@ -3443,6 +3560,7 @@ Pressione o botão do microfone para começar a falar."
                     {/* Botão de Gravação (Centralizado e Maior) */}
                     <Animated.View style={[{ transform: [{ scale: pulseAnim }] }, styles.recordButtonWrapper]}>
                         <TouchableOpacity
+                            ref={micButtonRef}
                             style={[styles.recordButton, isRecording && styles.recordButtonActive]}
                             onPress={toggleRecording}
                             activeOpacity={0.8}
@@ -3496,7 +3614,12 @@ Pressione o botão do microfone para começar a falar."
                 onClose={() => setShowHelpModal(false)}
             />
             <FredCommandOverlay />
-            {/* Tutorial removido */}
+            <TutorialOverlay
+                visible={showTutorial}
+                steps={tutorialSteps}
+                onClose={() => setShowTutorial(false)}
+                onFinish={handleFinishTutorial}
+            />
         </View >
     );
 }
