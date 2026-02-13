@@ -37,21 +37,10 @@ export default function PDFViewer({ fileUrl, filename, page = 1, zoom = 'auto' }
             }
 
             if (fileId) {
-                if (filename.toLowerCase().endsWith('.pdf')) {
-                    // URL do Proxy no Backend
-                    // Importar API_URL de @/services/api se necessário, ou usar hardcoded relativo
-                    // Assumindo que o app roda na mesma origem ou configurado
-                    const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
-                    const proxyUrl = `${API_URL}/documents/proxy/${fileId}`;
-
-                    // Usar visualizador nativo do navegador (iframe direto)
-                    // Evita problema de Mixed Content (HTTPS mozilla.github.io x HTTP localhost)
-                    // Chrome/Edge/Firefox nativos suportam #page=N
-                    viewerUrl = `${proxyUrl}#page=${page}&zoom=${zoom}`;
-                } else {
-                    // OUTROS ARQUIVOS (PPTX, DOCX): Usar Google Drive Preview (Embed)
-                    viewerUrl = `https://drive.google.com/file/d/${fileId}/preview`;
-                }
+                // Preferir proxy para evitar bloqueios de iframe em ambiente local
+                const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:5000/api';
+                const proxyUrl = `${API_URL}/documents/proxy/${fileId}`;
+                viewerUrl = `${proxyUrl}#page=${page}&zoom=${zoom}`;
             } else {
                 // Fallback se não conseguir extrair ID
                 viewerUrl = fileUrl;

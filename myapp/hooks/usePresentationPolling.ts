@@ -53,6 +53,7 @@ export function usePresentationPolling({ code, enabled = true, pollingInterval =
                                 timestamp: Date.now() // Force effect trigger
                             });
                         }
+
                     }
                 }
             } catch (error) {

@@ -33,6 +33,7 @@ export default function PresentationControls({ code, onEnd }: Props) {
         onEnd();
     };
 
+
     if (!code) return null;
 
     return (

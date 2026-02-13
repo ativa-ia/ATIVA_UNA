@@ -1317,6 +1317,67 @@ export default function TranscriptionScreen() {
                 }
             }
 
+
+            // 0.3 Compartilhar documento da tela com os alunos
+            // Exemplos: "enviar documento para alunos", "mandar arquivo para turma", "compartilhar documento"
+            const isShareDocCmd =
+                /\b(envi(ar|e)|mand(ar|e)|compartilh(ar|e)|disponibiliz(ar|e)|liber(ar|e)|solt(ar|e))\b.{0,20}\b(documento|arquivo|material|pdf|apostila|slide)\b(?:.{0,20}\b(alunos?|estudantes?|turma|classe)\b)?/i.test(lowerCmd) ||
+                /\b(alunos?|estudantes?|turma|classe)\b.{0,20}\b(envi(ar|e)|mand(ar|e)|compartilh(ar|e)|disponibiliz(ar|e)|liber(ar|e)|solt(ar|e))\b.{0,20}\b(documento|arquivo|material|pdf|apostila|slide)\b/i.test(lowerCmd);
+
+            if (isShareDocCmd) {
+                console.log('[AI INTERCEPTOR] Comando: Compartilhar documento com alunos');
+
+                if (!presentationCodeRef.current) {
+                    setFredCommand('Inicie uma apresentação primeiro!');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                }
+
+                let hasDocumentOnScreen = presentationContentType === 'document';
+
+                if (!hasDocumentOnScreen) {
+                    try {
+                        const { getPresentation } = require('@/services/presentation');
+                        const pres = await getPresentation(presentationCodeRef.current);
+                        if (pres?.success && pres.current_content?.type === 'document') {
+                            hasDocumentOnScreen = true;
+                            setPresentationContentType('document');
+                        }
+                    } catch (error) {
+                        console.error('[AI] Erro ao validar documento na tela:', error);
+                    }
+                }
+
+                if (!hasDocumentOnScreen) {
+                    setFredCommand('Nenhum documento na tela');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                }
+
+                setFredCommand('Enviando documento para alunos...');
+
+                try {
+                    const { sharePresentationDocumentToStudents } = require('@/services/api');
+                    const result = await sharePresentationDocumentToStudents(presentationCodeRef.current);
+
+                    if (result.success) {
+                        const countText = typeof result.count === 'number' ? ` (${result.count})` : '';
+                        setFredCommand(`Documento enviado para alunos${countText}`);
+                    } else {
+                        setFredCommand(result.error || 'Erro ao compartilhar documento');
+                    }
+                } catch (error) {
+                    console.error('[AI] Erro ao compartilhar documento:', error);
+                    setFredCommand('Erro ao compartilhar documento');
+                }
+
+                setTimeout(() => setFredCommand(null), 3000);
+                setIsGenerating(false);
+                return;
+            }
+
             // 0. Enviar para APRESENTAÇÃO (Tela/Projetor)
             // GUARD: Ignorar se mencionar "alunos", "turma", etc. (intento de envio para dispositivos, não tela)
             const isStudentIntent = /\b(alunos?|estudantes?|turma|classe|todos)\b/i.test(lowerCmd);
@@ -1456,7 +1517,7 @@ export default function TranscriptionScreen() {
                 console.log('[AI INTERCEPTOR] Comando: Ir para página PDF');
                 if (presentationCodeRef.current) {
                     let pageNum = 1;
-                    const numStr = gotoPageMatch[10]; // O número está no grupo 10
+                    const numStr = gotoPageMatch[gotoPageMatch.length - 1]; // Ultimo grupo capturado
 
                     if (!isNaN(parseInt(numStr))) {
                         pageNum = parseInt(numStr);
@@ -1563,6 +1624,7 @@ export default function TranscriptionScreen() {
             // Variações: "abre o documento 2", "mostra o pdf 1", "exibe o arquivo três",
             // "abre o primeiro documento", "mostra a apostila", "coloca o slide"
             const isOpenDocCmd = /\b(abr(ir?|e|a)|mostr(ar?|e|a)|exib(ir?|e|a)|coloca(r)?|acess(ar?|e|a)|carreg(ar?|ue|a))\b.{0,10}\b(documento|pdf|arquivo|apresentaç[ãa]o|apostila|slide|material)\b/i.test(lowerCmd);
+            const isBareOpenDocCmd = /\b(abr(ir?|e|a)|mostr(ar?|e|a)|exib(ir?|e|a)|coloca(r)?|acess(ar?|e|a)|carreg(ar?|ue|a))\b.{0,10}\b(documento|pdf|arquivo|apresentaç[ãa]o|apostila|slide|material)\b\s*$/i.test(lowerCmd);
 
             if (isOpenDocCmd) {
                 console.log('[AI INTERCEPTOR] Comando: Abrir documento');
@@ -1607,7 +1669,7 @@ export default function TranscriptionScreen() {
 
                 const nameMatch = lowerCmd.match(/\b(documento|pdf|arquivo|apresentação)\s+(.+)/i);
 
-                if (numberMatch || nameMatch) {
+                if (numberMatch || nameMatch || isBareOpenDocCmd) {
                     setFredCommand('Procurando documento...');
 
                     try {
@@ -1641,6 +1703,13 @@ export default function TranscriptionScreen() {
                                 );
                                 if (selectedDoc) {
                                     console.log('[AI] Documento selecionado por nome:', selectedDoc.filename);
+                                }
+                            }
+
+                            if (!selectedDoc && isBareOpenDocCmd) {
+                                selectedDoc = result.documents[0];
+                                if (selectedDoc) {
+                                    console.log('[AI] Documento selecionado (primeiro da lista):', selectedDoc.filename);
                                 }
                             }
 
@@ -1844,6 +1913,7 @@ export default function TranscriptionScreen() {
 
                             if (result.success) {
                                 console.log('[AI] ✅ Documento enviado com sucesso!');
+                                setPresentationContentType('document');
                                 Alert.alert('✅ Sucesso', 'Documento enviado para apresentação!');
                             } else {
                                 console.error('[AI] ❌ Erro ao enviar documento:', result.error);

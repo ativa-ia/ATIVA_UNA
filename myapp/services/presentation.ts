@@ -149,6 +149,10 @@ export const controlPresentationVideo = async (code: string, command: 'play' | '
 };
 
 /**
+ * Controlar fullscreen da apresentacao (Professor)
+ */
+
+/**
  * Obter sessão ativa do professor
  */
 export const getActivePresentation = async (): Promise<{
