@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
     },
     videoContainer: {
         width: '100%',
-        height: '90%', // Deixar espaço para caption
+        height: '95%',
         justifyContent: 'center',
         alignItems: 'center',
         backgroundColor: '#000',
@@ -146,10 +146,11 @@ const styles = StyleSheet.create({
         color: colors.slate400,
     },
     caption: {
-        marginTop: 16,
-        fontSize: 24,
-        fontWeight: 'bold',
+        marginTop: 8,
+        fontSize: 14,
+        fontWeight: '500',
         color: colors.white,
+        opacity: 0.7,
         textAlign: 'center',
         textShadowColor: 'rgba(0, 0, 0, 0.75)',
         textShadowOffset: { width: -1, height: 1 },

@@ -591,6 +591,7 @@ def send_kb_document_to_presentation(current_user, file_id):
             document_data = {
                 'filename': context_file.filename,
                 'file_url': context_file.file_url,
+                'supabase_url': context_file.file_url,
                 'file_path': context_file.file_path,
                 'file_type': context_file.file_type,
                 'uploaded_at': context_file.created_at.isoformat() if context_file.created_at else None
@@ -639,10 +640,14 @@ def send_kb_document_to_presentation(current_user, file_id):
                 }]
             
             document_data = {
+                'file_id': context_file.id,
+                'subject_id': context_file.subject_id,
                 'filename': context_file.filename,
                 'sections': sections,
                 'total_sections': len(sections),
-                'total_chunks': len(paragraphs)
+                'total_chunks': len(paragraphs),
+                'file_type': context_file.file_type,
+                'uploaded_at': context_file.created_at.isoformat() if context_file.created_at else None
             }
         
         # 4. Atualizar conteúdo da apresentação

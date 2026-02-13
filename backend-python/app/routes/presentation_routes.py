@@ -157,19 +157,115 @@ def send_content(current_user, code):
     }
     db.session.commit()
     
-    # Emitir via WebSocket para todas as telas conectadas
-    # (Removido para Polling Strategy)
-    # try:
-    #     from app.services.websocket_service import emit_presentation_content
-    #     emit_presentation_content(code, session.current_content)
-    #     logger.info(f"Conteúdo enviado para apresentação {code}: {content_type}")
-    # except Exception as e:
-    #     logger.error(f"Erro ao emitir WebSocket: {e}")
-    
     return jsonify({
         'success': True,
         'message': f'Conteúdo enviado: {content_type}',
         'content': session.current_content
+    })
+
+
+@presentation_bp.route('/<string:code>/share-document', methods=['POST'])
+@token_required
+def share_document_to_students(current_user, code):
+    """
+    Compartilha o documento atual da apresentacao com os alunos da disciplina.
+    Requer que o conteudo atual seja um documento.
+    """
+    from app.models.enrollment import Enrollment
+    from app.models.teaching import Teaching
+    from app.models.study_material import StudyMaterial
+
+    session = PresentationSession.query.filter_by(code=code).first()
+
+    if not session:
+        return jsonify({'success': False, 'error': 'Sessao nao encontrada'}), 404
+
+    if session.teacher_id != current_user.id:
+        return jsonify({'success': False, 'error': 'Nao autorizado'}), 403
+
+    if session.status != 'active':
+        return jsonify({'success': False, 'error': 'Sessao encerrada'}), 400
+
+    current = session.current_content or {}
+    if current.get('type') != 'document':
+        return jsonify({'success': False, 'error': 'Nenhum documento na tela'}), 400
+
+    data = current.get('data') or {}
+    subject_id = data.get('subject_id')
+    classroom_id = data.get('classroom_id')
+    file_url = data.get('supabase_url') or data.get('file_url')
+    file_path = data.get('file_path')
+    title = data.get('filename') or 'Documento da aula'
+
+    if not subject_id and classroom_id:
+        from app.models.subject import Subject
+        resolved_subject = None
+
+        try:
+            if str(classroom_id).isdigit():
+                resolved_subject = Subject.query.get(int(classroom_id))
+        except Exception:
+            resolved_subject = None
+
+        if not resolved_subject:
+            resolved_subject = Subject.query.filter_by(name=classroom_id).first()
+
+        if not resolved_subject:
+            resolved_subject = Subject.query.filter_by(code=classroom_id).first()
+
+        if resolved_subject:
+            subject_id = resolved_subject.id
+
+    if not subject_id and file_url:
+        from app.models.ai_session import AIContextFile
+        context_file = AIContextFile.query.filter_by(file_url=file_url).first()
+        if context_file:
+            subject_id = context_file.subject_id
+
+    if not subject_id and file_path:
+        from app.models.ai_session import AIContextFile
+        context_file = AIContextFile.query.filter_by(file_path=file_path).first()
+        if context_file:
+            subject_id = context_file.subject_id
+
+    if not subject_id:
+        return jsonify({'success': False, 'error': 'Documento sem disciplina vinculada'}), 400
+
+    if not file_url:
+        return jsonify({'success': False, 'error': 'Documento sem URL compartilhavel'}), 400
+
+    teaching = Teaching.query.filter_by(
+        teacher_id=current_user.id,
+        subject_id=subject_id
+    ).first()
+
+    if not teaching:
+        return jsonify({'success': False, 'error': 'Sem permissao para esta disciplina'}), 403
+
+    enrollments = Enrollment.query.filter_by(subject_id=subject_id).all()
+    if not enrollments:
+        return jsonify({'success': True, 'message': 'Nenhum aluno matriculado', 'count': 0})
+
+    count = 0
+    for enrollment in enrollments:
+        material = StudyMaterial(
+            student_id=enrollment.student_id,
+            subject_id=subject_id,
+            activity_id=None,
+            title=title,
+            type='document',
+            content_url=file_url,
+            file_size=None
+        )
+        db.session.add(material)
+        count += 1
+
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': f'Documento enviado para {count} aluno(s)',
+        'count': count
     })
 
 
@@ -195,14 +291,6 @@ def clear_presentation(current_user, code):
     }
     db.session.commit()
     
-    # Emitir via WebSocket
-    # (Removido para Polling Strategy)
-    # try:
-    #     from app.services.websocket_service import emit_presentation_clear
-    #     emit_presentation_clear(code)
-    # except Exception as e:
-    #     logger.error(f"Erro ao emitir WebSocket: {e}")
-    
     return jsonify({
         'success': True,
         'message': 'Tela limpa'
@@ -224,14 +312,6 @@ def end_presentation(current_user, code):
         return jsonify({'success': False, 'error': 'Não autorizado'}), 403
     
     session.end_session()
-    
-    # Emitir via WebSocket para desconectar telas
-    # (Removido para Polling Strategy)
-    # try:
-    #     from app.services.websocket_service import emit_presentation_ended
-    #     emit_presentation_ended(code)
-    # except Exception as e:
-    #     logger.error(f"Erro ao emitir WebSocket: {e}")
     
     logger.info(f"Apresentação encerrada: {code}")
     
@@ -298,12 +378,12 @@ def control_content(current_user, code_or_id):
     # Persistir estado do vídeo
     if not session.current_content:
         session.current_content = {}
-        
+
     session.current_content.update({
         'video_control': {
             'command': command,
             'value': value,
-        'timestamp': datetime.utcnow().isoformat()
+            'timestamp': datetime.utcnow().isoformat()
         }
     })
     

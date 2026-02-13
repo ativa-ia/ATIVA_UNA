@@ -1,342 +1,336 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
+    Modal,
     View,
     Text,
     StyleSheet,
-    Modal,
     TouchableOpacity,
-    Dimensions,
     Animated,
     Platform,
-    TouchableWithoutFeedback,
+    LayoutRectangle,
+    useWindowDimensions
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 export interface TutorialStep {
+    targetRef: React.RefObject<any>;
     title: string;
     description: string;
-    targetRef?: any; // Just for identification in parent
-    key?: string; // identifier
-}
-
-export interface TargetLayout {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
+    position?: 'top' | 'bottom' | 'left' | 'right';
 }
 
 interface TutorialOverlayProps {
     visible: boolean;
     steps: TutorialStep[];
-    currentStepIndex: number;
-    targetLayout: TargetLayout | null;
-    onNext: () => void;
-    onPrev: () => void;
-    onSkip: () => void;
-    isLastStep: boolean;
+    onClose: () => void;
+    onFinish: () => void;
 }
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-
-export default function TutorialOverlay({
+export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({
     visible,
     steps,
-    currentStepIndex,
-    targetLayout,
-    onNext,
-    onPrev,
-    onSkip,
-    isLastStep
-}: TutorialOverlayProps) {
+    onClose,
+    onFinish
+}) => {
+    const { width, height } = useWindowDimensions();
+    const [currentStepIndex, setCurrentStepIndex] = useState(0);
+    const [targetLayout, setTargetLayout] = useState<LayoutRectangle | null>(null);
     const fadeAnim = useRef(new Animated.Value(0)).current;
 
-    // Animation trigger
     useEffect(() => {
         if (visible) {
+            setCurrentStepIndex(0);
+            measureCurrentTarget(0);
             Animated.timing(fadeAnim, {
                 toValue: 1,
                 duration: 300,
                 useNativeDriver: true,
             }).start();
         } else {
+            setTargetLayout(null);
             fadeAnim.setValue(0);
         }
-    }, [visible, currentStepIndex, targetLayout]); // Re-animate on step change
+    }, [visible]);
+
+    const measureCurrentTarget = (index: number) => {
+        const step = steps[index];
+        if (step && step.targetRef && step.targetRef.current) {
+            step.targetRef.current.measure((x: number, y: number, width: number, height: number, pageX: number, pageY: number) => {
+                setTargetLayout({
+                    x: pageX,
+                    y: pageY,
+                    width,
+                    height
+                });
+            });
+        }
+    };
+
+    const handleNext = () => {
+        if (currentStepIndex < steps.length - 1) {
+            const nextIndex = currentStepIndex + 1;
+            setCurrentStepIndex(nextIndex);
+            measureCurrentTarget(nextIndex);
+        } else {
+            finishTutorial();
+        }
+    };
+
+    const handlePrevious = () => {
+        if (currentStepIndex > 0) {
+            const prevIndex = currentStepIndex - 1;
+            setCurrentStepIndex(prevIndex);
+            measureCurrentTarget(prevIndex);
+        }
+    };
+
+    const finishTutorial = () => {
+        Animated.timing(fadeAnim, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: true,
+        }).start(() => {
+            onFinish();
+        });
+    }
+
+    // Calculate Card Position
+    const getCardStyle = () => {
+        // Fallback or centered default
+        if (!targetLayout) return { top: height / 2 - 100, left: (width - 300) / 2, width: 300 };
+
+        const spacing = 16;
+        // Adjust widths for better mobile fit
+        const maxCardWidth = 340;
+        const minCardWidth = 260;
+
+        let cardWidth = Math.min(width - 32, maxCardWidth);
+        if (cardWidth < minCardWidth) cardWidth = width - 36;
+
+        let top = 0;
+        let left = 0;
+
+        // Vertical Positioning
+        const spaceBelow = height - (targetLayout.y + targetLayout.height + spacing);
+        const spaceAbove = targetLayout.y - spacing;
+
+        // Decide placement based on available space
+        if (spaceBelow > 220 || spaceBelow > spaceAbove) {
+            // Below
+            top = targetLayout.y + targetLayout.height + spacing;
+        } else {
+            // Above
+            // Estimate height approx 200 to be safe
+            top = targetLayout.y - 200 - spacing;
+            if (top < 60) top = 60; // Keep clear of top status bar area
+        }
+
+        // Horizontal Positioning
+        // Attempt to center relative to target
+        left = targetLayout.x + (targetLayout.width / 2) - (cardWidth / 2);
+
+        // Boundary Check (Critical for "Fred" button on far right)
+        // Ensure left margin
+        if (left < 16) left = 16;
+
+        // Ensure right margin
+        if (left + cardWidth > width - 16) {
+            left = width - cardWidth - 16;
+        }
+
+        return { top, left, width: cardWidth };
+    };
 
     if (!visible) return null;
 
     const currentStep = steps[currentStepIndex];
-
-    // Determine Popover Position
-    // Default to center if no target
-    let popoverStyle: any = {
-        top: SCREEN_HEIGHT / 2 - 100,
-        left: 20,
-        right: 20,
-    };
-    let arrowStyle: any = { opacity: 0 };
-    let arrowDirection: 'up' | 'down' = 'up';
-
-    // Spotlight dimensions (default full screen dim if no target)
-    let spotTop = 0;
-    let spotLeft = 0;
-    let spotWidth = 0;
-    let spotHeight = 0;
-    let hasTarget = false;
-
-    if (targetLayout) {
-        hasTarget = true;
-        const { x, y, width, height } = targetLayout;
-        spotTop = y;
-        spotLeft = x;
-        spotWidth = width;
-        spotHeight = height;
-
-        const spaceAbove = y;
-        const spaceBelow = SCREEN_HEIGHT - (y + height);
-        const popoverHeight = 200; // estimated
-
-        // Decide whether to put bubble above or below
-        if (spaceBelow > popoverHeight || spaceBelow > spaceAbove) {
-            // Place Below
-            popoverStyle = {
-                top: y + height + 16,
-                left: 20, // Keep mostly full width but with padding
-                right: 20,
-            };
-            arrowDirection = 'up';
-            // Arrow position relative to the card. 
-            // The card is (SCREEN_WIDTH - 40) wide.
-            // visual target center relative to screen X is x + width/2.
-            // visual target center relative to card left (20) is (x + width/2) - 20.
-            const arrowX = (x + width / 2) - 20;
-            // Clamp arrowX to be within card radius (approx 16px to width-16px)
-            const clampedArrowX = Math.max(16, Math.min(SCREEN_WIDTH - 40 - 16, arrowX));
-
-            arrowStyle = {
-                top: -10, // Stick out top
-                left: clampedArrowX - 10, // Center the 20px arrow
-                borderBottomWidth: 10,
-                borderBottomColor: '#FFF',
-                borderLeftWidth: 10,
-                borderLeftColor: 'transparent',
-                borderRightWidth: 10,
-                borderRightColor: 'transparent',
-                borderTopWidth: 0,
-            };
-        } else {
-            // Place Above
-            popoverStyle = {
-                bottom: SCREEN_HEIGHT - y + 16,
-                left: 20,
-                right: 20,
-            };
-            arrowDirection = 'down';
-            const arrowX = (x + width / 2) - 20;
-            const clampedArrowX = Math.max(16, Math.min(SCREEN_WIDTH - 40 - 16, arrowX));
-
-            arrowStyle = {
-                bottom: -10, // Stick out bottom
-                left: clampedArrowX - 10,
-                borderTopWidth: 10,
-                borderTopColor: '#FFF',
-                borderLeftWidth: 10,
-                borderLeftColor: 'transparent',
-                borderRightWidth: 10,
-                borderRightColor: 'transparent',
-                borderBottomWidth: 0,
-            };
-        }
-    }
+    const cardStyle = getCardStyle();
 
     return (
         <Modal
             transparent
             visible={visible}
-            animationType="fade"
-            onRequestClose={onSkip}
-            statusBarTranslucent
+            animationType="none"
+            onRequestClose={onClose}
         >
-            {/* Spotlight Overlay Calculation */}
-            {hasTarget ? (
-                // 4-part overlay to create a "hole"
-                <View style={StyleSheet.absoluteFill}>
-                    {/* Top Dim */}
-                    <View style={{
-                        position: 'absolute', top: 0, left: 0, right: 0, height: spotTop,
-                        backgroundColor: 'rgba(0,0,0,0.7)'
-                    }} />
-                    {/* Bottom Dim */}
-                    <View style={{
-                        position: 'absolute', top: spotTop + spotHeight, left: 0, right: 0, bottom: 0,
-                        backgroundColor: 'rgba(0,0,0,0.7)'
-                    }} />
-                    {/* Left Dim */}
-                    <View style={{
-                        position: 'absolute', top: spotTop, left: 0, width: spotLeft, height: spotHeight,
-                        backgroundColor: 'rgba(0,0,0,0.7)'
-                    }} />
-                    {/* Right Dim */}
-                    <View style={{
-                        position: 'absolute', top: spotTop, left: spotLeft + spotWidth, right: 0, height: spotHeight,
-                        backgroundColor: 'rgba(0,0,0,0.7)'
-                    }} />
+            <View style={styles.container}>
+                {/* Background Mask - Semi-transparent dark overlay */}
+                {targetLayout && (
+                    <View style={styles.maskContainer}>
+                        {/* Top */}
+                        <View style={[styles.maskBlock, { top: 0, height: targetLayout.y, width: '100%', left: 0 }]} />
+                        {/* Bottom */}
+                        <View style={[styles.maskBlock, { top: targetLayout.y + targetLayout.height, height: height - (targetLayout.y + targetLayout.height), width: '100%', left: 0 }]} />
+                        {/* Left */}
+                        <View style={[styles.maskBlock, { top: targetLayout.y, height: targetLayout.height, width: targetLayout.x, left: 0 }]} />
+                        {/* Right */}
+                        <View style={[styles.maskBlock, { top: targetLayout.y, height: targetLayout.height, width: width - (targetLayout.x + targetLayout.width), left: targetLayout.x + targetLayout.width }]} />
 
-                    {/* Target Highlighting Border (Optional) */}
-                    <View style={{
-                        position: 'absolute',
-                        top: spotTop - 4, left: spotLeft - 4,
-                        width: spotWidth + 8, height: spotHeight + 8,
-                        borderRadius: 8,
-                        borderWidth: 2,
-                        borderColor: '#fff',
-                        backgroundColor: 'transparent',
-                        shadowColor: "#FFF",
-                        shadowOffset: { width: 0, height: 0 },
-                        shadowOpacity: 0.5,
-                        shadowRadius: 10,
-                        elevation: 10,
-                    }} />
-                </View>
-            ) : (
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.7)' }]} />
-            )}
-
-            {/* Click to Skip/Next area (maybe disabled to force interaction with buttons) */}
-            <View style={StyleSheet.absoluteFill} pointerEvents="box-none" />
-
-            {/* Popover Card */}
-            <Animated.View style={[styles.popoverCard, popoverStyle, { opacity: fadeAnim }]}>
-                {/* Arrow */}
-                {hasTarget && <View style={[styles.arrow, arrowStyle]} />}
-
-                <View style={styles.cardContent}>
-                    <Text style={styles.stepTitle}>{currentStep.title}</Text>
-                    <Text style={styles.stepDesc}>{currentStep.description}</Text>
-
-                    {/* Footer Controls */}
-                    <View style={styles.footer}>
-                        <View style={styles.dots}>
-                            {steps.map((_, i) => (
-                                <View
-                                    key={i}
-                                    style={[
-                                        styles.dot,
-                                        i === currentStepIndex ? styles.activeDot : styles.inactiveDot
-                                    ]}
-                                />
-                            ))}
-                        </View>
-
-                        <View style={styles.buttons}>
-                            <TouchableOpacity onPress={onSkip}>
-                                <Text style={styles.skipText}>Pular</Text>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity onPress={onNext} style={styles.nextBtn}>
-                                <LinearGradient
-                                    colors={['#6366f1', '#4f46e5']}
-                                    start={{ x: 0, y: 0 }}
-                                    end={{ x: 1, y: 0 }}
-                                    style={styles.gradientBtn}
-                                >
-                                    <Text style={styles.nextText}>
-                                        {isLastStep ? 'Concluir' : 'Próximo'}
-                                    </Text>
-                                    <MaterialIcons name="arrow-forward" size={16} color="#FFF" />
-                                </LinearGradient>
-                            </TouchableOpacity>
-                        </View>
+                        {/* Highlight Spot (The "Hole") - Optional glow border */}
+                        <View style={{
+                            position: 'absolute',
+                            top: targetLayout.y - 4,
+                            left: targetLayout.x - 4,
+                            width: targetLayout.width + 8,
+                            height: targetLayout.height + 8,
+                            borderRadius: 8,
+                            borderWidth: 2,
+                            borderColor: '#fbbf24', // Amber/Yellow highlight
+                            backgroundColor: 'transparent',
+                            shadowColor: "#fbbf24",
+                            shadowOffset: { width: 0, height: 0 },
+                            shadowOpacity: 0.8,
+                            shadowRadius: 10,
+                            elevation: 10
+                        }} />
                     </View>
-                </View>
-            </Animated.View>
+                )}
+                {!targetLayout && <View style={[styles.maskContainer, { backgroundColor: 'rgba(0,0,0,0.7)' }]} />}
+
+                {/* Card */}
+                <Animated.View style={[styles.card, { top: cardStyle.top, left: cardStyle.left, width: cardStyle.width, opacity: fadeAnim }]}>
+                    <LinearGradient
+                        colors={['#ffffff', '#f8fafc']}
+                        style={styles.cardGradient}
+                    >
+                        <View style={styles.cardHeader}>
+                            <Text style={styles.cardTitle}>{currentStep?.title}</Text>
+                            <TouchableOpacity onPress={onClose}>
+                                <MaterialIcons name="close" size={20} color="#94a3b8" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <Text style={styles.cardDescription}>{currentStep?.description}</Text>
+
+                        <View style={styles.cardFooter}>
+                            <View style={styles.indicators}>
+                                {steps.map((_, i) => (
+                                    <View
+                                        key={i}
+                                        style={[
+                                            styles.indicatorDot,
+                                            i === currentStepIndex && styles.indicatorDotActive
+                                        ]}
+                                    />
+                                ))}
+                            </View>
+
+                            <View style={styles.buttons}>
+                                {currentStepIndex > 0 && (
+                                    <TouchableOpacity style={styles.backButton} onPress={handlePrevious}>
+                                        <Text style={styles.backButtonText}>Voltar</Text>
+                                    </TouchableOpacity>
+                                )}
+                                <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
+                                    <LinearGradient
+                                        colors={['#4f46e5', '#4338ca']}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 0 }}
+                                        style={styles.nextButtonGradient}
+                                    >
+                                        <Text style={styles.nextButtonText}>
+                                            {currentStepIndex === steps.length - 1 ? 'Concluir' : 'Próximo'}
+                                        </Text>
+                                    </LinearGradient>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+
+                    </LinearGradient>
+                </Animated.View>
+            </View>
         </Modal>
     );
-}
+};
 
 const styles = StyleSheet.create({
-    popoverCard: {
+    container: {
+        flex: 1,
+    },
+    maskContainer: {
+        ...StyleSheet.absoluteFillObject,
+    },
+    maskBlock: {
         position: 'absolute',
-        backgroundColor: '#FFF',
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    },
+    card: {
+        position: 'absolute',
+        width: 300,
         borderRadius: 16,
-        padding: 20,
-        // Shadow
-        shadowColor: '#000',
+        backgroundColor: 'white',
+        shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,
         elevation: 10,
-        maxWidth: 500,
-        alignSelf: 'center', // Center horizontally if left/right not strict, but we set left/right to 20
     },
-    arrow: {
-        position: 'absolute',
-        width: 0,
-        height: 0,
-        backgroundColor: 'transparent',
-        borderStyle: 'solid',
+    cardGradient: {
+        borderRadius: 16,
+        padding: 20,
     },
-    cardContent: {
-        gap: 12,
+    cardHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
     },
-    stepTitle: {
+    cardTitle: {
         fontSize: 18,
         fontWeight: 'bold',
         color: '#1e293b',
     },
-    stepDesc: {
-        fontSize: 15,
-        color: '#475569',
-        lineHeight: 22,
+    cardDescription: {
+        fontSize: 14,
+        color: '#64748b',
+        lineHeight: 20,
+        marginBottom: 20,
     },
-    footer: {
+    cardFooter: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginTop: 12,
     },
-    dots: {
+    indicators: {
         flexDirection: 'row',
         gap: 6,
     },
-    dot: {
-        height: 6,
-        borderRadius: 3,
+    indicatorDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: '#e2e8f0',
     },
-    activeDot: {
-        width: 24,
-        backgroundColor: '#6366f1',
-    },
-    inactiveDot: {
-        width: 6,
-        backgroundColor: '#cbd5e1',
+    indicatorDotActive: {
+        backgroundColor: '#4f46e5',
+        width: 16,
     },
     buttons: {
         flexDirection: 'row',
+        gap: 12,
         alignItems: 'center',
-        gap: 16,
     },
-    skipText: {
-        color: '#94a3b8',
+    backButton: {
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+    },
+    backButtonText: {
+        color: '#64748b',
         fontSize: 14,
         fontWeight: '600',
     },
-    nextBtn: {
-        borderRadius: 12,
+    nextButton: {
+        borderRadius: 8,
         overflow: 'hidden',
     },
-    gradientBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 10,
+    nextButtonGradient: {
+        paddingVertical: 8,
         paddingHorizontal: 16,
-        gap: 6,
     },
-    nextText: {
-        color: '#FFF',
+    nextButtonText: {
+        color: 'white',
         fontSize: 14,
-        fontWeight: 'bold',
+        fontWeight: '600',
     },
 });
