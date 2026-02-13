@@ -328,6 +328,26 @@ def send_to_presentation(current_user):
         final_document_data = document_data.copy()
         final_document_data['sections'] = processed_sections
         final_document_data['total_sections'] = len(processed_sections)
+        final_document_data['classroom_id'] = temp_doc.classroom_id
+
+        if not final_document_data.get('subject_id') and temp_doc.classroom_id:
+            from app.models.subject import Subject
+            resolved_subject = None
+
+            try:
+                if str(temp_doc.classroom_id).isdigit():
+                    resolved_subject = Subject.query.get(int(temp_doc.classroom_id))
+            except Exception:
+                resolved_subject = None
+
+            if not resolved_subject:
+                resolved_subject = Subject.query.filter_by(name=temp_doc.classroom_id).first()
+
+            if not resolved_subject:
+                resolved_subject = Subject.query.filter_by(code=temp_doc.classroom_id).first()
+
+            if resolved_subject:
+                final_document_data['subject_id'] = resolved_subject.id
 
         # Atualizar conteúdo da apresentação
         session.current_content = {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, TextInput, TouchableOpacity, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TextInput, TouchableOpacity, SafeAreaView, Platform } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -20,6 +20,7 @@ import DocumentListSlide from '@/components/presentation/DocumentListSlide';
 import PDFViewer from '@/components/presentation/PDFViewer';
 
 export default function PresentationScreen() {
+        const [isFullscreen, setIsFullscreen] = useState(false);
     const { code } = useLocalSearchParams<{ code: string }>();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -152,6 +153,35 @@ export default function PresentationScreen() {
         setHasInteracted(true);
     };
 
+    useEffect(() => {
+        if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+
+        const handleFullscreenChange = () => {
+            setIsFullscreen(!!document.fullscreenElement);
+        };
+
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        handleFullscreenChange();
+
+        return () => {
+            document.removeEventListener('fullscreenchange', handleFullscreenChange);
+        };
+    }, []);
+
+    const handleToggleFullscreen = async () => {
+        if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+
+        try {
+            if (!document.fullscreenElement) {
+                await document.documentElement.requestFullscreen();
+            } else {
+                await document.exitFullscreen();
+            }
+        } catch (error) {
+            // Keep silent to avoid blocking the presentation flow
+        }
+    };
+
     // ... (rest of code)
 
     // Renderizar conteúdo baseado no tipo
@@ -177,14 +207,14 @@ export default function PresentationScreen() {
                     <View style={styles.overlayContent}>
                         <MaterialIcons name="play-circle-outline" size={100} color={colors.white} />
                         <Text style={styles.overlayTitle}>Clique para Iniciar</Text>
-                        <Text style={styles.overlaySubtitle}>Necessário para ativar o áudio</Text>
+                        <Text style={styles.overlaySubtitle}>Necessario para ativar o audio</Text>
 
                         <View style={styles.startButtonContainer}>
                             <Text
                                 style={styles.startButton}
                                 onPress={handleInteraction}
                             >
-                                INICIAR APRESENTAÇÃO
+                                INICIAR APRESENTACAO
                             </Text>
                         </View>
                     </View>
@@ -243,13 +273,16 @@ export default function PresentationScreen() {
             case 'document':
                 // Se tiver file_url, usar PDFViewer (arquivo original)
                 if (content.data.file_url) {
+                    const docUrl = content.data.supabase_url || content.data.file_url;
                     return (
-                        <PDFViewer
-                            fileUrl={content.data.file_url}
-                            filename={content.data.filename || 'Documento'}
-                            page={content.pdf_page || 1}
-                            zoom={content.pdf_zoom || 'auto'}
-                        />
+                        <View style={styles.documentWrapper}>
+                            <PDFViewer
+                                fileUrl={docUrl}
+                                filename={content.data.filename || 'Documento'}
+                                page={content.pdf_page || 1}
+                                zoom={content.pdf_zoom || 'auto'}
+                            />
+                        </View>
                     );
                 }
                 // Fallback: usar DocumentSlide (texto em seções)
@@ -265,14 +298,17 @@ export default function PresentationScreen() {
         }
     };
 
+    const isDocumentFull = !!content && content.type === 'document' && !!content.data?.file_url;
+
     return (
         <LinearGradient
             colors={['#1e1b4b', '#312e81', '#3730a3']}
-            style={styles.gradientContainer}
+            style={[styles.gradientContainer, isDocumentFull && styles.fullscreenContainer]}
         >
-            <View style={{ flex: 1, width: '100%' }}>
+            <View style={[styles.contentWrapper, isDocumentFull && styles.fullscreenContentWrapper]}>
                 {renderContent()}
             </View>
+            
         </LinearGradient>
     );
 
@@ -287,6 +323,41 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         padding: 4,
+    },
+    fullscreenContainer: {
+        padding: 0,
+        alignItems: 'stretch',
+    },
+    contentWrapper: {
+        flex: 1,
+        width: '100%',
+    },
+    fullscreenContentWrapper: {
+        alignSelf: 'stretch',
+    },
+    documentWrapper: {
+        flex: 1,
+        width: '100%',
+        height: '100%',
+    },
+    fullscreenButton: {
+        position: 'absolute',
+        top: spacing.md,
+        right: spacing.md,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.md,
+        borderRadius: 999,
+        backgroundColor: 'rgba(0,0,0,0.55)',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
+    },
+    fullscreenButtonText: {
+        color: colors.white,
+        fontSize: typography.fontSize.sm,
+        fontWeight: typography.fontWeight.semibold,
     },
 
     // Loading State

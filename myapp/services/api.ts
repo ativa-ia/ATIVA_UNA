@@ -1261,4 +1261,27 @@ export const sendDocumentToPresentation = async (documentId: string, presentatio
     }
 };
 
+// Compartilhar documento atual da apresentacao com os alunos
+export const sharePresentationDocumentToStudents = async (presentationCode: string): Promise<{
+    success: boolean;
+    message?: string;
+    count?: number;
+    error?: string;
+}> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/presentation/${presentationCode}/share-document`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Erro ao compartilhar documento da apresentacao:', error);
+        return { success: false, error: 'Erro ao compartilhar documento' };
+    }
+};
+
 
