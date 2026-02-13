@@ -1383,7 +1383,7 @@ def export_activity_pdf(current_user, activity_id):
     """
     Gera e retorna PDF do relatório da atividade ao vivo
     """
-    from flask import send_file
+    from flask import send_file, make_response
     from app.services.pdf_service import generate_activity_report_pdf
     import io
     
@@ -1520,13 +1520,16 @@ def export_activity_pdf(current_user, activity_id):
     )
     buffer.seek(0)
     
-    # Enviar arquivo
-    return send_file(
+    # Enviar arquivo com headers CORS explícitos
+    response = make_response(send_file(
         buffer,
         mimetype='application/pdf',
         as_attachment=True,
         download_name=f'relatorio_atividade_{activity_id}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
-    )
+    ))
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    return response
 
 
 # ==================== LISTAGEM ====================
