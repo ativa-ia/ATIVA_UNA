@@ -75,7 +75,7 @@ export default function PresentationControls({ code, onEnd }: Props) {
 const styles = StyleSheet.create({
     container: {
         backgroundColor: colors.success + '15',
-        padding: spacing.md,
+        padding: spacing.sm,
         borderRadius: borderRadius.lg,
         borderWidth: 1,
         borderColor: colors.success + '30',
@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
     header: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: spacing.sm,
+        marginBottom: spacing.xs,
     },
     title: {
         marginLeft: spacing.sm,
@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
         color: colors.success,
     },
     codeContainer: {
-        marginBottom: spacing.sm,
+        marginBottom: spacing.xs,
     },
     codeRow: {
         flexDirection: 'row',
@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
         marginRight: spacing.xs,
     },
     code: {
-        fontSize: 24,
+        fontSize: 20,
         fontWeight: typography.fontWeight.bold,
         color: colors.primary,
         letterSpacing: 2,
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         backgroundColor: colors.white,
-        padding: spacing.sm,
+        padding: spacing.xs,
         borderRadius: borderRadius.md,
         gap: spacing.xs,
     },

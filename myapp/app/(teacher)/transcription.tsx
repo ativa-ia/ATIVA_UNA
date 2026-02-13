@@ -1623,8 +1623,8 @@ export default function TranscriptionScreen() {
             // ========== INTERCEPTOR: Abrir Documento Específico ==========
             // Variações: "abre o documento 2", "mostra o pdf 1", "exibe o arquivo três",
             // "abre o primeiro documento", "mostra a apostila", "coloca o slide"
-            const isOpenDocCmd = /\b(abr(ir?|e|a)|mostr(ar?|e|a)|exib(ir?|e|a)|coloca(r)?|acess(ar?|e|a)|carreg(ar?|ue|a))\b.{0,10}\b(documento|pdf|arquivo|apresentaç[ãa]o|apostila|slide|material)\b/i.test(lowerCmd);
-            const isBareOpenDocCmd = /\b(abr(ir?|e|a)|mostr(ar?|e|a)|exib(ir?|e|a)|coloca(r)?|acess(ar?|e|a)|carreg(ar?|ue|a))\b.{0,10}\b(documento|pdf|arquivo|apresentaç[ãa]o|apostila|slide|material)\b\s*$/i.test(lowerCmd);
+            const isOpenDocCmd = /\b(abr(ir?|e|a)|mostr(ar?|e|a)|exib(ir?|e|a)|coloca(r)?|acess(ar?|e|a)|carreg(ar?|ue|a))\b.{0,25}\b(documento|pdf|arquivo|apresentaç[ãa]o|apostila|slide|material)\b/i.test(lowerCmd);
+            const isBareOpenDocCmd = /\b(abr(ir?|e|a)|mostr(ar?|e|a)|exib(ir?|e|a)|coloca(r)?|acess(ar?|e|a)|carreg(ar?|ue|a))\b.{0,25}\b(documento|pdf|arquivo|apresentaç[ãa]o|apostila|slide|material)\b\s*$/i.test(lowerCmd);
 
             if (isOpenDocCmd) {
                 console.log('[AI INTERCEPTOR] Comando: Abrir documento');
@@ -1636,7 +1636,7 @@ export default function TranscriptionScreen() {
                     return;
                 }
 
-                // Mapa de números por extenso
+                // Mapa de números por extenso (cardinais e ordinais)
                 const numberWords: { [key: string]: number } = {
                     'um': 1, 'uma': 1,
                     'dois': 2, 'duas': 2,
@@ -1647,22 +1647,46 @@ export default function TranscriptionScreen() {
                     'sete': 7,
                     'oito': 8,
                     'nove': 9,
-                    'dez': 10
+                    'dez': 10,
+                    // Ordinais
+                    'primeiro': 1, 'primeira': 1,
+                    'segundo': 2, 'segunda': 2,
+                    'terceiro': 3, 'terceira': 3,
+                    'quarto': 4, 'quarta': 4,
+                    'quinto': 5, 'quinta': 5,
+                    'sexto': 6, 'sexta': 6,
+                    'sétimo': 7, 'setimo': 7, 'sétima': 7, 'setima': 7,
+                    'oitavo': 8, 'oitava': 8,
+                    'nono': 9, 'nona': 9,
+                    'décimo': 10, 'decimo': 10, 'décima': 10, 'decima': 10,
                 };
 
                 // Extrair número ou nome
                 // Ex: "abrir documento 2" ou "abrir documento um" ou "abrir apostila matemática"
                 let numberMatch = lowerCmd.match(/\b(documento|pdf|arquivo|apresentação)\s+(\d+)\b/i);
 
-                // Se não encontrou número, tentar número por extenso
+                // Se não encontrou número, tentar número por extenso (cardinal + ordinal após o substantivo)
                 if (!numberMatch) {
-                    const wordNumberMatch = lowerCmd.match(/\b(documento|pdf|arquivo|apresentação)\s+(um|uma|dois|duas|três|tres|quatro|cinco|seis|sete|oito|nove|dez)\b/i);
+                    const wordNumberMatch = lowerCmd.match(/\b(documento|pdf|arquivo|apresentação)\s+(um|uma|dois|duas|três|tres|quatro|cinco|seis|sete|oito|nove|dez|primeiro|primeira|segundo|segunda|terceiro|terceira|quarto|quarta|quinto|quinta|sexto|sexta|s[ée]timo|s[ée]tima|oitavo|oitava|nono|nona|d[ée]cimo|d[ée]cima)\b/i);
                     if (wordNumberMatch) {
                         const wordNumber = wordNumberMatch[2].toLowerCase();
                         const digit = numberWords[wordNumber];
                         if (digit) {
                             // Criar um match fake no formato esperado
                             numberMatch = [wordNumberMatch[0], wordNumberMatch[1], digit.toString()] as any;
+                        }
+                    }
+                }
+
+                // Se não encontrou após o substantivo, tentar ordinal ANTES do substantivo
+                // Ex: "abre o primeiro documento", "mostra a segunda apostila"
+                if (!numberMatch) {
+                    const ordinalBeforeMatch = lowerCmd.match(/\b(primeiro|primeira|segundo|segunda|terceiro|terceira|quarto|quarta|quinto|quinta|sexto|sexta|s[ée]timo|s[ée]tima|oitavo|oitava|nono|nona|d[ée]cimo|d[ée]cima)\s+(documento|pdf|arquivo|apresentaç[ãa]o|apostila|slide|material)\b/i);
+                    if (ordinalBeforeMatch) {
+                        const ordinalWord = ordinalBeforeMatch[1].toLowerCase();
+                        const digit = numberWords[ordinalWord];
+                        if (digit) {
+                            numberMatch = [ordinalBeforeMatch[0], ordinalBeforeMatch[2], digit.toString()] as any;
                         }
                     }
                 }
@@ -3155,7 +3179,7 @@ export default function TranscriptionScreen() {
                 {/* Painel Esquerdo - Conteúdo Gerado */}
                 {/* No mobile, se não tiver conteúdo gerado (modo 'none'), pode esconder esse painel ou deixá-lo menor */}
                 {(displayMode !== 'none' || !isMobile) && (
-                    <View style={[styles.leftPanel, isMobile && { width: '100%', flex: 0, minHeight: 300 }]}>
+                    <View style={[styles.leftPanel, isMobile && { width: '100%', flex: 0, minHeight: 200 }]}>
                         <View style={styles.panelHeader}>
                             <MaterialIcons
                                 name={displayMode === 'quiz' ? 'quiz' : 'summarize'}
@@ -3443,7 +3467,7 @@ export default function TranscriptionScreen() {
                 )}
 
                 {/* Painel Direito - Transcrição */}
-                <View style={[styles.rightPanel, isMobile && { width: '100%', flex: 1, minHeight: 400 }]}>
+                <View style={[styles.rightPanel, isMobile && { width: '100%', flex: 1, minHeight: 250 }]}>
                     <View style={styles.panelHeader}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                             <MaterialIcons name="mic" size={20} color={colors.primary} />
@@ -3648,7 +3672,7 @@ Pressione o botão do microfone para começar a falar."
             />
 
             {/* Footer */}
-            <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
+            <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.xs }]}>
 
 
                 <View style={styles.footerButtons}>
@@ -3664,7 +3688,7 @@ Pressione o botão do microfone para começar a falar."
                             colors={['#64748b', '#475569']}
                             style={styles.historyButtonGradient}
                         >
-                            <MaterialIcons name="history" size={24} color={colors.white} />
+                            <MaterialIcons name="history" size={20} color={colors.white} />
                             <Text style={styles.buttonLabel}>Histórico</Text>
                         </LinearGradient>
                     </TouchableOpacity>
@@ -3684,7 +3708,7 @@ Pressione o botão do microfone para começar a falar."
                             >
                                 <MaterialIcons
                                     name={isRecording ? 'stop' : 'mic'}
-                                    size={32}
+                                    size={26}
                                     color={colors.white}
                                 />
                             </LinearGradient>
@@ -3692,7 +3716,7 @@ Pressione o botão do microfone para começar a falar."
                     </Animated.View>
 
                     {/* Espaço vazio para manter alinhamento se necessário, ou remover */}
-                    <View style={{ width: 60 }} />
+                    <View style={{ width: 48 }} />
 
                 </View>
 
@@ -4089,7 +4113,7 @@ const styles = StyleSheet.create({
     },
     footer: {
         paddingHorizontal: spacing.base,
-        paddingTop: spacing.lg,
+        paddingTop: spacing.sm,
         borderTopWidth: 1,
         borderTopColor: colors.slate200,
         alignItems: 'center',
@@ -4110,9 +4134,9 @@ const styles = StyleSheet.create({
         shadowColor: '#ef4444',
     },
     recordButtonGradient: {
-        width: 70,
-        height: 70,
-        borderRadius: 35,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
         justifyContent: 'center',
         alignItems: 'center',
         shadowColor: colors.primary,
@@ -4156,9 +4180,9 @@ const styles = StyleSheet.create({
         elevation: 10,
     },
     historyButtonGradient: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
+        width: 48,
+        height: 48,
+        borderRadius: 24,
         justifyContent: 'center',
         alignItems: 'center',
         gap: 2,
@@ -4228,7 +4252,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     footerHint: {
-        marginTop: spacing.sm,
+        marginTop: spacing.xs,
         fontSize: typography.fontSize.sm,
         color: colors.textSecondary,
     },
@@ -5120,7 +5144,7 @@ const styles = StyleSheet.create({
         lineHeight: 22,
     },
     presentationSection: {
-        padding: spacing.md,
+        padding: spacing.sm,
         backgroundColor: colors.slate50,
         borderBottomWidth: 1,
         borderBottomColor: colors.slate200,
