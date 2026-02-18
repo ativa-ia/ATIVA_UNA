@@ -14,11 +14,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Header } from '@/components/navigation/Header';
 import { BottomNav, NavItem } from '@/components/navigation/BottomNav';
 import { SubjectCard } from '@/components/cards/SubjectCard';
+import SummaryToast from '@/components/notifications/SummaryToast';
 import { Subject, Activity } from '@/types';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
-import { getSubjects, Subject as APISubject, getMe, getActiveActivity, LiveActivity, isActivitySubmitted } from '@/services/api';
+import { getSubjects, Subject as APISubject, getMe, getActiveActivity, LiveActivity, isActivitySubmitted, submitActivityResponse } from '@/services/api';
 import { useCallback } from 'react';
 
 /**
@@ -35,6 +36,10 @@ export default function StudentDashboardScreen() {
     // Estado para atividade ao vivo
     const [liveActivity, setLiveActivity] = useState<LiveActivity | null>(null);
     const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    // Estado para toast de resumo (notificação sutil)
+    const [summaryToast, setSummaryToast] = useState<{ visible: boolean; title: string; subjectName: string; subjectId: string } | null>(null);
+    const handledSummariesRef = useRef<Set<number>>(new Set());
     const pulseAnim = useRef(new Animated.Value(1)).current;
 
     // Formatar data atual
@@ -64,18 +69,57 @@ export default function StudentDashboardScreen() {
             if (subjects.length === 0) return;
 
             const checkActivities = async () => {
+                let foundActivity = false;
+
                 for (const subject of subjects) {
                     try {
                         const result = await getActiveActivity(parseInt(subject.id));
-                        if (result.success && result.active && result.activity) {
+
+                        if (!result.success) continue;
+
+                        // Detectar resumo — pode vir como activity principal OU como campo summary
+                        const summaryData = (result.active && result.activity?.activity_type === 'summary')
+                            ? result.activity
+                            : (result.has_summary && result.summary)
+                                ? result.summary
+                                : null;
+
+                        if (summaryData) {
+                            const summaryId = summaryData.id;
+
+                            // Evitar toast repetido para o mesmo resumo
+                            if (!handledSummariesRef.current.has(summaryId) && !isActivitySubmitted(summaryId)) {
+                                handledSummariesRef.current.add(summaryId);
+
+                                // Mostrar toast sutil
+                                setSummaryToast({
+                                    visible: true,
+                                    title: summaryData.title || 'Resumo da Aula',
+                                    subjectName: summaryData.subject_name || subject.name,
+                                    subjectId: subject.id,
+                                });
+
+                                // Auto-marcar como lido silenciosamente
+                                submitActivityResponse(summaryId, { read: true }).catch((err) =>
+                                    console.log('Auto-read summary error (silent):', err)
+                                );
+                            }
+                            continue; // Resumo não é atividade interativa
+                        }
+
+                        // Atividade interativa (quiz ou pergunta aberta) → banner pulsante
+                        if (result.active && result.activity) {
                             setLiveActivity(result.activity);
-                            return; // Encontrou uma atividade ativa
+                            foundActivity = true;
                         }
                     } catch (error) {
                         console.error('Erro ao verificar atividade:', error);
                     }
                 }
-                setLiveActivity(null);
+
+                if (!foundActivity) {
+                    setLiveActivity(null);
+                }
             };
 
             checkActivities(); // Check imediato ao focar
@@ -150,7 +194,7 @@ export default function StudentDashboardScreen() {
 
     const navItems: NavItem[] = [
         { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
-        { id: 'materials', label: 'Materiais', iconName: 'folder-open' }, // Added Materials
+        { id: 'socratic', label: 'Sócrates', iconName: 'psychology' },
         { id: 'calendar', label: 'Calendário', iconName: 'calendar-today' },
     ];
 
@@ -160,8 +204,8 @@ export default function StudentDashboardScreen() {
         switch (id) {
             case 'dashboard':
                 break;
-            case 'materials': // Handle Materials
-                router.push('/(student)/materials');
+            case 'socratic':
+                router.push('/(student)/socratic');
                 break;
             case 'calendar':
                 router.push('./calendar');
@@ -171,7 +215,7 @@ export default function StudentDashboardScreen() {
 
     const handleSubjectPress = (subject: Subject) => {
         router.push({
-            pathname: '/(student)/activities',
+            pathname: '/(student)/content-hub',
             params: { subjectName: subject.name, subjectId: subject.id }
         });
     };
@@ -214,8 +258,8 @@ export default function StudentDashboardScreen() {
                         </View>
                     </LinearGradient>
 
-                    {/* Banner de Atividade Ao Vivo */}
-                    {liveActivity && !isActivitySubmitted(liveActivity.id) && (
+                    {/* Banner de Atividade Ao Vivo (apenas quiz e perguntas abertas) */}
+                    {liveActivity && !isActivitySubmitted(liveActivity.id) && liveActivity.activity_type !== 'summary' && (
                         <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
                             <TouchableOpacity
                                 style={styles.liveActivityBanner}
@@ -233,9 +277,7 @@ export default function StudentDashboardScreen() {
                                     <Text style={styles.liveActivityTitle}>
                                         {liveActivity.activity_type === 'quiz'
                                             ? `🎯 Quiz: ${liveActivity.subject_name || 'Nova Atividade'}`
-                                            : liveActivity.activity_type === 'summary'
-                                                ? '📝 Resumo da Aula Disponível'
-                                                : '💬 Pergunta do Professor!'}
+                                            : '💬 Pergunta do Professor!'}
                                     </Text>
                                     <Text style={styles.liveActivityDesc}>
                                         Toque para responder agora
@@ -280,6 +322,25 @@ export default function StudentDashboardScreen() {
                     </View>
 
                 </ScrollView>
+
+                {/* Toast sutil para resumos */}
+                <SummaryToast
+                    visible={summaryToast?.visible || false}
+                    title={summaryToast?.title || ''}
+                    subjectName={summaryToast?.subjectName}
+                    onPress={() => {
+                        if (summaryToast) {
+                            router.push({
+                                pathname: '/(student)/content-hub',
+                                params: {
+                                    subjectName: summaryToast.subjectName,
+                                    subjectId: summaryToast.subjectId
+                                }
+                            });
+                        }
+                    }}
+                    onDismiss={() => setSummaryToast(null)}
+                />
 
                 {/* Bottom Navigation */}
                 <BottomNav

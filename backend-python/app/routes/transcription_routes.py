@@ -556,6 +556,31 @@ def broadcast_activity(current_user, activity_id):
         subject_id=activity.session.subject_id
     ).count()
 
+    # Auto-criar notificação para os alunos
+    try:
+        subject_name = activity.session.subject.name if activity.session.subject else 'Disciplina'
+        if activity.activity_type == 'quiz':
+            notif_title = f'🎯 Novo Quiz: {activity.title}'
+            notif_message = f'O professor enviou um quiz em {subject_name}. Responda agora!'
+            notif_type = 'quiz'
+        else:
+            notif_title = f'💬 Pergunta do Professor'
+            notif_message = f'Há uma nova pergunta em {subject_name}. Participe!'
+            notif_type = 'open_question'
+
+        notif = Notification(
+            title=notif_title,
+            message=notif_message,
+            type=notif_type,
+            subject_id=activity.session.subject_id,
+            teacher_id=current_user.id,
+            sent_to_students=True
+        )
+        db.session.add(notif)
+        db.session.commit()
+    except Exception as e:
+        print(f'[NOTIF] Erro ao criar notificação de broadcast: {e}')
+
     # --- ATIVA-IA FIX: Sincronizar com a tela de apresentação ---
     # Quando o professor dá "broadcast", deve aparecer na tela automaticamente
     # [DISABLED] Separating student broadcast from presentation display
@@ -634,6 +659,22 @@ def share_summary(current_user, activity_id):
     activity.starts_at = datetime.utcnow()
     
     db.session.commit()
+
+    # Auto-criar notificação para os alunos
+    try:
+        subject_name = activity.session.subject.name if activity.session.subject else 'Disciplina'
+        notif = Notification(
+            title=f'📝 Novo Resumo: {activity.title}',
+            message=f'O professor compartilhou um resumo em {subject_name}.',
+            type='summary',
+            subject_id=activity.session.subject_id,
+            teacher_id=current_user.id,
+            sent_to_students=True
+        )
+        db.session.add(notif)
+        db.session.commit()
+    except Exception as e:
+        print(f'[NOTIF] Erro ao criar notificação de resumo: {e}')
 
     # --- ATIVA-IA FIX: Sincronizar Resumo com a tela de apresentação ---
     try:

@@ -1285,3 +1285,89 @@ export const sharePresentationDocumentToStudents = async (presentationCode: stri
 };
 
 
+// ========== SOCRATIC ASSISTANT API ==========
+
+// Refinar texto transcrito (pós-processamento do STT)
+export const refineTranscription = async (text: string): Promise<{
+    success: boolean;
+    refined_text?: string;
+    error?: string;
+}> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/socratic/refine`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ text }),
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Erro ao refinar transcrição:', error);
+        return { success: false, error: 'Erro ao refinar transcrição' };
+    }
+};
+
+// Chat socrático - enviar mensagem e receber pergunta desafiadora
+export const socraticChat = async (
+    subjectName: string,
+    messages: Array<{ role: string; content: string }>,
+    studentText: string
+): Promise<{
+    success: boolean;
+    response?: string;
+    error?: string;
+}> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/socratic/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+                subject_name: subjectName,
+                messages,
+                student_text: studentText,
+            }),
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Erro no chat socrático:', error);
+        return { success: false, error: 'Erro ao comunicar com o assistente' };
+    }
+};
+
+
+// ========== NOTIFICATIONS API ==========
+
+export interface AppNotification {
+    id: number;
+    title: string;
+    message: string;
+    type: 'quiz' | 'summary' | 'open_question' | 'material' | 'general';
+    subject_id: number;
+    teacher_id: number;
+    subject_name: string | null;
+    teacher_name: string | null;
+    created_at: string;
+    sent_to_students: boolean;
+}
+
+export const getMyNotifications = async (): Promise<{ success: boolean; notifications: AppNotification[] }> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/notifications/mine`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Erro ao buscar notificações:', error);
+        return { success: false, notifications: [] };
+    }
+};
