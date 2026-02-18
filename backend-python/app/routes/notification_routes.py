@@ -63,8 +63,8 @@ def send_notification(current_user):
 from app.models.enrollment import Enrollment
 
 @notification_bp.route('/student/<int:student_id>', methods=['GET'])
-# @token_required # Comentado para facilitar testes se necessário, mas idealmente protegido
-def get_student_notifications(student_id):
+@token_required
+def get_student_notifications(current_user, student_id):
     """
     Retorna notificações para um aluno (baseado nas disciplinas que ele cursa).
     """
@@ -79,7 +79,31 @@ def get_student_notifications(student_id):
     notifications = Notification.query\
         .filter(Notification.subject_id.in_(subject_ids))\
         .order_by(Notification.created_at.desc())\
-        .limit(20)\
+        .limit(50)\
+        .all()
+    
+    return jsonify({
+        'success': True,
+        'notifications': [n.to_dict() for n in notifications]
+    })
+
+
+@notification_bp.route('/mine', methods=['GET'])
+@token_required
+def get_my_notifications(current_user):
+    """
+    Retorna notificações do aluno autenticado (baseado nas disciplinas matriculadas).
+    """
+    enrolled_subjects = db.session.query(Enrollment.subject_id).filter_by(student_id=current_user.id).all()
+    subject_ids = [s[0] for s in enrolled_subjects]
+    
+    if not subject_ids:
+        return jsonify({'success': True, 'notifications': []})
+
+    notifications = Notification.query\
+        .filter(Notification.subject_id.in_(subject_ids))\
+        .order_by(Notification.created_at.desc())\
+        .limit(50)\
         .all()
     
     return jsonify({

@@ -1340,3 +1340,34 @@ export const socraticChat = async (
         return { success: false, error: 'Erro ao comunicar com o assistente' };
     }
 };
+
+
+// ========== NOTIFICATIONS API ==========
+
+export interface AppNotification {
+    id: number;
+    title: string;
+    message: string;
+    type: 'quiz' | 'summary' | 'open_question' | 'material' | 'general';
+    subject_id: number;
+    teacher_id: number;
+    subject_name: string | null;
+    teacher_name: string | null;
+    created_at: string;
+    sent_to_students: boolean;
+}
+
+export const getMyNotifications = async (): Promise<{ success: boolean; notifications: AppNotification[] }> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/notifications/mine`, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Erro ao buscar notificações:', error);
+        return { success: false, notifications: [] };
+    }
+};
