@@ -1285,3 +1285,58 @@ export const sharePresentationDocumentToStudents = async (presentationCode: stri
 };
 
 
+// ========== SOCRATIC ASSISTANT API ==========
+
+// Refinar texto transcrito (pós-processamento do STT)
+export const refineTranscription = async (text: string): Promise<{
+    success: boolean;
+    refined_text?: string;
+    error?: string;
+}> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/socratic/refine`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ text }),
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Erro ao refinar transcrição:', error);
+        return { success: false, error: 'Erro ao refinar transcrição' };
+    }
+};
+
+// Chat socrático - enviar mensagem e receber pergunta desafiadora
+export const socraticChat = async (
+    subjectName: string,
+    messages: Array<{ role: string; content: string }>,
+    studentText: string
+): Promise<{
+    success: boolean;
+    response?: string;
+    error?: string;
+}> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/socratic/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+                subject_name: subjectName,
+                messages,
+                student_text: studentText,
+            }),
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Erro no chat socrático:', error);
+        return { success: false, error: 'Erro ao comunicar com o assistente' };
+    }
+};

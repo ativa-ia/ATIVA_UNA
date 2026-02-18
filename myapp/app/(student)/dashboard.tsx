@@ -150,7 +150,7 @@ export default function StudentDashboardScreen() {
 
     const navItems: NavItem[] = [
         { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
-        { id: 'materials', label: 'Materiais', iconName: 'folder-open' }, // Added Materials
+        { id: 'socratic', label: 'Sócrates', iconName: 'psychology' },
         { id: 'calendar', label: 'Calendário', iconName: 'calendar-today' },
     ];
 
@@ -160,8 +160,8 @@ export default function StudentDashboardScreen() {
         switch (id) {
             case 'dashboard':
                 break;
-            case 'materials': // Handle Materials
-                router.push('/(student)/materials');
+            case 'socratic':
+                router.push('/(student)/socratic');
                 break;
             case 'calendar':
                 router.push('./calendar');
@@ -171,7 +171,7 @@ export default function StudentDashboardScreen() {
 
     const handleSubjectPress = (subject: Subject) => {
         router.push({
-            pathname: '/(student)/activities',
+            pathname: '/(student)/content-hub',
             params: { subjectName: subject.name, subjectId: subject.id }
         });
     };

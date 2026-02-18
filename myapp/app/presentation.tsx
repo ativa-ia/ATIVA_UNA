@@ -20,16 +20,22 @@ import DocumentListSlide from '@/components/presentation/DocumentListSlide';
 import PDFViewer from '@/components/presentation/PDFViewer';
 
 export default function PresentationScreen() {
-        const [isFullscreen, setIsFullscreen] = useState(false);
+    const [isFullscreen, setIsFullscreen] = useState(false);
     const { code } = useLocalSearchParams<{ code: string }>();
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [content, setContent] = useState<PresentationContent | null>(null);
     const [sessionActive, setSessionActive] = useState(true);
+    // Estado de controle de vídeo
+    const [videoControl, setVideoControl] = useState<{ command: 'play' | 'pause' | 'seek' | 'mute' | 'unmute' | 'seek_relative' | 'restart', value?: number, timestamp: number } | undefined>(undefined);
+    // State for manual code entry
+    const [inputCode, setInputCode] = useState('');
+    // Estado de interação do usuário (para autoplay)
+    const [hasInteracted, setHasInteracted] = useState(false);
 
     const { content: polledContent, videoControl: polledVideoControl, sessionActive: isSessionActive } = usePresentationPolling({
         code: code as string,
-        enabled: true
+        enabled: !!code
     });
 
     // Carregar conteúdo inicial
@@ -39,7 +45,6 @@ export default function PresentationScreen() {
 
     const loadPresentation = async () => {
         if (!code) {
-            setError('Código não fornecido');
             setLoading(false);
             return;
         }
@@ -62,10 +67,6 @@ export default function PresentationScreen() {
         }
     };
 
-    // Estado de controle de vídeo
-    const [videoControl, setVideoControl] = useState<{ command: 'play' | 'pause' | 'seek' | 'mute' | 'unmute' | 'seek_relative' | 'restart', value?: number, timestamp: number } | undefined>(undefined);
-
-    // WebSocket - Entrar na sala
     // Sincronizar estado com o polling
     useEffect(() => {
         if (polledContent) {
@@ -81,15 +82,21 @@ export default function PresentationScreen() {
         }
     }, [polledContent, polledVideoControl, isSessionActive]);
 
-    // Polling handled by usePresentationPolling hook
+    // Fullscreen listener (web only)
+    useEffect(() => {
+        if (Platform.OS !== 'web' || typeof document === 'undefined') return;
 
-    // ... (rest of code)
+        const handleFullscreenChange = () => {
+            setIsFullscreen(!!document.fullscreenElement);
+        };
 
-    // State for manual code entry
-    const [inputCode, setInputCode] = useState('');
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        handleFullscreenChange();
 
-    // Estado de interação do usuário (para autoplay)
-    const [hasInteracted, setHasInteracted] = useState(false);
+        return () => {
+            document.removeEventListener('fullscreenchange', handleFullscreenChange);
+        };
+    }, []);
 
     // Se não tiver código na URL e não estiver carregando, mostrar tela de input
     if (!code && !loading) {
@@ -147,26 +154,9 @@ export default function PresentationScreen() {
         );
     }
 
-
-
     const handleInteraction = () => {
         setHasInteracted(true);
     };
-
-    useEffect(() => {
-        if (Platform.OS !== 'web' || typeof document === 'undefined') return;
-
-        const handleFullscreenChange = () => {
-            setIsFullscreen(!!document.fullscreenElement);
-        };
-
-        document.addEventListener('fullscreenchange', handleFullscreenChange);
-        handleFullscreenChange();
-
-        return () => {
-            document.removeEventListener('fullscreenchange', handleFullscreenChange);
-        };
-    }, []);
 
     const handleToggleFullscreen = async () => {
         if (Platform.OS !== 'web' || typeof document === 'undefined') return;
@@ -181,8 +171,6 @@ export default function PresentationScreen() {
             // Keep silent to avoid blocking the presentation flow
         }
     };
-
-    // ... (rest of code)
 
     // Renderizar conteúdo baseado no tipo
     const renderContent = () => {
@@ -209,14 +197,11 @@ export default function PresentationScreen() {
                         <Text style={styles.overlayTitle}>Clique para Iniciar</Text>
                         <Text style={styles.overlaySubtitle}>Necessario para ativar o audio</Text>
 
-                        <View style={styles.startButtonContainer}>
-                            <Text
-                                style={styles.startButton}
-                                onPress={handleInteraction}
-                            >
+                        <TouchableOpacity style={styles.startButtonContainer} onPress={handleInteraction}>
+                            <Text style={styles.startButton}>
                                 INICIAR APRESENTACAO
                             </Text>
-                        </View>
+                        </TouchableOpacity>
                     </View>
                 </View>
             );
@@ -308,7 +293,7 @@ export default function PresentationScreen() {
             <View style={[styles.contentWrapper, isDocumentFull && styles.fullscreenContentWrapper]}>
                 {renderContent()}
             </View>
-            
+
         </LinearGradient>
     );
 
