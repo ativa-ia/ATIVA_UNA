@@ -24,7 +24,7 @@ import { spacing, borderRadius } from '@/constants/spacing';
 import { getSubjects, Subject, refineTranscription, socraticChat } from '@/services/api';
 
 // @ts-ignore
-import SocraticAvatar from '@/assets/images/socratic_avatar.png';
+import SocraticAvatar from '@/assets/images/avatar-assistente.png';
 
 interface ChatMessage {
     id: string;
@@ -41,6 +41,10 @@ export default function SocraticScreen() {
     const [isRecording, setIsRecording] = useState(false);
     const [isRefining, setIsRefining] = useState(false);
 
+    // UI State
+    const [showChatHistory, setShowChatHistory] = useState(false);
+    const [showTextInput, setShowTextInput] = useState(false);
+
     // Subject selection
     const [subjects, setSubjects] = useState<Subject[]>([]);
     const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
@@ -51,50 +55,51 @@ export default function SocraticScreen() {
     const scrollViewRef = useRef<ScrollView>(null);
     const recognitionRef = useRef<any>(null);
     const pulseAnim = useRef(new Animated.Value(1)).current;
-    const fadeAnim = useRef(new Animated.Value(0)).current;
-    const typingDots = useRef(new Animated.Value(0)).current;
+
+    // Avatar animations
+    const avatarScale = useRef(new Animated.Value(1)).current;
+    const avatarGlow = useRef(new Animated.Value(0)).current;
 
     // Load subjects on mount
     useEffect(() => {
         loadSubjects();
     }, []);
 
-    // Fade in animation
-    useEffect(() => {
-        Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 600,
-            useNativeDriver: true,
-        }).start();
-    }, []);
-
-    // Typing indicator animation
-    useEffect(() => {
-        if (isLoading) {
-            Animated.loop(
-                Animated.sequence([
-                    Animated.timing(typingDots, { toValue: 1, duration: 500, useNativeDriver: true }),
-                    Animated.timing(typingDots, { toValue: 0, duration: 500, useNativeDriver: true }),
-                ])
-            ).start();
-        } else {
-            typingDots.setValue(0);
-        }
-    }, [isLoading]);
-
-    // Pulse animation for recording
+    // Pulse animation for recording (Mic button)
     useEffect(() => {
         if (isRecording) {
             Animated.loop(
                 Animated.sequence([
-                    Animated.timing(pulseAnim, { toValue: 1.3, duration: 600, useNativeDriver: true }),
-                    Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+                    Animated.timing(pulseAnim, { toValue: 1.2, duration: 800, useNativeDriver: true }),
+                    Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
                 ])
             ).start();
         } else {
             pulseAnim.setValue(1);
         }
     }, [isRecording]);
+
+    // Avatar animation when speaking (assistant processing/replying)
+    useEffect(() => {
+        if (isLoading || isRefining) {
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(avatarScale, { toValue: 1.05, duration: 1000, useNativeDriver: true }),
+                    Animated.timing(avatarScale, { toValue: 1, duration: 1000, useNativeDriver: true }),
+                ])
+            ).start();
+
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(avatarGlow, { toValue: 1, duration: 1500, useNativeDriver: true }),
+                    Animated.timing(avatarGlow, { toValue: 0.3, duration: 1500, useNativeDriver: true }),
+                ])
+            ).start();
+        } else {
+            avatarScale.setValue(1);
+            avatarGlow.setValue(0);
+        }
+    }, [isLoading, isRefining]);
 
     const loadSubjects = async () => {
         try {
@@ -120,7 +125,7 @@ export default function SocraticScreen() {
             const welcomeMsg: ChatMessage = {
                 id: 'welcome',
                 role: 'assistant',
-                content: `Olá! 👋 Eu sou o Sócrates, seu assistente de estudo!\n\nEstou aqui para te ajudar a aprender **${selectedSubject.name}** de forma mais profunda.\n\n🎯 Me explique o que você entendeu sobre o assunto, e eu vou te fazer perguntas para testar seu conhecimento!\n\nVocê pode digitar ou usar o microfone 🎙️ para falar.`,
+                content: `Olá! 👋 Eu sou o Fred, seu assistente de estudo!\n\nEstou aqui para te ajudar a aprender sobre ${selectedSubject.name}.\n\nFale comigo para começarmos!`,
                 timestamp: new Date(),
             };
             setMessages([welcomeMsg]);
@@ -129,12 +134,12 @@ export default function SocraticScreen() {
 
     // Auto-scroll to bottom
     useEffect(() => {
-        if (messages.length > 0) {
+        if (showChatHistory && messages.length > 0) {
             setTimeout(() => {
                 scrollViewRef.current?.scrollToEnd({ animated: true });
             }, 100);
         }
-    }, [messages, isLoading]);
+    }, [messages, showChatHistory]);
 
     // ===== STT (Web Speech API) =====
     const startRecording = () => {
@@ -192,7 +197,8 @@ export default function SocraticScreen() {
 
     const toggleRecording = () => {
         if (isRecording) {
-            stopRecording();
+            // If we are recording and press the button, we want to STOP and SEND.
+            handleSend();
         } else {
             startRecording();
         }
@@ -200,13 +206,27 @@ export default function SocraticScreen() {
 
     // ===== Send Message =====
     const handleSend = async () => {
+        // Stop recording if active - do this first to ensure UI updates
+        if (isRecording) {
+            stopRecording();
+        }
+
+        // Slight delay to ensure final STT results are processed if any
+        // In a real app we might rely on a 'final' event or debounce, 
+        // but for now we'll grab what's in inputText.
+
+        // Use a small timeout to allow state to settle if needed, or just proceed.
+        // For immediate responsiveness, we'll try to just send current inputText.
         const text = inputText.trim();
-        if (!text || isLoading || !selectedSubject) return;
 
-        // Stop recording if active
-        if (isRecording) stopRecording();
+        if (!text) {
+            // If no text, nothing to do.
+            return;
+        }
 
-        // Add user message immediately
+        if (isLoading || !selectedSubject) return;
+
+        // Add user message via text (or STT final result)
         const userMsg: ChatMessage = {
             id: Date.now().toString(),
             role: 'user',
@@ -215,6 +235,9 @@ export default function SocraticScreen() {
         };
         setMessages(prev => [...prev, userMsg]);
         setInputText('');
+        // Hide text input after sending if it was open
+        setShowTextInput(false);
+
         setIsLoading(true);
 
         try {
@@ -252,6 +275,7 @@ export default function SocraticScreen() {
                     timestamp: new Date(),
                 };
                 setMessages(prev => [...prev, assistantMsg]);
+                // Here we would trigger TTS play
             } else {
                 const errorMsg: ChatMessage = {
                     id: (Date.now() + 1).toString(),
@@ -279,7 +303,6 @@ export default function SocraticScreen() {
     // ===== Render Functions =====
     const renderMessage = (msg: ChatMessage) => {
         const isUser = msg.role === 'user';
-
         return (
             <View
                 key={msg.id}
@@ -289,7 +312,7 @@ export default function SocraticScreen() {
                 ]}
             >
                 {!isUser && (
-                    <Image source={SocraticAvatar} style={styles.avatar} />
+                    <Image source={SocraticAvatar} style={styles.chatAvatar} />
                 )}
                 <View
                     style={[
@@ -314,19 +337,6 @@ export default function SocraticScreen() {
         );
     };
 
-    const renderTypingIndicator = () => (
-        <View style={[styles.messageRow, styles.messageRowAssistant]}>
-            <Image source={SocraticAvatar} style={styles.avatar} />
-            <View style={[styles.messageBubble, styles.assistantBubble, styles.typingBubble]}>
-                <Animated.View style={{ opacity: typingDots }}>
-                    <Text style={styles.typingText}>
-                        {isRefining ? '✨ Refinando texto...' : '🤔 Pensando...'}
-                    </Text>
-                </Animated.View>
-            </View>
-        </View>
-    );
-
     // Subject Picker Modal
     const renderSubjectPicker = () => (
         <Modal
@@ -348,7 +358,7 @@ export default function SocraticScreen() {
                         <Image source={SocraticAvatar} style={styles.modalAvatar} />
                         <Text style={styles.modalTitle}>Escolha a Disciplina</Text>
                         <Text style={styles.modalSubtitle}>
-                            Selecione sobre qual matéria quer estudar
+                            Sobre qual matéria vamos conversar hoje?
                         </Text>
                     </LinearGradient>
 
@@ -370,7 +380,6 @@ export default function SocraticScreen() {
                                     onPress={() => {
                                         setSelectedSubject(item);
                                         setShowSubjectPicker(false);
-                                        // Reset conversation when switching subject
                                         setMessages([]);
                                     }}
                                     activeOpacity={0.7}
@@ -398,389 +407,384 @@ export default function SocraticScreen() {
         </Modal>
     );
 
-    return (
-        <SafeAreaView style={styles.safeArea}>
-            <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
-                {/* Header */}
-                <LinearGradient
-                    colors={['#4f46e5', '#7c3aed']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.header}
+    // Chat History Modal
+    const renderChatHistory = () => (
+        <Modal
+            visible={showChatHistory}
+            animationType="slide"
+            presentationStyle="pageSheet"
+            onRequestClose={() => setShowChatHistory(false)}
+        >
+            <View style={styles.historyContainer}>
+                <View style={styles.historyHeader}>
+                    <Text style={styles.historyTitle}>Histórico da Conversa</Text>
+                    <TouchableOpacity onPress={() => setShowChatHistory(false)} style={styles.closeHistoryButton}>
+                        <MaterialIcons name="close" size={24} color={colors.slate600} />
+                    </TouchableOpacity>
+                </View>
+                <ScrollView
+                    ref={scrollViewRef}
+                    style={styles.messagesContainer}
+                    contentContainerStyle={styles.messagesContent}
                 >
+                    {messages.map(renderMessage)}
+                </ScrollView>
+            </View>
+        </Modal>
+    );
+
+    // Helper to get last assistant message
+    const lastAssistantMessage = messages.slice().reverse().find(m => m.role === 'assistant');
+
+    return (
+        <View style={styles.container}>
+            <LinearGradient
+                colors={['#4f46e5', '#7c3aed']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+            />
+
+            <SafeAreaView style={styles.safeArea}>
+                {/* Top Controls */}
+                <View style={styles.topControls}>
                     <TouchableOpacity
-                        style={styles.backButton}
+                        style={styles.iconButton}
                         onPress={() => router.back()}
                     >
-                        <MaterialIcons name="arrow-back" size={24} color={colors.white} />
+                        <MaterialIcons name="arrow-back" size={28} color="rgba(255,255,255,0.8)" />
                     </TouchableOpacity>
 
-                    <View style={styles.headerCenter}>
-                        <Image source={SocraticAvatar} style={styles.headerAvatar} />
-                        <View>
-                            <Text style={styles.headerTitle}>Sócrates</Text>
-                            <TouchableOpacity
-                                onPress={() => setShowSubjectPicker(true)}
-                                style={styles.subjectSelector}
-                            >
-                                <Text style={styles.headerSubject} numberOfLines={1}>
-                                    {selectedSubject?.name || 'Selecionar disciplina'}
+                    <TouchableOpacity
+                        style={styles.subjectPill}
+                        onPress={() => setShowSubjectPicker(true)}
+                    >
+                        <MaterialIcons name="school" size={16} color="white" />
+                        <Text style={styles.subjectPillText}>
+                            {selectedSubject?.name || 'Selecionar'}
+                        </Text>
+                        <MaterialIcons name="expand-more" size={16} color="white" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={styles.iconButton}
+                        onPress={() => setShowChatHistory(true)}
+                    >
+                        <MaterialIcons name="history" size={28} color="rgba(255,255,255,0.8)" />
+                    </TouchableOpacity>
+                </View>
+
+                {/* Main Avatar Area */}
+                <View style={styles.avatarContainer}>
+                    <Animated.View style={[
+                        styles.avatarWrapper,
+                        { transform: [{ scale: avatarScale }] }
+                    ]}>
+                        <Animated.View style={[
+                            styles.avatarGlow,
+                            { opacity: avatarGlow, transform: [{ scale: Animated.add(1, avatarGlow) }] }
+                        ]} />
+                        <Image source={SocraticAvatar} style={styles.mainAvatar} resizeMode="cover" />
+                    </Animated.View>
+
+                    <View style={styles.statusContainer}>
+                        {isLoading || isRefining ? (
+                            <View style={styles.statusBadge}>
+                                <ActivityIndicator size="small" color="white" style={{ marginRight: 6 }} />
+                                <Text style={styles.statusText}>
+                                    {isRefining ? 'Ouvindo...' : 'Pensando...'}
                                 </Text>
-                                <MaterialIcons name="expand-more" size={18} color="rgba(255,255,255,0.8)" />
+                            </View>
+                        ) : isRecording ? (
+                            <View style={[styles.statusBadge, styles.statusBadgeRecording]}>
+                                <View style={styles.recordingDot} />
+                                <Text style={styles.statusText}>Ouvindo você...</Text>
+                            </View>
+                        ) : (
+                            <Text style={styles.instructionText}>
+                                Toque no microfone para falar
+                            </Text>
+                        )}
+                    </View>
+
+                    {/* Display Last Assistant Message */}
+                    {lastAssistantMessage && !isLoading && !isRecording && (
+                        <View style={styles.lastMessageContainer}>
+                            <Text style={styles.lastMessageText}>
+                                {lastAssistantMessage.content}
+                            </Text>
+                        </View>
+                    )}
+                </View>
+
+                {/* Bottom Controls */}
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={styles.bottomControls}
+                >
+                    {/* Input or Controls */}
+                    {showTextInput ? (
+                        <View style={styles.textInputContainer}>
+                            <TouchableOpacity
+                                onPress={() => setShowTextInput(false)}
+                                style={styles.closeInputButton}
+                            >
+                                <MaterialIcons name="close" size={24} color="rgba(255,255,255,0.6)" />
+                            </TouchableOpacity>
+                            <TextInput
+                                style={styles.mainInput}
+                                value={inputText}
+                                onChangeText={setInputText}
+                                placeholder="Digite sua resposta..."
+                                placeholderTextColor="rgba(255,255,255,0.5)"
+                                autoFocus
+                                onSubmitEditing={handleSend}
+                            />
+                            <TouchableOpacity
+                                style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
+                                onPress={handleSend}
+                                disabled={!inputText.trim()}
+                            >
+                                <MaterialIcons name="send" size={24} color={colors.primary} />
                             </TouchableOpacity>
                         </View>
-                    </View>
+                    ) : (
+                        <View style={styles.controlsRow}>
+                            <TouchableOpacity
+                                style={styles.secondaryButton}
+                                onPress={() => setShowTextInput(true)}
+                            >
+                                <MaterialIcons name="keyboard" size={28} color="white" />
+                            </TouchableOpacity>
 
-                    <View style={styles.headerStatus}>
-                        <View style={[styles.statusDot, isLoading && styles.statusDotBusy]} />
-                        <Text style={styles.statusText}>
-                            {isLoading ? 'Pensando' : 'Online'}
-                        </Text>
-                    </View>
-                </LinearGradient>
-
-                {/* Chat Area */}
-                <KeyboardAvoidingView
-                    style={styles.chatArea}
-                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                    keyboardVerticalOffset={90}
-                >
-                    <ScrollView
-                        ref={scrollViewRef}
-                        style={styles.messagesContainer}
-                        contentContainerStyle={styles.messagesContent}
-                        showsVerticalScrollIndicator={false}
-                    >
-                        {messages.map(renderMessage)}
-                        {isLoading && renderTypingIndicator()}
-                    </ScrollView>
-
-                    {/* Input Area */}
-                    <View style={styles.inputArea}>
-                        <View style={styles.inputRow}>
-                            {/* Mic Button */}
                             <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
                                 <TouchableOpacity
                                     style={[
-                                        styles.micButton,
-                                        isRecording && styles.micButtonRecording,
+                                        styles.mainMicButton,
+                                        isRecording && styles.mainMicButtonRecording
                                     ]}
                                     onPress={toggleRecording}
-                                    activeOpacity={0.7}
-                                    disabled={!selectedSubject}
+                                    activeOpacity={0.8}
                                 >
                                     <MaterialIcons
                                         name={isRecording ? 'stop' : 'mic'}
-                                        size={24}
+                                        size={48}
                                         color={isRecording ? colors.white : colors.primary}
                                     />
                                 </TouchableOpacity>
                             </Animated.View>
 
-                            {/* Text Input */}
-                            <TextInput
-                                style={styles.textInput}
-                                value={inputText}
-                                onChangeText={setInputText}
-                                placeholder={
-                                    !selectedSubject
-                                        ? 'Selecione uma disciplina...'
-                                        : isRecording
-                                            ? 'Ouvindo... 🎙️'
-                                            : 'Explique o que você entendeu...'
-                                }
-                                placeholderTextColor={colors.slate400}
-                                multiline
-                                maxLength={2000}
-                                editable={!!selectedSubject && !isLoading}
-                                onSubmitEditing={handleSend}
-                            />
-
-                            {/* Send Button */}
-                            <TouchableOpacity
-                                style={[
-                                    styles.sendButton,
-                                    (!inputText.trim() || isLoading || !selectedSubject) && styles.sendButtonDisabled,
-                                ]}
-                                onPress={handleSend}
-                                disabled={!inputText.trim() || isLoading || !selectedSubject}
-                                activeOpacity={0.7}
-                            >
-                                {isLoading ? (
-                                    <ActivityIndicator size="small" color={colors.white} />
-                                ) : (
-                                    <MaterialIcons name="send" size={22} color={colors.white} />
-                                )}
-                            </TouchableOpacity>
+                            {/* Placeholder for symmetry or another action */}
+                            <View style={styles.secondaryButtonPlaceholder} />
                         </View>
-
-                        {isRecording && (
-                            <View style={styles.recordingIndicator}>
-                                <View style={styles.recordingDot} />
-                                <Text style={styles.recordingText}>Gravando... Toque no microfone para parar</Text>
-                            </View>
-                        )}
-                    </View>
+                    )}
                 </KeyboardAvoidingView>
 
-                {/* Subject Picker Modal */}
+                {/* Modals */}
                 {renderSubjectPicker()}
-            </Animated.View>
-        </SafeAreaView>
+                {renderChatHistory()}
+            </SafeAreaView>
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
-        backgroundColor: colors.backgroundLight,
-    },
     container: {
         flex: 1,
     },
-
-    // Header
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: spacing.base,
-        paddingVertical: spacing.md,
-        paddingTop: spacing.lg,
-        borderBottomLeftRadius: 20,
-        borderBottomRightRadius: 20,
+    safeArea: {
+        flex: 1,
+        justifyContent: 'space-between',
     },
-    backButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.15)',
+
+    // Top Controls
+    topControls: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: spacing.lg,
+        paddingTop: spacing.lg,
+        zIndex: 10,
+    },
+    iconButton: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: 'rgba(0,0,0,0.1)',
         justifyContent: 'center',
         alignItems: 'center',
     },
-    headerCenter: {
-        flex: 1,
+    subjectPill: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginLeft: spacing.md,
-        gap: spacing.sm,
-    },
-    headerAvatar: {
-        width: 40,
-        height: 40,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        paddingVertical: 8,
+        paddingHorizontal: 16,
         borderRadius: 20,
-        borderWidth: 2,
-        borderColor: 'rgba(255,255,255,0.4)',
+        gap: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.3)',
     },
-    headerTitle: {
-        fontSize: typography.fontSize.lg,
-        fontWeight: typography.fontWeight.bold,
-        fontFamily: typography.fontFamily.display,
-        color: colors.white,
+    subjectPillText: {
+        color: 'white',
+        fontWeight: '600',
+        fontSize: typography.fontSize.sm,
     },
-    subjectSelector: {
-        flexDirection: 'row',
+
+    // Avatar Area
+    avatarContainer: {
+        flex: 1,
+        justifyContent: 'center',
         alignItems: 'center',
-        gap: 2,
+        paddingBottom: 40,
+        paddingHorizontal: spacing.lg,
     },
-    headerSubject: {
-        fontSize: typography.fontSize.xs,
-        fontFamily: typography.fontFamily.body,
-        color: 'rgba(255,255,255,0.8)',
-        maxWidth: 180,
-    },
-    headerStatus: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 6,
+    lastMessageContainer: {
+        marginTop: spacing.xl,
         backgroundColor: 'rgba(255,255,255,0.15)',
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderRadius: 12,
+        padding: spacing.md,
+        borderRadius: 16,
+        maxWidth: '90%',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.3)',
     },
-    statusDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: '#34d399',
+    lastMessageText: {
+        color: 'white',
+        fontSize: typography.fontSize.base,
+        textAlign: 'center',
+        lineHeight: 22,
+        fontWeight: '500',
     },
-    statusDotBusy: {
-        backgroundColor: '#fbbf24',
+    avatarWrapper: {
+        width: 250,
+        height: 250,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: spacing.xl,
+        position: 'relative',
+    },
+    avatarGlow: {
+        position: 'absolute',
+        width: 300,
+        height: 300,
+        borderRadius: 150,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+    },
+    mainAvatar: {
+        width: 250,
+        height: 250,
+        borderRadius: 125,
+        borderWidth: 4,
+        borderColor: 'rgba(255,255,255,0.8)',
+    },
+    statusContainer: {
+        alignItems: 'center',
+        marginTop: spacing.lg,
+    },
+    statusBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.25)',
+        paddingVertical: 8,
+        paddingHorizontal: 20,
+        borderRadius: 20,
+    },
+    statusBadgeRecording: {
+        backgroundColor: 'rgba(220, 38, 38, 0.3)', // Red tint
+    },
+    recordingDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: '#ef4444',
+        marginRight: 8,
     },
     statusText: {
-        fontSize: 11,
-        color: colors.white,
-        fontFamily: typography.fontFamily.body,
-    },
-
-    // Chat area
-    chatArea: {
-        flex: 1,
-    },
-    messagesContainer: {
-        flex: 1,
-    },
-    messagesContent: {
-        paddingHorizontal: spacing.base,
-        paddingVertical: spacing.md,
-        paddingBottom: spacing.xl,
-    },
-
-    // Messages
-    messageRow: {
-        flexDirection: 'row',
-        marginBottom: spacing.md,
-        alignItems: 'flex-end',
-        gap: spacing.sm,
-    },
-    messageRowUser: {
-        justifyContent: 'flex-end',
-    },
-    messageRowAssistant: {
-        justifyContent: 'flex-start',
-    },
-    avatar: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        borderWidth: 2,
-        borderColor: colors.primaryLight,
-    },
-    messageBubble: {
-        maxWidth: '75%',
-        paddingHorizontal: spacing.base,
-        paddingVertical: spacing.md,
-        borderRadius: 18,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 4,
-        elevation: 1,
-    },
-    userBubble: {
-        backgroundColor: colors.primary,
-        borderBottomRightRadius: 4,
-    },
-    assistantBubble: {
-        backgroundColor: colors.white,
-        borderBottomLeftRadius: 4,
-        borderWidth: 1,
-        borderColor: colors.slate200,
-    },
-    messageText: {
+        color: 'white',
         fontSize: typography.fontSize.base,
-        fontFamily: typography.fontFamily.body,
-        lineHeight: typography.fontSize.base * 1.5,
+        fontWeight: '600',
     },
-    userMessageText: {
-        color: colors.white,
-    },
-    assistantMessageText: {
-        color: colors.textPrimary,
-    },
-    messageTime: {
-        fontSize: 10,
-        marginTop: 4,
-        textAlign: 'right',
-    },
-    userMessageTime: {
+    instructionText: {
         color: 'rgba(255,255,255,0.7)',
-    },
-    assistantMessageTime: {
-        color: colors.slate400,
-    },
-
-    // Typing indicator
-    typingBubble: {
-        paddingVertical: spacing.sm,
-        paddingHorizontal: spacing.md,
-    },
-    typingText: {
-        fontSize: typography.fontSize.sm,
-        color: colors.slate500,
-        fontFamily: typography.fontFamily.body,
+        fontSize: typography.fontSize.base,
+        marginTop: spacing.sm,
     },
 
-    // Input area
-    inputArea: {
-        borderTopWidth: 1,
-        borderTopColor: colors.slate200,
-        backgroundColor: colors.white,
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.sm,
+    // Bottom Controls
+    bottomControls: {
+        paddingHorizontal: spacing.xl,
+        paddingBottom: Platform.OS === 'ios' ? 20 : 40,
     },
-    inputRow: {
+    controlsRow: {
         flexDirection: 'row',
-        alignItems: 'flex-end',
-        gap: spacing.sm,
+        alignItems: 'center',
+        justifyContent: 'space-between',
     },
-    micButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: 'rgba(79, 70, 229, 0.1)',
+    mainMicButton: {
+        width: 90,
+        height: 90,
+        borderRadius: 45,
+        backgroundColor: 'white',
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 1.5,
-        borderColor: colors.primary,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 8,
     },
-    micButtonRecording: {
-        backgroundColor: colors.danger,
-        borderColor: colors.danger,
+    mainMicButtonRecording: {
+        backgroundColor: '#ef4444', // Red
     },
-    textInput: {
+    secondaryButton: {
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    secondaryButtonPlaceholder: {
+        width: 50,
+    },
+
+    // Text Input Overlay
+    textInputContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        borderRadius: 30,
+        padding: 6,
+    },
+    mainInput: {
         flex: 1,
-        minHeight: 44,
-        maxHeight: 120,
-        backgroundColor: colors.slate50,
-        borderRadius: 22,
-        paddingHorizontal: spacing.base,
-        paddingVertical: spacing.sm,
+        color: 'white',
         fontSize: typography.fontSize.base,
-        fontFamily: typography.fontFamily.body,
-        color: colors.textPrimary,
-        borderWidth: 1,
-        borderColor: colors.slate200,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+        height: 48,
+    },
+    closeInputButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     sendButton: {
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: colors.primary,
+        backgroundColor: 'white',
         justifyContent: 'center',
         alignItems: 'center',
-        shadowColor: colors.primary,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-        elevation: 3,
     },
     sendButtonDisabled: {
-        backgroundColor: colors.slate300,
-        shadowOpacity: 0,
-        elevation: 0,
+        backgroundColor: '#ccc',
+        opacity: 0.7,
     },
 
-    // Recording indicator
-    recordingIndicator: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 6,
-        paddingTop: spacing.xs,
-    },
-    recordingDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: colors.danger,
-    },
-    recordingText: {
-        fontSize: typography.fontSize.xs,
-        color: colors.danger,
-        fontFamily: typography.fontFamily.body,
-    },
-
-    // Modal - Subject Picker
+    // Modal Common
     modalOverlay: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.5)',
@@ -799,12 +803,12 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.base,
     },
     modalAvatar: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
-        borderWidth: 3,
-        borderColor: 'rgba(255,255,255,0.4)',
+        width: 60,
+        height: 60,
+        borderRadius: 30,
         marginBottom: spacing.md,
+        borderWidth: 2,
+        borderColor: 'white',
     },
     modalTitle: {
         fontSize: typography.fontSize.xl,
@@ -849,5 +853,90 @@ const styles = StyleSheet.create({
     },
     subjectItemTextActive: {
         color: colors.white,
+    },
+
+    // Chat History Modal
+    historyContainer: {
+        flex: 1,
+        backgroundColor: '#f8fafc',
+    },
+    historyHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: spacing.md,
+        backgroundColor: 'white',
+        borderBottomWidth: 1,
+        borderBottomColor: '#e2e8f0',
+    },
+    historyTitle: {
+        fontSize: typography.fontSize.lg,
+        fontWeight: 'bold',
+        color: colors.slate800,
+    },
+    closeHistoryButton: {
+        padding: 8,
+    },
+
+    // Messages (for History view)
+    messagesContainer: {
+        flex: 1,
+    },
+    messagesContent: {
+        padding: spacing.md,
+        gap: spacing.md,
+        paddingBottom: 40,
+    },
+    messageRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        gap: 8,
+    },
+    messageRowUser: {
+        justifyContent: 'flex-end',
+    },
+    messageRowAssistant: {
+        justifyContent: 'flex-start',
+    },
+    chatAvatar: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+    },
+    messageBubble: {
+        maxWidth: '80%',
+        padding: 12,
+        borderRadius: 16,
+    },
+    userBubble: {
+        backgroundColor: colors.primary,
+        borderBottomRightRadius: 2,
+    },
+    assistantBubble: {
+        backgroundColor: 'white',
+        borderBottomLeftRadius: 2,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    messageText: {
+        fontSize: 15,
+        lineHeight: 22,
+    },
+    userMessageText: {
+        color: 'white',
+    },
+    assistantMessageText: {
+        color: colors.slate800,
+    },
+    messageTime: {
+        fontSize: 10,
+        textAlign: 'right',
+        marginTop: 4,
+    },
+    userMessageTime: {
+        color: 'rgba(255,255,255,0.7)',
+    },
+    assistantMessageTime: {
+        color: '#94a3b8',
     },
 });
