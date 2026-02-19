@@ -11,18 +11,21 @@ import {
     Animated,
     LayoutAnimation,
     UIManager,
+    Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import { Audio, AVPlaybackStatus } from 'expo-av';
 
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
-import { getStudentHistory, getSubjectMaterials } from '@/services/api';
+import { getStudentHistory, getSubjectMaterials, getStudentMaterials, getAudioMaterialSignedUrl } from '@/services/api';
 import { FolderCard } from '@/components/cards/FolderCard';
 import { Material } from '@/types';
 
@@ -87,10 +90,18 @@ export default function ContentHubScreen() {
     const [quizzes, setQuizzes] = useState<ActivityHistoryItem[]>([]);
     const [summaries, setSummaries] = useState<ActivityHistoryItem[]>([]);
     const [materials, setMaterials] = useState<Material[]>([]);
+    const [audioMaterials, setAudioMaterials] = useState<Material[]>([]);
 
     // UI state
     const [openFolder, setOpenFolder] = useState<FolderType>(null);
     const [exportingId, setExportingId] = useState<number | null>(null);
+    const [audioModalVisible, setAudioModalVisible] = useState(false);
+    const [audioLoading, setAudioLoading] = useState(false);
+    const [selectedAudio, setSelectedAudio] = useState<{ id: string; title: string; url: string } | null>(null);
+    const [audioSound, setAudioSound] = useState<Audio.Sound | null>(null);
+    const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+    const [audioPositionMs, setAudioPositionMs] = useState(0);
+    const [audioDurationMs, setAudioDurationMs] = useState(0);
 
     // ============ DATA LOADING ============
 
@@ -102,9 +113,10 @@ export default function ContentHubScreen() {
         setLoading(true);
         try {
             // Load history (quizzes + summaries) and materials in parallel
-            const [historyRes, materialsRes] = await Promise.all([
+            const [historyRes, materialsRes, studentMaterialsRes] = await Promise.all([
                 getStudentHistory(subjectId, 1, 50).catch(() => ({ success: false, history: [] })),
                 getSubjectMaterials(subjectId).catch(() => []),
+                getStudentMaterials().catch(() => []),
             ]);
 
             if (historyRes.success && historyRes.history) {
@@ -113,7 +125,16 @@ export default function ContentHubScreen() {
                 setSummaries(items.filter(i => i.activity.activity_type === 'summary'));
             }
 
-            setMaterials(materialsRes || []);
+            const studentMaterials = Array.isArray(studentMaterialsRes) ? studentMaterialsRes : [];
+
+            setMaterials((materialsRes as Material[]) || []);
+
+            const audioOnly = studentMaterials.filter((item) => {
+                if (item.type !== 'audio') return false;
+                if (item.subjectId && subjectId) return item.subjectId === subjectId;
+                return item.subject === subjectName;
+            });
+            setAudioMaterials(audioOnly);
         } catch (error) {
             console.error('Erro ao carregar conteúdo:', error);
         } finally {
@@ -262,6 +283,25 @@ export default function ContentHubScreen() {
         try {
             const { Linking } = require('react-native');
             const { API_URL } = require('@/services/api');
+
+            if (material.type === 'audio') {
+                setAudioLoading(true);
+                const signed = await getAudioMaterialSignedUrl(material.id);
+                if (!signed.success || !signed.audio_url) {
+                    setAudioLoading(false);
+                    Alert.alert('Erro', signed.error || 'Não foi possível gerar acesso ao áudio.');
+                    return;
+                }
+                setSelectedAudio({
+                    id: String(material.id),
+                    title: material.title,
+                    url: signed.audio_url,
+                });
+                setAudioModalVisible(true);
+                setAudioLoading(false);
+                return;
+            }
+
             let fullUrl = material.url;
             if (!material.url.startsWith('http')) {
                 const baseUrl = API_URL.replace('/api', '');
@@ -269,8 +309,84 @@ export default function ContentHubScreen() {
             }
             await Linking.openURL(fullUrl);
         } catch (error) {
+            setAudioLoading(false);
             console.error('Erro ao abrir material:', error);
             Alert.alert('Erro', 'Não foi possível abrir o material.');
+        }
+    };
+
+    const formatMs = (ms: number) => {
+        const totalSec = Math.floor((ms || 0) / 1000);
+        const min = Math.floor(totalSec / 60);
+        const sec = totalSec % 60;
+        return `${min}:${String(sec).padStart(2, '0')}`;
+    };
+
+    React.useEffect(() => {
+        let mounted = true;
+
+        const loadAudio = async () => {
+            if (!audioModalVisible || !selectedAudio?.url) return;
+
+            try {
+                const sound = new Audio.Sound();
+                await sound.loadAsync(
+                    { uri: selectedAudio.url },
+                    { shouldPlay: true },
+                    true
+                );
+
+                sound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
+                    if (!status.isLoaded) return;
+                    setIsPlayingAudio(status.isPlaying);
+                    setAudioPositionMs(status.positionMillis || 0);
+                    setAudioDurationMs(status.durationMillis || 0);
+                });
+
+                if (mounted) {
+                    setAudioSound(sound);
+                } else {
+                    await sound.unloadAsync();
+                }
+            } catch (error) {
+                Alert.alert('Erro', 'Não foi possível reproduzir o áudio neste momento.');
+            }
+        };
+
+        loadAudio();
+
+        return () => {
+            mounted = false;
+        };
+    }, [audioModalVisible, selectedAudio?.url]);
+
+    const closeAudioModal = async () => {
+        setAudioModalVisible(false);
+        setSelectedAudio(null);
+        setIsPlayingAudio(false);
+        setAudioPositionMs(0);
+        setAudioDurationMs(0);
+
+        if (audioSound) {
+            try {
+                await audioSound.unloadAsync();
+            } catch (error) {
+                // ignore
+            }
+        }
+        setAudioSound(null);
+    };
+
+    const togglePlayPause = async () => {
+        if (!audioSound) return;
+        try {
+            if (isPlayingAudio) {
+                await audioSound.pauseAsync();
+            } else {
+                await audioSound.playAsync();
+            }
+        } catch (error) {
+            Alert.alert('Erro', 'Falha ao controlar reprodução do áudio.');
         }
     };
 
@@ -355,6 +471,7 @@ export default function ContentHubScreen() {
             video: 'play-circle-outline',
             link: 'link',
             document: 'description',
+            audio: 'headphones',
         };
 
         return (
@@ -406,7 +523,8 @@ export default function ContentHubScreen() {
                 content = materials.map(renderMaterialItem);
                 break;
             case 'audio':
-                isEmpty = true;
+                isEmpty = audioMaterials.length === 0;
+                content = audioMaterials.map(renderMaterialItem);
                 break;
         }
 
@@ -419,15 +537,7 @@ export default function ContentHubScreen() {
                     </Text>
                 </View>
 
-                {openFolder === 'audio' ? (
-                    <View style={sectionStyles.comingSoon}>
-                        <MaterialIcons name="headphones" size={48} color={colors.slate300} />
-                        <Text style={sectionStyles.comingSoonTitle}>Em Breve</Text>
-                        <Text style={sectionStyles.comingSoonText}>
-                            Áudios e podcasts gerados por IA estarão disponíveis aqui em breve!
-                        </Text>
-                    </View>
-                ) : isEmpty ? (
+                {isEmpty ? (
                     <View style={sectionStyles.emptyState}>
                         <MaterialIcons name="inbox" size={40} color={colors.slate300} />
                         <Text style={sectionStyles.emptyText}>Nenhum conteúdo encontrado</Text>
@@ -511,10 +621,9 @@ export default function ContentHubScreen() {
                             title={FOLDER_CONFIG.audio.title}
                             iconName={FOLDER_CONFIG.audio.icon}
                             accentColor={FOLDER_CONFIG.audio.color}
-                            itemCount={0}
+                            itemCount={audioMaterials.length}
                             isOpen={openFolder === 'audio'}
                             onPress={() => toggleFolder('audio')}
-                            subtitle="Em breve"
                         />
                     </View>
 
@@ -522,6 +631,109 @@ export default function ContentHubScreen() {
                     {renderFolderContent()}
                 </ScrollView>
             )}
+
+            <Modal
+                visible={audioModalVisible}
+                transparent
+                animationType="fade"
+                onRequestClose={closeAudioModal}
+            >
+                <View style={audioStyles.overlay}>
+                    <View style={audioStyles.container}>
+                        <View style={audioStyles.header}>
+                            <Text style={audioStyles.title} numberOfLines={2}>
+                                {selectedAudio?.title || 'Áudio'}
+                            </Text>
+                            <TouchableOpacity onPress={closeAudioModal}>
+                                <MaterialIcons name="close" size={22} color={colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        {audioLoading ? (
+                            <View style={audioStyles.loadingBox}>
+                                <ActivityIndicator size="small" color={colors.primary} />
+                                <Text style={audioStyles.loadingText}>Preparando áudio...</Text>
+                            </View>
+                        ) : selectedAudio?.url ? (
+                            <View style={audioStyles.playerWrap}>
+                                <View style={audioStyles.playerCard}>
+                                    <MaterialIcons name="headphones" size={26} color={colors.primary} />
+                                    <Text style={audioStyles.playerInfo}>Reprodução no app</Text>
+                                    <Text style={audioStyles.timeText}>
+                                        {formatMs(audioPositionMs)} / {formatMs(audioDurationMs)}
+                                    </Text>
+
+                                    <TouchableOpacity style={audioStyles.playButton} onPress={togglePlayPause}>
+                                        <MaterialIcons
+                                            name={isPlayingAudio ? 'pause' : 'play-arrow'}
+                                            size={20}
+                                            color={colors.white}
+                                        />
+                                        <Text style={audioStyles.playButtonText}>
+                                            {isPlayingAudio ? 'Pausar' : 'Reproduzir'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+
+                                <TouchableOpacity
+                                    style={audioStyles.downloadButton}
+                                    onPress={async () => {
+                                        try {
+                                            if (Platform.OS === 'web') {
+                                                if (typeof document === 'undefined' || !selectedAudio?.id) {
+                                                    throw new Error('Download indisponível neste ambiente');
+                                                }
+
+                                                const token = await AsyncStorage.getItem('authToken');
+                                                if (!token) {
+                                                    throw new Error('Sessão expirada. Faça login novamente.');
+                                                }
+
+                                                const { API_URL } = require('@/services/api');
+                                                const response = await fetch(
+                                                    `${API_URL}/transcription/materials/${selectedAudio.id}/audio-download`,
+                                                    {
+                                                        headers: {
+                                                            'Authorization': `Bearer ${token}`,
+                                                        },
+                                                    }
+                                                );
+
+                                                if (!response.ok) {
+                                                    throw new Error(`Falha no download (HTTP ${response.status})`);
+                                                }
+
+                                                const blob = await response.blob();
+                                                const blobUrl = URL.createObjectURL(blob);
+
+                                                const anchor = document.createElement('a');
+                                                anchor.href = blobUrl;
+                                                anchor.download = `${(selectedAudio.title || 'audio').replace(/\s+/g, '_')}.mp3`;
+                                                document.body.appendChild(anchor);
+                                                anchor.click();
+                                                document.body.removeChild(anchor);
+                                                URL.revokeObjectURL(blobUrl);
+                                            } else {
+                                                const { Linking } = require('react-native');
+                                                await Linking.openURL(selectedAudio.url);
+                                            }
+                                        } catch (error) {
+                                            Alert.alert('Erro', 'Não foi possível baixar o áudio.');
+                                        }
+                                    }}
+                                >
+                                    <MaterialIcons name="download" size={16} color={colors.white} />
+                                    <Text style={audioStyles.downloadButtonText}>Baixar áudio</Text>
+                                </TouchableOpacity>
+                            </View>
+                        ) : (
+                            <View style={audioStyles.loadingBox}>
+                                <Text style={audioStyles.loadingText}>Áudio indisponível</Text>
+                            </View>
+                        )}
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -723,5 +935,102 @@ const sectionStyles = StyleSheet.create({
         textAlign: 'center',
         lineHeight: 20,
         paddingHorizontal: spacing.lg,
+    },
+});
+
+const audioStyles = StyleSheet.create({
+    overlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.45)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: spacing.md,
+    },
+    container: {
+        width: '100%',
+        maxWidth: 560,
+        backgroundColor: colors.white,
+        borderRadius: borderRadius.lg,
+        overflow: 'hidden',
+    },
+    header: {
+        padding: spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.slate100,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: spacing.sm,
+    },
+    title: {
+        flex: 1,
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.semibold,
+        color: colors.textPrimary,
+    },
+    playerWrap: {
+        padding: spacing.md,
+        gap: spacing.md,
+    },
+    playerCard: {
+        width: '100%',
+        minHeight: 118,
+        backgroundColor: '#f8fafc',
+        borderRadius: borderRadius.default,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: spacing.md,
+        gap: spacing.xs,
+    },
+    playerInfo: {
+        color: colors.textPrimary,
+        fontWeight: typography.fontWeight.semibold,
+        fontSize: typography.fontSize.base,
+    },
+    timeText: {
+        color: colors.textSecondary,
+        fontSize: typography.fontSize.sm,
+    },
+    playButton: {
+        marginTop: spacing.xs,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: spacing.xs,
+        backgroundColor: colors.primary,
+        borderRadius: borderRadius.default,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+    },
+    playButtonText: {
+        color: colors.white,
+        fontWeight: typography.fontWeight.semibold,
+        fontSize: typography.fontSize.sm,
+    },
+    loadingBox: {
+        padding: spacing.lg,
+        alignItems: 'center',
+        gap: spacing.sm,
+    },
+    loadingText: {
+        color: colors.textSecondary,
+        fontSize: typography.fontSize.sm,
+    },
+    downloadButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: spacing.xs,
+        backgroundColor: colors.primary,
+        borderRadius: borderRadius.default,
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.md,
+    },
+    downloadButtonText: {
+        color: colors.white,
+        fontWeight: typography.fontWeight.semibold,
+        fontSize: typography.fontSize.sm,
     },
 });

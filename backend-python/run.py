@@ -8,6 +8,7 @@ app = create_app()
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 3000))
+    is_dev = os.getenv('FLASK_ENV', 'development') == 'development'
     
     print('\n>> Servidor rodando na porta', port)
     print(f'>> http://localhost:{port}')
@@ -19,5 +20,5 @@ if __name__ == '__main__':
         host='0.0.0.0',
         port=port,
         debug=True,
-        use_reloader=False 
+        use_reloader=is_dev
     )

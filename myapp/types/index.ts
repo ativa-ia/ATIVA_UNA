@@ -28,10 +28,11 @@ export interface Material {
     id: string;
     title: string;
     subject: string;
-    type: 'pdf' | 'video' | 'link' | 'document';
+    type: 'pdf' | 'video' | 'link' | 'document' | 'audio';
     uploadDate: string;
     size?: string;
     url?: string;
+    subjectId?: number;
 }
 
 export interface Student {
