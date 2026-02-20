@@ -23,7 +23,7 @@ interface SummaryAudioOptionsModalProps {
 const VOICES = [
     { id: 'pt_BR-faber-medium', label: 'Faber (equilibrado)' },
     { id: 'pt_BR-cadu-medium', label: 'Cadu (variação)' },
-    { id: 'pt_BR-jeff-medium', label: 'Jeff (variação)' },
+    { id: 'pt_BR-jeff-medium', label: 'Jeff (padrão)' },
     { id: 'pt_BR-edresson-low', label: 'Edresson (rápido)' },
 ];
 
@@ -50,7 +50,7 @@ export default function SummaryAudioOptionsModal({
     onCancel,
 }: SummaryAudioOptionsModalProps) {
     const defaults: SummaryAudioOptions = useMemo(() => ({
-        voice: initialValue?.voice || 'pt_BR-faber-medium',
+        voice: initialValue?.voice || 'pt_BR-jeff-medium',
         mode: initialValue?.mode || 'summary',
         bg_id: initialValue?.bg_id ?? 'lofi_calm',
         bg_volume: initialValue?.bg_volume ?? 0.10,

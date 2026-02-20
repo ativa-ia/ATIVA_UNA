@@ -285,6 +285,43 @@ const helpSections: HelpSection[] = [
                     '"Fred, envia esse resumo"',
                     '"Fred, manda o resumo para os alunos"'
                 ]
+            },
+            {
+                title: 'Enviar Resumo com Áudio (Padrão)',
+                description: 'Ao enviar por voz, o resumo vai com áudio usando padrão: voz Jeff, modo Summary e música atual.',
+                examples: [
+                    '"Fred, enviar resumo para alunos"',
+                    '"Fred, manda pros alunos"',
+                    '"Fred, emvia esse resumo"'
+                ]
+            },
+            {
+                title: 'Título por Voz e Título Automático',
+                description: 'Você pode definir o título falando no comando. Se não informar, o sistema cria automaticamente no formato: [Disciplina] - resumo em audio 1, 2, 3...',
+                examples: [
+                    '"Fred, enviar resumo com título revisão prova 1"',
+                    '"Fred, mandar resumo titulo farmacocinética"',
+                    '"Fred, enviar resumo" (usa título automático)'
+                ]
+            },
+            {
+                title: 'Confirmar Envio por Voz',
+                description: 'Após abrir o preview com Título final, você pode editar no campo e confirmar por botão ou por comando de voz.',
+                examples: [
+                    '"Fred, confirmar envio"',
+                    '"Fred, pode enviar"',
+                    '"Fred, cancelar envio"'
+                ]
+            },
+            {
+                title: 'Configurar Áudio por Voz',
+                description: 'Você pode escolher voz, modo e música no próprio comando; o Fred também tolera variações de fala/escrita.',
+                examples: [
+                    '"Fred, enviar resumo voz jeff modo summary"',
+                    '"Fred, enviar resumo modo rapido musica lofi study"',
+                    '"Fred, mandar resumo voz jefi modo sumari musica lof stadi"',
+                    '"Fred, enviar resumo sem música"'
+                ]
             }
         ]
     },
