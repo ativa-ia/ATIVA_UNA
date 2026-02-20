@@ -14,17 +14,37 @@ import {
     ActivityIndicator,
     Modal,
     FlatList,
+    Dimensions,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Audio } from 'expo-av';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
-import { getSubjects, Subject, refineTranscription, socraticChat } from '@/services/api';
+import {
+    getSubjects,
+    Subject,
+    refineTranscription,
+    socraticChat,
+    createSocraticSession,
+    getSocraticSessions,
+    getSocraticSession,
+    SocraticSessionData,
+} from '@/services/api';
 
 // @ts-ignore
-import SocraticAvatar from '@/assets/images/socratic_avatar.png';
+import AvatarIdle from '@/assets/images/avatar-assistente.png';
+// @ts-ignore
+import AvatarListening from '@/assets/images/avatar-listening.png';
+// @ts-ignore
+import AvatarThinking from '@/assets/images/avatar-thinking.png';
+// @ts-ignore
+import AvatarSpeaking from '@/assets/images/avatar-speaking.png';
+
+const TTS_API_URL = process.env.EXPO_PUBLIC_TTS_API_URL;
+const MAX_INPUT_HEIGHT = 120; // approx 5 lines
 
 interface ChatMessage {
     id: string;
@@ -37,58 +57,75 @@ export default function SocraticScreen() {
     // State
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [inputText, setInputText] = useState('');
+    const [inputHeight, setInputHeight] = useState(44);
     const [isLoading, setIsLoading] = useState(false);
     const [isRecording, setIsRecording] = useState(false);
     const [isRefining, setIsRefining] = useState(false);
+    const [isSpeaking, setIsSpeaking] = useState(false);
 
-    // Subject selection
+    // UI State — two separate modals
+    const [showCurrentChat, setShowCurrentChat] = useState(false);
+    const [showPastSessions, setShowPastSessions] = useState(false);
+    const [showTextInput, setShowTextInput] = useState(false);
+    const [showTranscript, setShowTranscript] = useState(false);
+    const [liveTranscript, setLiveTranscript] = useState('');
+
+    // Subject selection — shown immediately
     const [subjects, setSubjects] = useState<Subject[]>([]);
     const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
-    const [showSubjectPicker, setShowSubjectPicker] = useState(false);
+    const [showSubjectPicker, setShowSubjectPicker] = useState(true); // starts open
     const [loadingSubjects, setLoadingSubjects] = useState(true);
+
+    // Session management
+    const [currentSessionId, setCurrentSessionId] = useState<number | null>(null);
+    const [pastSessions, setPastSessions] = useState<SocraticSessionData[]>([]);
+    const [loadingSessions, setLoadingSessions] = useState(false);
 
     // Refs
     const scrollViewRef = useRef<ScrollView>(null);
+    const chatScrollRef = useRef<ScrollView>(null);
     const recognitionRef = useRef<any>(null);
     const pulseAnim = useRef(new Animated.Value(1)).current;
-    const fadeAnim = useRef(new Animated.Value(0)).current;
-    const typingDots = useRef(new Animated.Value(0)).current;
+    const soundRef = useRef<Audio.Sound | null>(null);
 
-    // Load subjects on mount
+    // Avatar animations
+    const avatarScale = useRef(new Animated.Value(1)).current;
+    const avatarGlow = useRef(new Animated.Value(0)).current;
+    const breatheAnim = useRef(new Animated.Value(1)).current;
+
+    // Transcript accordion animation
+    const transcriptHeight = useRef(new Animated.Value(0)).current;
+
+    // Dynamic avatar based on state
+    const currentAvatar = isSpeaking
+        ? AvatarSpeaking
+        : isRecording
+            ? AvatarListening
+            : (isLoading || isRefining)
+                ? AvatarThinking
+                : AvatarIdle;
+
+    // Load subjects immediately on mount
     useEffect(() => {
         loadSubjects();
     }, []);
 
-    // Fade in animation
+    // Cleanup sound on unmount
     useEffect(() => {
-        Animated.timing(fadeAnim, {
-            toValue: 1,
-            duration: 600,
-            useNativeDriver: true,
-        }).start();
+        return () => {
+            if (soundRef.current) {
+                soundRef.current.unloadAsync();
+            }
+        };
     }, []);
-
-    // Typing indicator animation
-    useEffect(() => {
-        if (isLoading) {
-            Animated.loop(
-                Animated.sequence([
-                    Animated.timing(typingDots, { toValue: 1, duration: 500, useNativeDriver: true }),
-                    Animated.timing(typingDots, { toValue: 0, duration: 500, useNativeDriver: true }),
-                ])
-            ).start();
-        } else {
-            typingDots.setValue(0);
-        }
-    }, [isLoading]);
 
     // Pulse animation for recording
     useEffect(() => {
         if (isRecording) {
             Animated.loop(
                 Animated.sequence([
-                    Animated.timing(pulseAnim, { toValue: 1.3, duration: 600, useNativeDriver: true }),
-                    Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+                    Animated.timing(pulseAnim, { toValue: 1.2, duration: 800, useNativeDriver: true }),
+                    Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
                 ])
             ).start();
         } else {
@@ -96,17 +133,58 @@ export default function SocraticScreen() {
         }
     }, [isRecording]);
 
+    // Avatar animation when speaking/processing
+    useEffect(() => {
+        if (isLoading || isRefining || isSpeaking) {
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(avatarScale, { toValue: 1.05, duration: 1000, useNativeDriver: true }),
+                    Animated.timing(avatarScale, { toValue: 1, duration: 1000, useNativeDriver: true }),
+                ])
+            ).start();
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(avatarGlow, { toValue: 1, duration: 1500, useNativeDriver: true }),
+                    Animated.timing(avatarGlow, { toValue: 0.3, duration: 1500, useNativeDriver: true }),
+                ])
+            ).start();
+        } else {
+            avatarScale.setValue(1);
+            avatarGlow.setValue(0);
+        }
+    }, [isLoading, isRefining, isSpeaking]);
+
+    // Subtle breathing animation when idle (always alive)
+    useEffect(() => {
+        const breathe = Animated.loop(
+            Animated.sequence([
+                Animated.timing(breatheAnim, { toValue: 1.02, duration: 2500, useNativeDriver: true }),
+                Animated.timing(breatheAnim, { toValue: 1, duration: 2500, useNativeDriver: true }),
+            ])
+        );
+        breathe.start();
+        return () => breathe.stop();
+    }, []);
+
+    // Transcript accordion toggle
+    useEffect(() => {
+        Animated.timing(transcriptHeight, {
+            toValue: showTranscript ? 1 : 0,
+            duration: 300,
+            useNativeDriver: false,
+        }).start();
+    }, [showTranscript]);
+
     const loadSubjects = async () => {
         try {
             setLoadingSubjects(true);
             const data = await getSubjects();
             setSubjects(data);
-            // Auto-select if only one subject
             if (data.length === 1) {
                 setSelectedSubject(data[0]);
-            } else if (data.length > 1) {
-                setShowSubjectPicker(true);
+                setShowSubjectPicker(false);
             }
+            // If more than 1 subject, the picker is already open (starts true)
         } catch (err) {
             console.error('Erro ao carregar disciplinas:', err);
         } finally {
@@ -114,58 +192,158 @@ export default function SocraticScreen() {
         }
     };
 
-    // Welcome message when subject is selected
+    // Create a new session when subject is selected
     useEffect(() => {
-        if (selectedSubject && messages.length === 0) {
-            const welcomeMsg: ChatMessage = {
-                id: 'welcome',
-                role: 'assistant',
-                content: `Olá! 👋 Eu sou o Sócrates, seu assistente de estudo!\n\nEstou aqui para te ajudar a aprender **${selectedSubject.name}** de forma mais profunda.\n\n🎯 Me explique o que você entendeu sobre o assunto, e eu vou te fazer perguntas para testar seu conhecimento!\n\nVocê pode digitar ou usar o microfone 🎙️ para falar.`,
-                timestamp: new Date(),
-            };
-            setMessages([welcomeMsg]);
+        if (selectedSubject) {
+            startNewSession();
         }
     }, [selectedSubject]);
 
-    // Auto-scroll to bottom
+    const startNewSession = async () => {
+        if (!selectedSubject) return;
+        try {
+            const result = await createSocraticSession(selectedSubject.id);
+            if (result.success && result.session) {
+                setCurrentSessionId(result.session.id);
+                setMessages([]);
+                const welcomeMsg: ChatMessage = {
+                    id: 'welcome',
+                    role: 'assistant',
+                    content: `Olá! 👋 Eu sou o Fred, seu assistente de estudo!\n\nEstou aqui para te ajudar a aprender sobre ${selectedSubject.name}.\n\nMe explique o que você entendeu sobre algum assunto da matéria, e eu vou te desafiar com perguntas!`,
+                    timestamp: new Date(),
+                };
+                setMessages([welcomeMsg]);
+            }
+        } catch (err) {
+            console.error('Erro ao criar sessão:', err);
+        }
+    };
+
+    // Load past sessions
+    const loadPastSessions = async () => {
+        if (!selectedSubject) return;
+        setLoadingSessions(true);
+        try {
+            const result = await getSocraticSessions(selectedSubject.id);
+            if (result.success && result.sessions) {
+                setPastSessions(result.sessions);
+            }
+        } catch (err) {
+            console.error('Erro ao carregar sessões:', err);
+        } finally {
+            setLoadingSessions(false);
+        }
+    };
+
+    // Load a past session
+    const loadSession = async (sessionId: number) => {
+        try {
+            const result = await getSocraticSession(sessionId);
+            if (result.success && result.session) {
+                setCurrentSessionId(result.session.id);
+                const loadedMessages: ChatMessage[] = (result.session.messages_data || []).map(
+                    (msg, idx) => ({
+                        id: `loaded-${idx}`,
+                        role: msg.role as 'user' | 'assistant',
+                        content: msg.content,
+                        timestamp: new Date(msg.timestamp),
+                    })
+                );
+                setMessages(loadedMessages);
+                setShowPastSessions(false);
+                setShowCurrentChat(true);
+            }
+        } catch (err) {
+            console.error('Erro ao carregar sessão:', err);
+        }
+    };
+
+    // Auto-scroll chat modal
     useEffect(() => {
-        if (messages.length > 0) {
+        if (showCurrentChat && messages.length > 0) {
             setTimeout(() => {
-                scrollViewRef.current?.scrollToEnd({ animated: true });
+                chatScrollRef.current?.scrollToEnd({ animated: true });
             }, 100);
         }
-    }, [messages, isLoading]);
+    }, [messages, showCurrentChat]);
+
+    // ===== TTS =====
+    const playTTS = async (text: string) => {
+        if (!TTS_API_URL) {
+            console.warn('TTS_API_URL não configurado');
+            return;
+        }
+        try {
+            // NOT setting isSpeaking here — wait for audio to actually play
+            if (soundRef.current) {
+                await soundRef.current.unloadAsync();
+                soundRef.current = null;
+            }
+            const response = await fetch(TTS_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text }),
+            });
+            if (!response.ok) {
+                console.error('TTS API error:', response.status);
+                return;
+            }
+            const audioBlob = await response.blob();
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const { sound } = await Audio.Sound.createAsync(
+                { uri: audioUrl },
+                { shouldPlay: true }
+            );
+            soundRef.current = sound;
+
+            // Only show "Falando..." when audio actually starts playing
+            sound.setOnPlaybackStatusUpdate((status) => {
+                if (status.isLoaded) {
+                    if (status.isPlaying && !isSpeaking) {
+                        setIsSpeaking(true);
+                    }
+                    if (status.didJustFinish) {
+                        setIsSpeaking(false);
+                        sound.unloadAsync();
+                        soundRef.current = null;
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('Erro ao reproduzir TTS:', error);
+            setIsSpeaking(false);
+        }
+    };
 
     // ===== STT (Web Speech API) =====
     const startRecording = () => {
-        if (Platform.OS !== 'web') {
-            // TODO: native STT
-            return;
-        }
-
+        if (Platform.OS !== 'web') return;
         const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
         if (!SpeechRecognition) {
             alert('Seu navegador não suporta reconhecimento de voz.');
             return;
         }
-
         const recognition = new SpeechRecognition();
         recognition.lang = 'pt-BR';
         recognition.interimResults = true;
         recognition.continuous = true;
+        let finalTranscript = '';
 
         recognition.onresult = (event: any) => {
-            let finalText = '';
+            let currentFinal = '';
             let interimText = '';
             for (let i = 0; i < event.results.length; i++) {
                 const transcript = event.results[i][0].transcript;
                 if (event.results[i].isFinal) {
-                    finalText += transcript + ' ';
+                    currentFinal += transcript + ' ';
                 } else {
                     interimText += transcript;
                 }
             }
-            setInputText((finalText + interimText).trim());
+            finalTranscript = currentFinal;
+            const fullText = (currentFinal + interimText).trim();
+            setInputText(fullText);
+            setLiveTranscript(fullText);
         };
 
         recognition.onerror = (event: any) => {
@@ -173,13 +351,23 @@ export default function SocraticScreen() {
             setIsRecording(false);
         };
 
+        // AUTO-SEND on end
         recognition.onend = () => {
             setIsRecording(false);
+            const textToSend = finalTranscript.trim();
+            if (textToSend) {
+                setInputText(textToSend);
+                setTimeout(() => {
+                    handleSendText(textToSend);
+                }, 200);
+            }
         };
 
         recognitionRef.current = recognition;
         recognition.start();
         setIsRecording(true);
+        setLiveTranscript('');
+        setInputText('');
     };
 
     const stopRecording = () => {
@@ -187,7 +375,6 @@ export default function SocraticScreen() {
             recognitionRef.current.stop();
             recognitionRef.current = null;
         }
-        setIsRecording(false);
     };
 
     const toggleRecording = () => {
@@ -199,48 +386,41 @@ export default function SocraticScreen() {
     };
 
     // ===== Send Message =====
-    const handleSend = async () => {
-        const text = inputText.trim();
-        if (!text || isLoading || !selectedSubject) return;
+    const handleSendText = async (text: string) => {
+        const cleanText = text.trim();
+        if (!cleanText || isLoading || !selectedSubject || !currentSessionId) return;
 
-        // Stop recording if active
-        if (isRecording) stopRecording();
-
-        // Add user message immediately
         const userMsg: ChatMessage = {
             id: Date.now().toString(),
             role: 'user',
-            content: text,
+            content: cleanText,
             timestamp: new Date(),
         };
         setMessages(prev => [...prev, userMsg]);
         setInputText('');
+        setLiveTranscript('');
+        setShowTextInput(false);
+        setInputHeight(44);
+
         setIsLoading(true);
 
         try {
-            // Step 1: Refine transcription
             setIsRefining(true);
-            const refineResult = await refineTranscription(text);
+            const refineResult = await refineTranscription(cleanText);
             const refinedText = refineResult.success && refineResult.refined_text
                 ? refineResult.refined_text
-                : text;
+                : cleanText;
             setIsRefining(false);
 
-            // Update user message if text was refined
-            if (refinedText !== text) {
+            if (refinedText !== cleanText) {
                 setMessages(prev => prev.map(m =>
                     m.id === userMsg.id ? { ...m, content: refinedText } : m
                 ));
             }
 
-            // Step 2: Send to Socratic chat
-            const chatHistory = messages
-                .filter(m => m.id !== 'welcome')
-                .map(m => ({ role: m.role, content: m.content }));
-
             const result = await socraticChat(
+                currentSessionId,
                 selectedSubject.name,
-                chatHistory,
                 refinedText
             );
 
@@ -252,6 +432,7 @@ export default function SocraticScreen() {
                     timestamp: new Date(),
                 };
                 setMessages(prev => [...prev, assistantMsg]);
+                playTTS(result.response);
             } else {
                 const errorMsg: ChatMessage = {
                     id: (Date.now() + 1).toString(),
@@ -276,10 +457,13 @@ export default function SocraticScreen() {
         }
     };
 
-    // ===== Render Functions =====
+    const handleSend = () => {
+        handleSendText(inputText);
+    };
+
+    // ===== Render: Message Bubble =====
     const renderMessage = (msg: ChatMessage) => {
         const isUser = msg.role === 'user';
-
         return (
             <View
                 key={msg.id}
@@ -289,7 +473,7 @@ export default function SocraticScreen() {
                 ]}
             >
                 {!isUser && (
-                    <Image source={SocraticAvatar} style={styles.avatar} />
+                    <Image source={AvatarIdle} style={styles.chatAvatar} />
                 )}
                 <View
                     style={[
@@ -314,53 +498,44 @@ export default function SocraticScreen() {
         );
     };
 
-    const renderTypingIndicator = () => (
-        <View style={[styles.messageRow, styles.messageRowAssistant]}>
-            <Image source={SocraticAvatar} style={styles.avatar} />
-            <View style={[styles.messageBubble, styles.assistantBubble, styles.typingBubble]}>
-                <Animated.View style={{ opacity: typingDots }}>
-                    <Text style={styles.typingText}>
-                        {isRefining ? '✨ Refinando texto...' : '🤔 Pensando...'}
-                    </Text>
-                </Animated.View>
-            </View>
-        </View>
-    );
-
-    // Subject Picker Modal
+    // ===== MODAL 1: Subject Picker (Floating Card) =====
     const renderSubjectPicker = () => (
         <Modal
             visible={showSubjectPicker}
             transparent
-            animationType="slide"
+            animationType="fade"
             onRequestClose={() => {
                 if (selectedSubject) setShowSubjectPicker(false);
             }}
         >
-            <View style={styles.modalOverlay}>
-                <View style={styles.modalContent}>
+            <View style={styles.floatingOverlay}>
+                <View style={styles.floatingCard}>
+                    {/* Compact gradient header */}
                     <LinearGradient
                         colors={['#4f46e5', '#7c3aed']}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
-                        style={styles.modalHeader}
+                        style={styles.floatingCardHeader}
                     >
-                        <Image source={SocraticAvatar} style={styles.modalAvatar} />
-                        <Text style={styles.modalTitle}>Escolha a Disciplina</Text>
-                        <Text style={styles.modalSubtitle}>
-                            Selecione sobre qual matéria quer estudar
-                        </Text>
+                        <Image source={AvatarIdle} style={styles.floatingAvatar} />
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.floatingCardTitle}>Escolha a Disciplina</Text>
+                            <Text style={styles.floatingCardSubtitle}>
+                                Sobre qual matéria vamos conversar?
+                            </Text>
+                        </View>
                     </LinearGradient>
 
                     {loadingSubjects ? (
-                        <View style={styles.modalLoading}>
+                        <View style={styles.floatingLoading}>
                             <ActivityIndicator size="large" color={colors.primary} />
+                            <Text style={{ color: '#94a3b8', marginTop: 8 }}>Carregando...</Text>
                         </View>
                     ) : (
                         <FlatList
                             data={subjects}
                             keyExtractor={(item) => item.id.toString()}
-                            contentContainerStyle={styles.subjectList}
+                            contentContainerStyle={styles.floatingList}
                             renderItem={({ item }) => (
                                 <TouchableOpacity
                                     style={[
@@ -370,14 +545,13 @@ export default function SocraticScreen() {
                                     onPress={() => {
                                         setSelectedSubject(item);
                                         setShowSubjectPicker(false);
-                                        // Reset conversation when switching subject
                                         setMessages([]);
                                     }}
                                     activeOpacity={0.7}
                                 >
                                     <MaterialIcons
                                         name="school"
-                                        size={24}
+                                        size={22}
                                         color={selectedSubject?.id === item.id ? colors.white : colors.primary}
                                     />
                                     <Text style={[
@@ -387,7 +561,7 @@ export default function SocraticScreen() {
                                         {item.name}
                                     </Text>
                                     {selectedSubject?.id === item.id && (
-                                        <MaterialIcons name="check-circle" size={22} color={colors.white} />
+                                        <MaterialIcons name="check-circle" size={20} color={colors.white} />
                                     )}
                                 </TouchableOpacity>
                             )}
@@ -398,441 +572,621 @@ export default function SocraticScreen() {
         </Modal>
     );
 
-    return (
-        <SafeAreaView style={styles.safeArea}>
-            <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
-                {/* Header */}
-                <LinearGradient
-                    colors={['#4f46e5', '#7c3aed']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.header}
+    // ===== MODAL 2: Current Chat =====
+    const renderCurrentChat = () => (
+        <Modal
+            visible={showCurrentChat}
+            animationType="slide"
+            presentationStyle="pageSheet"
+            onRequestClose={() => setShowCurrentChat(false)}
+        >
+            <View style={styles.chatModalContainer}>
+                <View style={styles.chatModalHeader}>
+                    <TouchableOpacity onPress={() => setShowCurrentChat(false)} style={styles.chatModalClose}>
+                        <MaterialIcons name="arrow-back" size={24} color={colors.slate800} />
+                    </TouchableOpacity>
+                    <View style={{ flex: 1, alignItems: 'center' }}>
+                        <Text style={styles.chatModalTitle}>Conversa Atual</Text>
+                        <Text style={styles.chatModalSubtitle}>{selectedSubject?.name || ''}</Text>
+                    </View>
+                    <View style={{ width: 40 }} />
+                </View>
+
+                <ScrollView
+                    ref={chatScrollRef}
+                    style={styles.messagesContainer}
+                    contentContainerStyle={styles.messagesContent}
                 >
+                    {messages.map(renderMessage)}
+                    {isLoading && (
+                        <View style={styles.typingIndicator}>
+                            <ActivityIndicator size="small" color={colors.primary} />
+                            <Text style={styles.typingText}>
+                                {isRefining ? 'Processando...' : 'Fred está pensando...'}
+                            </Text>
+                        </View>
+                    )}
+                </ScrollView>
+            </View>
+        </Modal>
+    );
+
+    // ===== MODAL 3: Past Sessions (History) =====
+    const renderPastSessions = () => (
+        <Modal
+            visible={showPastSessions}
+            animationType="slide"
+            presentationStyle="pageSheet"
+            onRequestClose={() => setShowPastSessions(false)}
+        >
+            <View style={styles.historyContainer}>
+                <View style={styles.historyHeader}>
+                    <Text style={styles.historyTitle}>Conversas Anteriores</Text>
+                    <TouchableOpacity onPress={() => setShowPastSessions(false)} style={styles.closeHistoryButton}>
+                        <MaterialIcons name="close" size={24} color={colors.slate600} />
+                    </TouchableOpacity>
+                </View>
+
+                <View style={styles.historyActions}>
                     <TouchableOpacity
-                        style={styles.backButton}
+                        style={styles.newSessionButton}
+                        onPress={() => {
+                            startNewSession();
+                            setShowPastSessions(false);
+                        }}
+                    >
+                        <MaterialIcons name="add" size={18} color={colors.primary} />
+                        <Text style={styles.newSessionButtonText}>Nova Conversa</Text>
+                    </TouchableOpacity>
+                </View>
+
+                {loadingSessions ? (
+                    <ActivityIndicator size="large" color={colors.primary} style={{ padding: 40 }} />
+                ) : pastSessions.length === 0 ? (
+                    <View style={styles.emptyState}>
+                        <MaterialIcons name="chat-bubble-outline" size={48} color="#cbd5e1" />
+                        <Text style={styles.emptySessionsText}>Nenhuma conversa anterior</Text>
+                    </View>
+                ) : (
+                    <FlatList
+                        data={pastSessions}
+                        keyExtractor={(item) => item.id.toString()}
+                        contentContainerStyle={styles.sessionsList}
+                        renderItem={({ item }) => (
+                            <TouchableOpacity
+                                style={[
+                                    styles.sessionItem,
+                                    item.id === currentSessionId && styles.sessionItemActive,
+                                ]}
+                                onPress={() => loadSession(item.id)}
+                            >
+                                <View style={styles.sessionItemIcon}>
+                                    <MaterialIcons name="chat" size={20} color={colors.primary} />
+                                </View>
+                                <View style={styles.sessionItemContent}>
+                                    <Text style={styles.sessionItemTitle} numberOfLines={1}>
+                                        {item.title}
+                                    </Text>
+                                    <Text style={styles.sessionItemMeta}>
+                                        {item.message_count} msgs · {new Date(item.updated_at).toLocaleDateString('pt-BR')}
+                                    </Text>
+                                </View>
+                                <View style={[
+                                    styles.sessionStatusDot,
+                                    item.status === 'active' ? styles.statusDotActive : styles.statusDotFinished
+                                ]} />
+                            </TouchableOpacity>
+                        )}
+                    />
+                )}
+            </View>
+        </Modal>
+    );
+
+    return (
+        <View style={styles.container}>
+            <LinearGradient
+                colors={['#4f46e5', '#7c3aed']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+            />
+
+            <SafeAreaView style={styles.safeArea}>
+                {/* Top Controls */}
+                <View style={styles.topControls}>
+                    <TouchableOpacity
+                        style={styles.iconButton}
                         onPress={() => router.back()}
                     >
-                        <MaterialIcons name="arrow-back" size={24} color={colors.white} />
+                        <MaterialIcons name="arrow-back" size={28} color="rgba(255,255,255,0.8)" />
                     </TouchableOpacity>
 
-                    <View style={styles.headerCenter}>
-                        <Image source={SocraticAvatar} style={styles.headerAvatar} />
-                        <View>
-                            <Text style={styles.headerTitle}>Sócrates</Text>
-                            <TouchableOpacity
-                                onPress={() => setShowSubjectPicker(true)}
-                                style={styles.subjectSelector}
-                            >
-                                <Text style={styles.headerSubject} numberOfLines={1}>
-                                    {selectedSubject?.name || 'Selecionar disciplina'}
+                    <TouchableOpacity
+                        style={styles.subjectPill}
+                        onPress={() => setShowSubjectPicker(true)}
+                    >
+                        <MaterialIcons name="school" size={16} color="white" />
+                        <Text style={styles.subjectPillText}>
+                            {selectedSubject?.name || 'Selecionar'}
+                        </Text>
+                        <MaterialIcons name="expand-more" size={16} color="white" />
+                    </TouchableOpacity>
+
+                    {/* History button -> opens past sessions */}
+                    <TouchableOpacity
+                        style={styles.iconButton}
+                        onPress={() => {
+                            loadPastSessions();
+                            setShowPastSessions(true);
+                        }}
+                    >
+                        <MaterialIcons name="history" size={28} color="rgba(255,255,255,0.8)" />
+                    </TouchableOpacity>
+                </View>
+
+                {/* Main Avatar Area — clean, no text */}
+                <View style={styles.avatarContainer}>
+                    <Animated.View style={[
+                        styles.avatarWrapper,
+                        { transform: [{ scale: Animated.multiply(avatarScale, breatheAnim) }] }
+                    ]}>
+                        <Animated.View style={[
+                            styles.avatarGlow,
+                            { opacity: avatarGlow, transform: [{ scale: Animated.add(1, avatarGlow) }] }
+                        ]} />
+                        <Image source={currentAvatar} style={styles.mainAvatar} resizeMode="cover" />
+                    </Animated.View>
+
+                    <View style={styles.statusContainer}>
+                        {isSpeaking ? (
+                            <View style={[styles.statusBadge, styles.statusBadgeSpeaking]}>
+                                <MaterialIcons name="volume-up" size={18} color="white" style={{ marginRight: 6 }} />
+                                <Text style={styles.statusText}>Falando...</Text>
+                            </View>
+                        ) : isLoading || isRefining ? (
+                            <View style={styles.statusBadge}>
+                                <ActivityIndicator size="small" color="white" style={{ marginRight: 6 }} />
+                                <Text style={styles.statusText}>
+                                    {isRefining ? 'Processando...' : 'Pensando...'}
                                 </Text>
-                                <MaterialIcons name="expand-more" size={18} color="rgba(255,255,255,0.8)" />
+                            </View>
+                        ) : isRecording ? (
+                            <View style={[styles.statusBadge, styles.statusBadgeRecording]}>
+                                <View style={styles.recordingDot} />
+                                <Text style={styles.statusText}>Ouvindo você...</Text>
+                            </View>
+                        ) : (
+                            <Text style={styles.instructionText}>
+                                Toque no microfone para explicar
+                            </Text>
+                        )}
+                    </View>
+                </View>
+
+                {/* Expandable Transcript (STT live text) */}
+                {(liveTranscript || isRecording) && (
+                    <View style={styles.transcriptSection}>
+                        <TouchableOpacity
+                            style={styles.transcriptToggle}
+                            onPress={() => setShowTranscript(!showTranscript)}
+                        >
+                            <MaterialIcons
+                                name={showTranscript ? 'expand-less' : 'expand-more'}
+                                size={20}
+                                color="rgba(255,255,255,0.7)"
+                            />
+                            <Text style={styles.transcriptToggleText}>
+                                {showTranscript ? 'Ocultar transcrição' : 'Ver transcrição'}
+                            </Text>
+                        </TouchableOpacity>
+
+                        <Animated.View style={[
+                            styles.transcriptContent,
+                            {
+                                maxHeight: transcriptHeight.interpolate({
+                                    inputRange: [0, 1],
+                                    outputRange: [0, 120],
+                                }),
+                                opacity: transcriptHeight,
+                            }
+                        ]}>
+                            <Text style={styles.transcriptText}>
+                                {liveTranscript || 'Aguardando fala...'}
+                            </Text>
+                        </Animated.View>
+                    </View>
+                )}
+
+                {/* Bottom Controls */}
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={styles.bottomControls}
+                >
+                    {showTextInput ? (
+                        /* Multiline text input */
+                        <View style={styles.textInputContainer}>
+                            <TouchableOpacity
+                                onPress={() => { setShowTextInput(false); setInputHeight(44); }}
+                                style={styles.closeInputButton}
+                            >
+                                <MaterialIcons name="close" size={24} color="rgba(255,255,255,0.6)" />
+                            </TouchableOpacity>
+                            <TextInput
+                                style={[styles.mainInput, { height: Math.min(inputHeight, MAX_INPUT_HEIGHT) }]}
+                                value={inputText}
+                                onChangeText={setInputText}
+                                placeholder="Digite sua resposta..."
+                                placeholderTextColor="rgba(255,255,255,0.5)"
+                                autoFocus
+                                multiline
+                                textAlignVertical="top"
+                                scrollEnabled={inputHeight >= MAX_INPUT_HEIGHT}
+                                onContentSizeChange={(e) => {
+                                    setInputHeight(Math.max(44, e.nativeEvent.contentSize.height));
+                                }}
+                                blurOnSubmit={false}
+                            />
+                            <TouchableOpacity
+                                style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
+                                onPress={handleSend}
+                                disabled={!inputText.trim()}
+                            >
+                                <MaterialIcons name="send" size={24} color={colors.primary} />
                             </TouchableOpacity>
                         </View>
-                    </View>
+                    ) : (
+                        <View style={styles.controlsRow}>
+                            {/* Keyboard (text fallback) */}
+                            <TouchableOpacity
+                                style={styles.secondaryButton}
+                                onPress={() => setShowTextInput(true)}
+                            >
+                                <MaterialIcons name="keyboard" size={24} color="rgba(255,255,255,0.6)" />
+                            </TouchableOpacity>
 
-                    <View style={styles.headerStatus}>
-                        <View style={[styles.statusDot, isLoading && styles.statusDotBusy]} />
-                        <Text style={styles.statusText}>
-                            {isLoading ? 'Pensando' : 'Online'}
-                        </Text>
-                    </View>
-                </LinearGradient>
-
-                {/* Chat Area */}
-                <KeyboardAvoidingView
-                    style={styles.chatArea}
-                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                    keyboardVerticalOffset={90}
-                >
-                    <ScrollView
-                        ref={scrollViewRef}
-                        style={styles.messagesContainer}
-                        contentContainerStyle={styles.messagesContent}
-                        showsVerticalScrollIndicator={false}
-                    >
-                        {messages.map(renderMessage)}
-                        {isLoading && renderTypingIndicator()}
-                    </ScrollView>
-
-                    {/* Input Area */}
-                    <View style={styles.inputArea}>
-                        <View style={styles.inputRow}>
-                            {/* Mic Button */}
+                            {/* Main Mic Button */}
                             <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
                                 <TouchableOpacity
                                     style={[
-                                        styles.micButton,
-                                        isRecording && styles.micButtonRecording,
+                                        styles.mainMicButton,
+                                        isRecording && styles.mainMicButtonRecording
                                     ]}
                                     onPress={toggleRecording}
-                                    activeOpacity={0.7}
-                                    disabled={!selectedSubject}
+                                    activeOpacity={0.8}
+                                    disabled={isLoading}
                                 >
                                     <MaterialIcons
                                         name={isRecording ? 'stop' : 'mic'}
-                                        size={24}
+                                        size={48}
                                         color={isRecording ? colors.white : colors.primary}
                                     />
                                 </TouchableOpacity>
                             </Animated.View>
 
-                            {/* Text Input */}
-                            <TextInput
-                                style={styles.textInput}
-                                value={inputText}
-                                onChangeText={setInputText}
-                                placeholder={
-                                    !selectedSubject
-                                        ? 'Selecione uma disciplina...'
-                                        : isRecording
-                                            ? 'Ouvindo... 🎙️'
-                                            : 'Explique o que você entendeu...'
-                                }
-                                placeholderTextColor={colors.slate400}
-                                multiline
-                                maxLength={2000}
-                                editable={!!selectedSubject && !isLoading}
-                                onSubmitEditing={handleSend}
-                            />
-
-                            {/* Send Button */}
+                            {/* Chat button -> opens current conversation */}
                             <TouchableOpacity
-                                style={[
-                                    styles.sendButton,
-                                    (!inputText.trim() || isLoading || !selectedSubject) && styles.sendButtonDisabled,
-                                ]}
-                                onPress={handleSend}
-                                disabled={!inputText.trim() || isLoading || !selectedSubject}
-                                activeOpacity={0.7}
+                                style={styles.secondaryButton}
+                                onPress={() => setShowCurrentChat(true)}
                             >
-                                {isLoading ? (
-                                    <ActivityIndicator size="small" color={colors.white} />
-                                ) : (
-                                    <MaterialIcons name="send" size={22} color={colors.white} />
+                                <MaterialIcons name="chat" size={24} color="rgba(255,255,255,0.6)" />
+                                {messages.length > 1 && (
+                                    <View style={styles.chatBadge}>
+                                        <Text style={styles.chatBadgeText}>{messages.length - 1}</Text>
+                                    </View>
                                 )}
                             </TouchableOpacity>
                         </View>
-
-                        {isRecording && (
-                            <View style={styles.recordingIndicator}>
-                                <View style={styles.recordingDot} />
-                                <Text style={styles.recordingText}>Gravando... Toque no microfone para parar</Text>
-                            </View>
-                        )}
-                    </View>
+                    )}
                 </KeyboardAvoidingView>
 
-                {/* Subject Picker Modal */}
+                {/* Modals */}
                 {renderSubjectPicker()}
-            </Animated.View>
-        </SafeAreaView>
+                {renderCurrentChat()}
+                {renderPastSessions()}
+            </SafeAreaView>
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
-        backgroundColor: colors.backgroundLight,
-    },
     container: {
         flex: 1,
     },
-
-    // Header
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: spacing.base,
-        paddingVertical: spacing.md,
-        paddingTop: spacing.lg,
-        borderBottomLeftRadius: 20,
-        borderBottomRightRadius: 20,
+    safeArea: {
+        flex: 1,
+        justifyContent: 'space-between',
     },
-    backButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        backgroundColor: 'rgba(255,255,255,0.15)',
+
+    // Top Controls
+    topControls: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: spacing.lg,
+        paddingTop: spacing.lg,
+        zIndex: 10,
+    },
+    iconButton: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: 'rgba(0,0,0,0.1)',
         justifyContent: 'center',
         alignItems: 'center',
     },
-    headerCenter: {
-        flex: 1,
+    subjectPill: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginLeft: spacing.md,
-        gap: spacing.sm,
-    },
-    headerAvatar: {
-        width: 40,
-        height: 40,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        paddingVertical: 8,
+        paddingHorizontal: 16,
         borderRadius: 20,
-        borderWidth: 2,
-        borderColor: 'rgba(255,255,255,0.4)',
+        gap: 8,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.3)',
     },
-    headerTitle: {
-        fontSize: typography.fontSize.lg,
-        fontWeight: typography.fontWeight.bold,
-        fontFamily: typography.fontFamily.display,
-        color: colors.white,
+    subjectPillText: {
+        color: 'white',
+        fontWeight: '600',
+        fontSize: typography.fontSize.sm,
     },
-    subjectSelector: {
-        flexDirection: 'row',
+
+    // Avatar Area (clean — no text)
+    avatarContainer: {
+        flex: 1,
+        justifyContent: 'center',
         alignItems: 'center',
-        gap: 2,
+        paddingBottom: 20,
+        paddingHorizontal: spacing.lg,
     },
-    headerSubject: {
-        fontSize: typography.fontSize.xs,
-        fontFamily: typography.fontFamily.body,
-        color: 'rgba(255,255,255,0.8)',
-        maxWidth: 180,
-    },
-    headerStatus: {
-        flexDirection: 'row',
+    avatarWrapper: {
+        width: 220,
+        height: 220,
+        justifyContent: 'center',
         alignItems: 'center',
-        gap: 6,
+        marginBottom: spacing.lg,
+        position: 'relative',
+    },
+    avatarGlow: {
+        position: 'absolute',
+        width: 280,
+        height: 280,
+        borderRadius: 140,
         backgroundColor: 'rgba(255,255,255,0.15)',
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        borderRadius: 12,
+        shadowColor: '#a78bfa',
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.6,
+        shadowRadius: 30,
+        elevation: 15,
     },
-    statusDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: '#34d399',
+    mainAvatar: {
+        width: 220,
+        height: 220,
+        borderRadius: 110,
+        borderWidth: 4,
+        borderColor: 'rgba(255,255,255,0.85)',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+        elevation: 10,
     },
-    statusDotBusy: {
-        backgroundColor: '#fbbf24',
+    statusContainer: {
+        alignItems: 'center',
+        marginTop: spacing.md,
+    },
+    statusBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.25)',
+        paddingVertical: 8,
+        paddingHorizontal: 20,
+        borderRadius: 20,
+    },
+    statusBadgeRecording: {
+        backgroundColor: 'rgba(220, 38, 38, 0.3)',
+    },
+    statusBadgeSpeaking: {
+        backgroundColor: 'rgba(34, 197, 94, 0.3)',
+    },
+    recordingDot: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: '#ef4444',
+        marginRight: 8,
     },
     statusText: {
-        fontSize: 11,
-        color: colors.white,
-        fontFamily: typography.fontFamily.body,
-    },
-
-    // Chat area
-    chatArea: {
-        flex: 1,
-    },
-    messagesContainer: {
-        flex: 1,
-    },
-    messagesContent: {
-        paddingHorizontal: spacing.base,
-        paddingVertical: spacing.md,
-        paddingBottom: spacing.xl,
-    },
-
-    // Messages
-    messageRow: {
-        flexDirection: 'row',
-        marginBottom: spacing.md,
-        alignItems: 'flex-end',
-        gap: spacing.sm,
-    },
-    messageRowUser: {
-        justifyContent: 'flex-end',
-    },
-    messageRowAssistant: {
-        justifyContent: 'flex-start',
-    },
-    avatar: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
-        borderWidth: 2,
-        borderColor: colors.primaryLight,
-    },
-    messageBubble: {
-        maxWidth: '75%',
-        paddingHorizontal: spacing.base,
-        paddingVertical: spacing.md,
-        borderRadius: 18,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 4,
-        elevation: 1,
-    },
-    userBubble: {
-        backgroundColor: colors.primary,
-        borderBottomRightRadius: 4,
-    },
-    assistantBubble: {
-        backgroundColor: colors.white,
-        borderBottomLeftRadius: 4,
-        borderWidth: 1,
-        borderColor: colors.slate200,
-    },
-    messageText: {
+        color: 'white',
         fontSize: typography.fontSize.base,
-        fontFamily: typography.fontFamily.body,
-        lineHeight: typography.fontSize.base * 1.5,
+        fontWeight: '600',
     },
-    userMessageText: {
-        color: colors.white,
-    },
-    assistantMessageText: {
-        color: colors.textPrimary,
-    },
-    messageTime: {
-        fontSize: 10,
-        marginTop: 4,
-        textAlign: 'right',
-    },
-    userMessageTime: {
+    instructionText: {
         color: 'rgba(255,255,255,0.7)',
-    },
-    assistantMessageTime: {
-        color: colors.slate400,
-    },
-
-    // Typing indicator
-    typingBubble: {
-        paddingVertical: spacing.sm,
-        paddingHorizontal: spacing.md,
-    },
-    typingText: {
-        fontSize: typography.fontSize.sm,
-        color: colors.slate500,
-        fontFamily: typography.fontFamily.body,
+        fontSize: typography.fontSize.base,
+        marginTop: spacing.sm,
     },
 
-    // Input area
-    inputArea: {
-        borderTopWidth: 1,
-        borderTopColor: colors.slate200,
-        backgroundColor: colors.white,
-        paddingHorizontal: spacing.md,
-        paddingVertical: spacing.sm,
+    // Expandable Transcript
+    transcriptSection: {
+        paddingHorizontal: spacing.xl,
+        marginBottom: spacing.sm,
     },
-    inputRow: {
+    transcriptToggle: {
         flexDirection: 'row',
-        alignItems: 'flex-end',
-        gap: spacing.sm,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 6,
+        gap: 4,
     },
-    micButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: 'rgba(79, 70, 229, 0.1)',
+    transcriptToggleText: {
+        color: 'rgba(255,255,255,0.7)',
+        fontSize: typography.fontSize.sm,
+    },
+    transcriptContent: {
+        overflow: 'hidden',
+        backgroundColor: 'rgba(0,0,0,0.2)',
+        borderRadius: 12,
+        paddingHorizontal: spacing.md,
+    },
+    transcriptText: {
+        color: 'rgba(255,255,255,0.9)',
+        fontSize: typography.fontSize.sm,
+        lineHeight: 20,
+        paddingVertical: spacing.sm,
+    },
+
+    // Bottom Controls
+    bottomControls: {
+        paddingHorizontal: spacing.xl,
+        paddingBottom: Platform.OS === 'ios' ? 20 : 40,
+    },
+    controlsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 30,
+    },
+    mainMicButton: {
+        width: 90,
+        height: 90,
+        borderRadius: 45,
+        backgroundColor: 'white',
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 1.5,
-        borderColor: colors.primary,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 8,
     },
-    micButtonRecording: {
-        backgroundColor: colors.danger,
-        borderColor: colors.danger,
+    mainMicButtonRecording: {
+        backgroundColor: '#ef4444',
     },
-    textInput: {
+    secondaryButton: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        position: 'relative',
+    },
+    chatBadge: {
+        position: 'absolute',
+        top: -2,
+        right: -2,
+        backgroundColor: '#ef4444',
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    chatBadgeText: {
+        color: 'white',
+        fontSize: 10,
+        fontWeight: 'bold',
+    },
+
+    // Text Input — multiline
+    textInputContainer: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        backgroundColor: 'rgba(0,0,0,0.4)',
+        borderRadius: 24,
+        padding: 6,
+    },
+    mainInput: {
         flex: 1,
-        minHeight: 44,
-        maxHeight: 120,
-        backgroundColor: colors.slate50,
-        borderRadius: 22,
-        paddingHorizontal: spacing.base,
-        paddingVertical: spacing.sm,
+        color: 'white',
         fontSize: typography.fontSize.base,
-        fontFamily: typography.fontFamily.body,
-        color: colors.textPrimary,
-        borderWidth: 1,
-        borderColor: colors.slate200,
+        paddingHorizontal: spacing.md,
+        paddingVertical: 10,
+        minHeight: 44,
+        maxHeight: MAX_INPUT_HEIGHT,
+        lineHeight: 22,
+    },
+    closeInputButton: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     sendButton: {
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: colors.primary,
+        backgroundColor: 'white',
         justifyContent: 'center',
         alignItems: 'center',
-        shadowColor: colors.primary,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.3,
-        shadowRadius: 4,
-        elevation: 3,
     },
     sendButtonDisabled: {
-        backgroundColor: colors.slate300,
-        shadowOpacity: 0,
-        elevation: 0,
+        backgroundColor: '#ccc',
+        opacity: 0.7,
     },
 
-    // Recording indicator
-    recordingIndicator: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 6,
-        paddingTop: spacing.xs,
-    },
-    recordingDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
-        backgroundColor: colors.danger,
-    },
-    recordingText: {
-        fontSize: typography.fontSize.xs,
-        color: colors.danger,
-        fontFamily: typography.fontFamily.body,
-    },
-
-    // Modal - Subject Picker
-    modalOverlay: {
+    // ===== Floating Subject Picker =====
+    floatingOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'flex-end',
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
     },
-    modalContent: {
-        backgroundColor: colors.white,
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
+    floatingCard: {
+        backgroundColor: 'white',
+        borderRadius: 20,
+        width: '100%',
+        maxWidth: 400,
         maxHeight: '70%',
         overflow: 'hidden',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.25,
+        shadowRadius: 16,
+        elevation: 12,
     },
-    modalHeader: {
+    floatingCardHeader: {
+        flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: spacing.xl,
-        paddingHorizontal: spacing.base,
+        padding: 16,
+        gap: 12,
     },
-    modalAvatar: {
-        width: 64,
-        height: 64,
-        borderRadius: 32,
-        borderWidth: 3,
-        borderColor: 'rgba(255,255,255,0.4)',
-        marginBottom: spacing.md,
+    floatingAvatar: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.6)',
     },
-    modalTitle: {
-        fontSize: typography.fontSize.xl,
-        fontWeight: typography.fontWeight.bold,
-        fontFamily: typography.fontFamily.display,
-        color: colors.white,
-        marginBottom: 4,
+    floatingCardTitle: {
+        fontSize: typography.fontSize.lg,
+        fontWeight: '700',
+        color: 'white',
     },
-    modalSubtitle: {
-        fontSize: typography.fontSize.sm,
-        fontFamily: typography.fontFamily.body,
+    floatingCardSubtitle: {
+        fontSize: typography.fontSize.xs,
         color: 'rgba(255,255,255,0.8)',
+        marginTop: 2,
     },
-    modalLoading: {
-        padding: spacing['3xl'],
+    floatingLoading: {
+        padding: 40,
         alignItems: 'center',
     },
-    subjectList: {
-        padding: spacing.base,
-        gap: spacing.sm,
+    floatingList: {
+        padding: 12,
+        gap: 8,
     },
     subjectItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: spacing.base,
-        borderRadius: borderRadius.lg,
-        backgroundColor: colors.slate50,
-        gap: spacing.md,
+        padding: 14,
+        borderRadius: 12,
+        backgroundColor: '#f8fafc',
+        gap: 12,
         borderWidth: 1.5,
         borderColor: 'transparent',
     },
@@ -843,11 +1197,214 @@ const styles = StyleSheet.create({
     subjectItemText: {
         flex: 1,
         fontSize: typography.fontSize.base,
-        fontWeight: typography.fontWeight.semibold,
-        fontFamily: typography.fontFamily.display,
+        fontWeight: '600',
         color: colors.textPrimary,
     },
     subjectItemTextActive: {
         color: colors.white,
+    },
+
+    // ===== Current Chat Modal =====
+    chatModalContainer: {
+        flex: 1,
+        backgroundColor: '#f8fafc',
+    },
+    chatModalHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: spacing.md,
+        backgroundColor: 'white',
+        borderBottomWidth: 1,
+        borderBottomColor: '#e2e8f0',
+    },
+    chatModalClose: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    chatModalTitle: {
+        fontSize: typography.fontSize.lg,
+        fontWeight: 'bold',
+        color: colors.slate800,
+    },
+    chatModalSubtitle: {
+        fontSize: typography.fontSize.xs,
+        color: '#94a3b8',
+    },
+    typingIndicator: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingVertical: 8,
+    },
+    typingText: {
+        color: '#94a3b8',
+        fontSize: typography.fontSize.sm,
+        fontStyle: 'italic',
+    },
+
+    // ===== Past Sessions (History) Modal =====
+    historyContainer: {
+        flex: 1,
+        backgroundColor: '#f8fafc',
+    },
+    historyHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: spacing.md,
+        backgroundColor: 'white',
+        borderBottomWidth: 1,
+        borderBottomColor: '#e2e8f0',
+    },
+    historyTitle: {
+        fontSize: typography.fontSize.lg,
+        fontWeight: 'bold',
+        color: colors.slate800,
+    },
+    closeHistoryButton: {
+        padding: 8,
+    },
+    historyActions: {
+        padding: spacing.md,
+    },
+    newSessionButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        paddingVertical: 10,
+        paddingHorizontal: 16,
+        borderRadius: 12,
+        backgroundColor: '#ede9fe',
+    },
+    newSessionButtonText: {
+        color: colors.primary,
+        fontSize: typography.fontSize.base,
+        fontWeight: '600',
+    },
+    emptyState: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 12,
+    },
+    emptySessionsText: {
+        color: '#94a3b8',
+        fontSize: typography.fontSize.base,
+    },
+    sessionsList: {
+        paddingHorizontal: spacing.md,
+        gap: 8,
+    },
+    sessionItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: spacing.md,
+        backgroundColor: 'white',
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        gap: 12,
+    },
+    sessionItemActive: {
+        borderColor: colors.primary,
+        backgroundColor: '#f5f3ff',
+    },
+    sessionItemIcon: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#ede9fe',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    sessionItemContent: {
+        flex: 1,
+    },
+    sessionItemTitle: {
+        fontSize: typography.fontSize.base,
+        fontWeight: '600',
+        color: colors.slate800,
+    },
+    sessionItemMeta: {
+        fontSize: typography.fontSize.xs,
+        color: '#94a3b8',
+        marginTop: 2,
+    },
+    sessionStatusDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+    },
+    statusDotActive: {
+        backgroundColor: '#22c55e',
+    },
+    statusDotFinished: {
+        backgroundColor: '#94a3b8',
+    },
+
+    // Messages (shared by chat modal)
+    messagesContainer: {
+        flex: 1,
+    },
+    messagesContent: {
+        padding: spacing.md,
+        gap: spacing.md,
+        paddingBottom: 40,
+    },
+    messageRow: {
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        gap: 8,
+    },
+    messageRowUser: {
+        justifyContent: 'flex-end',
+    },
+    messageRowAssistant: {
+        justifyContent: 'flex-start',
+    },
+    chatAvatar: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+    },
+    messageBubble: {
+        maxWidth: '80%',
+        padding: 12,
+        borderRadius: 16,
+    },
+    userBubble: {
+        backgroundColor: colors.primary,
+        borderBottomRightRadius: 2,
+    },
+    assistantBubble: {
+        backgroundColor: 'white',
+        borderBottomLeftRadius: 2,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    messageText: {
+        fontSize: 15,
+        lineHeight: 22,
+    },
+    userMessageText: {
+        color: 'white',
+    },
+    assistantMessageText: {
+        color: colors.slate800,
+    },
+    messageTime: {
+        fontSize: 10,
+        textAlign: 'right',
+        marginTop: 4,
+    },
+    userMessageTime: {
+        color: 'rgba(255,255,255,0.7)',
+    },
+    assistantMessageTime: {
+        color: '#94a3b8',
     },
 });

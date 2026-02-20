@@ -18,6 +18,7 @@ from app.models.transcription_session import (
     LiveActivity,
     LiveActivityResponse
 )
+from app.models.socratic import SocraticSession
 
 __all__ = [
     'User',
@@ -37,4 +38,5 @@ __all__ = [
     'TranscriptionCheckpoint',
     'LiveActivity',
     'LiveActivityResponse',
+    'SocraticSession',
 ]
