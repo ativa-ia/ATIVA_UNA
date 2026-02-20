@@ -28,6 +28,7 @@ import ConfirmationModal from '@/components/modals/ConfirmationModal';
 export default function LiveActivityScreen() {
     const insets = useSafeAreaInsets();
     const params = useLocalSearchParams();
+    const isPracticeMode = params.practiceMode === '1';
 
     // Parse activity data safely and memoize to prevent re-ref-gen
     const activity = React.useMemo(() => {
@@ -67,7 +68,7 @@ export default function LiveActivityScreen() {
     // Verificação inicial de segurança e status
     useEffect(() => {
         // Se a atividade não existe, não faz nada (a tela de erro já trata)
-        if (!activity) return;
+        if (!activity || isPracticeMode) return;
 
         // Verificar se atividade já encerrou (status 'ended' ou tempo acabou)
         const isEnded = activity.status === 'ended' || (activity.ends_at && new Date(activity.ends_at) < new Date());
@@ -84,13 +85,13 @@ export default function LiveActivityScreen() {
         if (isActivitySubmitted(activity.id)) {
             setIsSubmitted(true);
         }
-    }, [activity]);
+    }, [activity, isPracticeMode]);
 
     const timerRef = useRef<any>(null);
 
     // Timer countdown
     useEffect(() => {
-        if (isSubmitted || !activity) return;
+        if (isSubmitted || !activity || isPracticeMode) return;
 
         timerRef.current = setInterval(() => {
             setTimeRemaining((prev: number) => {
@@ -106,7 +107,7 @@ export default function LiveActivityScreen() {
         return () => {
             if (timerRef.current) clearInterval(timerRef.current);
         };
-    }, [isSubmitted, activity]);
+    }, [isSubmitted, activity, isPracticeMode]);
 
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
@@ -129,7 +130,7 @@ export default function LiveActivityScreen() {
         const questions = activity?.content?.questions || [];
 
         // Sync progress
-        if (activity.activity_type === 'quiz') {
+        if (activity.activity_type === 'quiz' && !isPracticeMode) {
             const totalTime = activity.time_limit || 300;
             const timeTaken = totalTime - timeRemaining;
 
@@ -165,10 +166,12 @@ export default function LiveActivityScreen() {
             const timeTaken = totalTime - timeRemaining;
 
             // Fire and forget sync to update teacher dashboard immediately
-            submitQuizProgress(activity.id, {
-                answers: answers,
-                time_taken: timeTaken
-            }).catch(err => console.log('Final sync error:', err));
+            if (!isPracticeMode) {
+                submitQuizProgress(activity.id, {
+                    answers: answers,
+                    time_taken: timeTaken
+                }).catch(err => console.log('Final sync error:', err));
+            }
 
             // Enforce answering ALL questions for better accuracy unless auto-submit (timeout)
             if (!autoSubmit && answeredCount < questions.length) {
@@ -228,6 +231,41 @@ export default function LiveActivityScreen() {
         console.log('Submitting answers:', JSON.stringify(currentAnswers));
 
         try {
+            if (isPracticeMode && activity.activity_type === 'quiz') {
+                const questions = activity.content?.questions || [];
+                const currentAnswers = answersRef.current || {};
+
+                let score = 0;
+                const details = questions.map((question: any, index: number) => {
+                    const questionKey = String(question?.id ?? index);
+                    const selected = currentAnswers[questionKey];
+                    const correct = question?.correct;
+                    const isCorrect = selected === correct;
+                    if (isCorrect) score += 1;
+
+                    return {
+                        question: question?.question || `Questão ${index + 1}`,
+                        selected,
+                        correct,
+                        isCorrect,
+                        options: question?.options || []
+                    };
+                });
+
+                const total = questions.length;
+                const percentage = total > 0 ? (score / total) * 100 : 0;
+
+                setResult({
+                    score,
+                    total,
+                    percentage,
+                    details,
+                    practice_mode: true
+                });
+                setIsSubmitted(true);
+                return;
+            }
+
             // Use functional update to get the absolute latest state
             let finalAnswers = answers;
 
@@ -299,7 +337,9 @@ export default function LiveActivityScreen() {
                             : '✅'}
                     </Text>
                     <Text style={styles.resultTitle}>
-                        {activity.activity_type === 'quiz' ? 'Quiz Concluído!' : 'Resposta Enviada!'}
+                        {activity.activity_type === 'quiz'
+                            ? (isPracticeMode ? 'Prática Concluída!' : 'Quiz Concluído!')
+                            : 'Resposta Enviada!'}
                     </Text>
 
                     {activity.activity_type === 'quiz' && (
@@ -309,7 +349,7 @@ export default function LiveActivityScreen() {
                             </Text>
 
                             {/* Points Display */}
-                            {result.points !== undefined && (
+                            {!isPracticeMode && result.points !== undefined && (
                                 <View style={styles.pointsContainer}>
                                     <MaterialIcons name="stars" size={24} color="#F59E0B" />
                                     <Text style={styles.pointsText}>+{result.points} pts</Text>
@@ -334,13 +374,28 @@ export default function LiveActivityScreen() {
 
                     <Text style={styles.resultMessage}>
                         {activity.activity_type === 'quiz'
-                            ? (result.percentage >= 70
-                                ? 'Excelente! Continue assim!'
-                                : result.percentage >= 50
-                                    ? 'Bom trabalho! Revise os pontos que errou.'
-                                    : 'Não desanime! Revise o conteúdo.')
+                            ? (isPracticeMode
+                                ? 'Modo prática: este resultado não altera sua nota oficial nem pontuação.'
+                                : (result.percentage >= 70
+                                    ? 'Excelente! Continue assim!'
+                                    : result.percentage >= 50
+                                        ? 'Bom trabalho! Revise os pontos que errou.'
+                                        : 'Não desanime! Revise o conteúdo.'))
                             : 'Sua resposta foi registrada com sucesso!'}
                     </Text>
+
+                    {isPracticeMode && activity.activity_type === 'quiz' && Array.isArray(result.details) && (
+                        <ScrollView style={styles.practiceReviewBox} contentContainerStyle={{ gap: 8 }}>
+                            {result.details.map((detail: any, idx: number) => (
+                                <View key={idx} style={styles.practiceReviewItem}>
+                                    <Text style={styles.practiceReviewQuestion}>Q{idx + 1}. {detail.question}</Text>
+                                    <Text style={[styles.practiceReviewStatus, { color: detail.isCorrect ? '#16a34a' : '#dc2626' }]}>
+                                        {detail.isCorrect ? '✅ Acertou' : '❌ Errou'}
+                                    </Text>
+                                </View>
+                            ))}
+                        </ScrollView>
+                    )}
 
                     <TouchableOpacity
                         style={styles.resultButton}
@@ -375,18 +430,24 @@ export default function LiveActivityScreen() {
                         timeRemaining <= 60 && styles.timerWarning,
                         timeRemaining <= 30 && styles.timerDanger
                     ]}>
-                        <MaterialIcons
-                            name="timer"
-                            size={20}
-                            color={timeRemaining <= 30 ? '#fff' : timeRemaining <= 60 ? '#f59e0b' : '#10b981'}
-                        />
-                        <Text style={[
-                            styles.timerText,
-                            timeRemaining <= 60 && styles.timerTextWarning,
-                            timeRemaining <= 30 && styles.timerTextDanger
-                        ]}>
-                            {formatTime(timeRemaining)}
-                        </Text>
+                        {isPracticeMode ? (
+                            <Text style={styles.practiceBadge}>Prática</Text>
+                        ) : (
+                            <>
+                                <MaterialIcons
+                                    name="timer"
+                                    size={20}
+                                    color={timeRemaining <= 30 ? '#fff' : timeRemaining <= 60 ? '#f59e0b' : '#10b981'}
+                                />
+                                <Text style={[
+                                    styles.timerText,
+                                    timeRemaining <= 60 && styles.timerTextWarning,
+                                    timeRemaining <= 30 && styles.timerTextDanger
+                                ]}>
+                                    {formatTime(timeRemaining)}
+                                </Text>
+                            </>
+                        )}
 
                     </View>
                     <TouchableOpacity
@@ -886,6 +947,36 @@ const styles = StyleSheet.create({
         fontSize: typography.fontSize.lg,
         fontWeight: typography.fontWeight.bold,
         color: '#F59E0B',
+    },
+    practiceBadge: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: typography.fontWeight.bold,
+        color: '#7c3aed',
+    },
+    practiceReviewBox: {
+        width: '100%',
+        maxHeight: 180,
+        marginBottom: spacing.md,
+        backgroundColor: colors.slate50,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        borderRadius: borderRadius.default,
+        padding: spacing.sm,
+    },
+    practiceReviewItem: {
+        paddingVertical: 4,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.slate200,
+    },
+    practiceReviewQuestion: {
+        fontSize: typography.fontSize.sm,
+        color: colors.textPrimary,
+        fontWeight: typography.fontWeight.medium,
+    },
+    practiceReviewStatus: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: typography.fontWeight.semibold,
+        marginTop: 2,
     },
     errorText: {
         fontSize: typography.fontSize.lg,

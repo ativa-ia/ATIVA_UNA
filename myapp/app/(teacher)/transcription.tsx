@@ -267,11 +267,224 @@ export default function TranscriptionScreen() {
 
     const [summaryAudioModalVisible, setSummaryAudioModalVisible] = useState(false);
     const [summaryAudioOptions, setSummaryAudioOptions] = useState<SummaryAudioOptions>({
-        voice: 'pt_BR-faber-medium',
+        voice: 'pt_BR-jeff-medium',
         mode: 'summary',
         bg_id: 'lofi_calm',
         bg_volume: 0.10,
     });
+    const [voiceSummaryConfirmModal, setVoiceSummaryConfirmModal] = useState<{
+        visible: boolean;
+        title: string;
+        options: SummaryAudioOptions | null;
+    }>({
+        visible: false,
+        title: '',
+        options: null,
+    });
+
+    const normalizeVoiceCommandText = (value: string): string =>
+        value
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^a-z0-9\s]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+    const levenshteinDistance = (a: string, b: string): number => {
+        if (a === b) return 0;
+        if (!a.length) return b.length;
+        if (!b.length) return a.length;
+
+        const matrix: number[][] = Array.from({ length: b.length + 1 }, () => []);
+
+        for (let i = 0; i <= b.length; i += 1) matrix[i][0] = i;
+        for (let j = 0; j <= a.length; j += 1) matrix[0][j] = j;
+
+        for (let i = 1; i <= b.length; i += 1) {
+            for (let j = 1; j <= a.length; j += 1) {
+                const cost = b[i - 1] === a[j - 1] ? 0 : 1;
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j] + 1,
+                    matrix[i][j - 1] + 1,
+                    matrix[i - 1][j - 1] + cost
+                );
+            }
+        }
+
+        return matrix[b.length][a.length];
+    };
+
+    const fuzzyHasKeyword = (normalizedCommand: string, keywords: string[]): boolean => {
+        if (!normalizedCommand) return false;
+        const tokens = normalizedCommand.split(' ').filter(Boolean);
+
+        for (const keyword of keywords) {
+            const normalizedKeyword = normalizeVoiceCommandText(keyword);
+            if (!normalizedKeyword) continue;
+
+            if (normalizedCommand.includes(normalizedKeyword)) return true;
+
+            const keywordTokens = normalizedKeyword.split(' ').filter(Boolean);
+            if (keywordTokens.length > 1) {
+                const phraseMaxDistance = normalizedKeyword.length <= 8 ? 1 : 2;
+                const phraseWindow = keywordTokens.length;
+
+                for (let i = 0; i <= tokens.length - phraseWindow; i += 1) {
+                    const candidate = tokens.slice(i, i + phraseWindow).join(' ');
+                    if (levenshteinDistance(candidate, normalizedKeyword) <= phraseMaxDistance) {
+                        return true;
+                    }
+                }
+
+                continue;
+            }
+
+            const maxDistance = normalizedKeyword.length <= 4 ? 1 : normalizedKeyword.length <= 8 ? 2 : 3;
+            for (const token of tokens) {
+                if (Math.abs(token.length - normalizedKeyword.length) > maxDistance) continue;
+                if (levenshteinDistance(token, normalizedKeyword) <= maxDistance) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    };
+
+    const parseVoiceSummaryAudioOptions = (voiceCommand: string): SummaryAudioOptions => {
+        const normalizedCmd = normalizeVoiceCommandText(voiceCommand);
+        const parsed: SummaryAudioOptions = {
+            ...summaryAudioOptions,
+            voice: summaryAudioOptions.voice || 'pt_BR-jeff-medium',
+            mode: summaryAudioOptions.mode || 'summary',
+            bg_id: summaryAudioOptions.bg_id ?? 'lofi_calm',
+            bg_volume: summaryAudioOptions.bg_volume ?? 0.10,
+        };
+
+        if (fuzzyHasKeyword(normalizedCmd, ['jeff', 'jef', 'geff', 'jefi', 'jefe'])) parsed.voice = 'pt_BR-jeff-medium';
+        else if (fuzzyHasKeyword(normalizedCmd, ['faber', 'faberh', 'faberr'])) parsed.voice = 'pt_BR-faber-medium';
+        else if (fuzzyHasKeyword(normalizedCmd, ['cadu', 'kadu', 'cado'])) parsed.voice = 'pt_BR-cadu-medium';
+        else if (fuzzyHasKeyword(normalizedCmd, ['edresson', 'edreson', 'ederson'])) parsed.voice = 'pt_BR-edresson-low';
+
+        if (fuzzyHasKeyword(normalizedCmd, ['summary', 'sumary', 'sumarry', 'resumo', 'resumir'])) parsed.mode = 'summary';
+        else if (fuzzyHasKeyword(normalizedCmd, ['normal', 'padrao'])) parsed.mode = 'normal';
+        else if (fuzzyHasKeyword(normalizedCmd, ['fast', 'rapido', 'rapida', 'veloz'])) parsed.mode = 'fast';
+
+        if (fuzzyHasKeyword(normalizedCmd, ['sem musica', 'sem som', 'sem trilha', 'sem fundo'])) {
+            parsed.bg_id = null;
+        } else if (fuzzyHasKeyword(normalizedCmd, ['lofi calm', 'calm', 'calma', 'calmo'])) {
+            parsed.bg_id = 'lofi_calm';
+        } else if (fuzzyHasKeyword(normalizedCmd, ['lofi study', 'study', 'estudo', 'stadi'])) {
+            parsed.bg_id = 'lofi_study';
+        } else if (fuzzyHasKeyword(normalizedCmd, ['lofi jazz', 'jazz'])) {
+            parsed.bg_id = 'lofi_jazz';
+        } else if (fuzzyHasKeyword(normalizedCmd, ['lofi ambient', 'ambient', 'ambiente'])) {
+            parsed.bg_id = 'lofi_ambient';
+        } else if (fuzzyHasKeyword(normalizedCmd, ['lofi dreams', 'dreams', 'dream', 'sonho', 'sonhos'])) {
+            parsed.bg_id = 'lofi_dreams';
+        }
+
+        return parsed;
+    };
+
+    const extractSummaryTitleFromVoiceCommand = (voiceCommand: string): string | null => {
+        if (!voiceCommand) return null;
+
+        const normalizedCmd = normalizeVoiceCommandText(voiceCommand);
+        const titleRegexes = [
+            /\btitulo\s*[:=-]?\s*(.+)$/i,
+            /\bcom\s+titulo\s*[:=-]?\s*(.+)$/i,
+            /\bnome\s*[:=-]?\s*(.+)$/i,
+            /\bchama\s+de\s+(.+)$/i,
+        ];
+
+        let captured: string | null = null;
+        for (const regex of titleRegexes) {
+            const match = normalizedCmd.match(regex);
+            if (match?.[1]) {
+                captured = match[1];
+                break;
+            }
+        }
+
+        if (!captured) return null;
+
+        const splitPattern = /\b(voz|modo|mode|musica|sem\s+musica|trilha|fundo)\b/i;
+        const splitIndex = captured.search(splitPattern);
+        let titleCandidate = splitIndex >= 0 ? captured.slice(0, splitIndex) : captured;
+
+        titleCandidate = titleCandidate
+            .replace(/^['"“”]+|['"“”]+$/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        if (titleCandidate.length < 3) return null;
+
+        return titleCandidate
+            .split(' ')
+            .map(word => (word ? word[0].toUpperCase() + word.slice(1) : word))
+            .join(' ');
+    };
+
+    const openVoiceSummaryConfirmModal = (title: string, options: SummaryAudioOptions) => {
+        setVoiceSummaryConfirmModal({
+            visible: true,
+            title,
+            options,
+        });
+        setFredCommand('Revise o título e diga "confirmar envio" ou clique em confirmar.');
+    };
+
+    const closeVoiceSummaryConfirmModal = () => {
+        setVoiceSummaryConfirmModal({ visible: false, title: '', options: null });
+    };
+
+    const confirmVoiceSummaryShare = async () => {
+        const title = voiceSummaryConfirmModal.title?.trim();
+        const options = voiceSummaryConfirmModal.options || undefined;
+        closeVoiceSummaryConfirmModal();
+        await performShareSummary(title || undefined, options);
+    };
+
+    const getVoiceLabel = (voiceId?: string) => {
+        switch (voiceId) {
+            case 'pt_BR-jeff-medium': return 'Jeff';
+            case 'pt_BR-faber-medium': return 'Faber';
+            case 'pt_BR-cadu-medium': return 'Cadu';
+            case 'pt_BR-edresson-low': return 'Edresson';
+            default: return voiceId || 'Jeff';
+        }
+    };
+
+    const getModeLabel = (mode?: SummaryAudioOptions['mode']) => {
+        switch (mode) {
+            case 'summary': return 'Summary';
+            case 'normal': return 'Normal';
+            case 'fast': return 'Fast';
+            default: return 'Summary';
+        }
+    };
+
+    const getMusicLabel = (bgId?: string | null) => {
+        switch (bgId) {
+            case null:
+            case undefined:
+                return 'Sem música';
+            case 'lofi_calm':
+                return 'Lofi Calm';
+            case 'lofi_study':
+                return 'Lofi Study';
+            case 'lofi_jazz':
+                return 'Lofi Jazz';
+            case 'lofi_ambient':
+                return 'Lofi Ambient';
+            case 'lofi_dreams':
+                return 'Lofi Dreams';
+            default:
+                return bgId;
+        }
+    };
 
     const closeInputModal = () => setInputModal(prev => ({ ...prev, visible: false }));
 
@@ -1218,8 +1431,45 @@ export default function TranscriptionScreen() {
         // E já temos uma atividade na tela (currentActivity)
         if (command) {
             const lowerCmd = command.toLowerCase();
-            const isSendIntent = /(envi|mand|aplic|lanç|disponibiliz)/i.test(lowerCmd);
+            const normalizedCmd = normalizeVoiceCommandText(lowerCmd);
+            const isSendIntent = /(envi|emvi|mand|manda|aplic|lanc|disponibiliz|liber|solt)/i.test(normalizedCmd)
+                || fuzzyHasKeyword(normalizedCmd, ['enviar', 'manda', 'mandar', 'liberar', 'disponibilizar']);
             const isGenerateIntent = /(ger|cri|faz|mont)/i.test(lowerCmd);
+
+            if (voiceSummaryConfirmModal.visible) {
+                const isConfirmVoiceCmd = /(confirm|confirmar|confirma|pode enviar|enviar agora|confirmo|ok|okay|pode ir)/i.test(normalizedCmd)
+                    || fuzzyHasKeyword(normalizedCmd, ['confirmar envio', 'pode enviar', 'enviar agora']);
+                const isCancelVoiceCmd = /(cancel|cancela|cancelar|nao enviar|não enviar|fechar|voltar|desistir)/i.test(normalizedCmd)
+                    || fuzzyHasKeyword(normalizedCmd, ['cancelar envio', 'nao enviar']);
+                const voiceTitleEdit = extractSummaryTitleFromVoiceCommand(command);
+
+                if (voiceTitleEdit) {
+                    setVoiceSummaryConfirmModal(prev => ({ ...prev, title: voiceTitleEdit }));
+                    setFredCommand(`Título atualizado: ${voiceTitleEdit}`);
+                    setTimeout(() => setFredCommand(null), 2500);
+                    setIsGenerating(false);
+                    return;
+                }
+
+                if (isConfirmVoiceCmd) {
+                    setIsGenerating(false);
+                    await confirmVoiceSummaryShare();
+                    return;
+                }
+
+                if (isCancelVoiceCmd) {
+                    closeVoiceSummaryConfirmModal();
+                    setFredCommand('Envio cancelado.');
+                    setTimeout(() => setFredCommand(null), 2500);
+                    setIsGenerating(false);
+                    return;
+                }
+
+                setFredCommand('Diga "confirmar envio", "cancelar envio" ou "título ...".');
+                setTimeout(() => setFredCommand(null), 3000);
+                setIsGenerating(false);
+                return;
+            }
 
             // 0.1 Controle de Vídeo (Mute/Unmute/Restart) - Prioridade sobre Play/Pause
             // Regex melhorado para MUTE: sem som, mudo, silenciar, tira o som
@@ -1827,7 +2077,12 @@ export default function TranscriptionScreen() {
                     if (act.activity_type === 'quiz') {
                         performStartActivity(act.id, act.title || 'Quiz');
                     } else if (act.activity_type === 'summary') {
-                        performShareSummary(act.title || 'Resumo da Aula');
+                        const voiceOptions = parseVoiceSummaryAudioOptions(lowerCmd);
+                        const voiceTitle = extractSummaryTitleFromVoiceCommand(command || '');
+                        const defaultVoiceTitle = `${subjectName || 'Disciplina'} - resumo em audio`;
+                        const finalVoiceTitle = voiceTitle || defaultVoiceTitle;
+                        setSummaryAudioOptions(voiceOptions);
+                        openVoiceSummaryConfirmModal(finalVoiceTitle, voiceOptions);
                     }
                     setIsGenerating(false);
                     setFredCommand(null);
@@ -2761,7 +3016,7 @@ export default function TranscriptionScreen() {
         setSummaryAudioModalVisible(true);
     };
 
-    const performShareSummary = async (title: string, audioOptions?: SummaryAudioOptions) => {
+    const performShareSummary = async (title?: string, audioOptions?: SummaryAudioOptions) => {
         setFredCommand('Enviando resumo aos alunos...');
 
         try {
@@ -3689,7 +3944,7 @@ Pressione o botão do microfone para começar a falar."
 
             <SummaryAudioOptionsModal
                 visible={summaryAudioModalVisible}
-                initialTitle={currentActivity?.title || 'Resumo da Aula'}
+                initialTitle={`${subjectName || 'Disciplina'} - resumo em audio`}
                 initialValue={summaryAudioOptions}
                 onCancel={() => {
                     setSummaryAudioModalVisible(false);
@@ -3697,9 +3952,57 @@ Pressione o botão do microfone para começar a falar."
                 onConfirm={({ title, options }) => {
                     setSummaryAudioOptions(options);
                     setSummaryAudioModalVisible(false);
-                    performShareSummary(title || currentActivity?.title || 'Resumo da Aula', options);
+                    performShareSummary(title || undefined, options);
                 }}
             />
+
+            <Modal
+                visible={voiceSummaryConfirmModal.visible}
+                transparent
+                animationType="fade"
+                onRequestClose={closeVoiceSummaryConfirmModal}
+            >
+                <View style={styles.voiceConfirmOverlay}>
+                    <View style={styles.voiceConfirmContainer}>
+                        <View style={styles.voiceConfirmHeader}>
+                            <Text style={styles.voiceConfirmTitle}>Confirmar envio do resumo</Text>
+                            <TouchableOpacity onPress={closeVoiceSummaryConfirmModal}>
+                                <MaterialIcons name="close" size={22} color={colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <Text style={styles.voiceConfirmLabel}>Título final</Text>
+                        <TextInput
+                            value={voiceSummaryConfirmModal.title}
+                            onChangeText={(value) => setVoiceSummaryConfirmModal(prev => ({ ...prev, title: value }))}
+                            placeholder="Digite o título"
+                            placeholderTextColor={colors.slate400}
+                            style={styles.voiceConfirmInput}
+                        />
+
+                        <Text style={styles.voiceConfirmHint}>
+                            Você também pode dizer: "título ..." e depois "confirmar envio".
+                        </Text>
+
+                        <Text style={styles.voiceConfirmAudioLine}>
+                            Áudio final: voz {getVoiceLabel(voiceSummaryConfirmModal.options?.voice)} · modo {getModeLabel(voiceSummaryConfirmModal.options?.mode)} · música {getMusicLabel(voiceSummaryConfirmModal.options?.bg_id)}
+                        </Text>
+
+                        <View style={styles.voiceConfirmActions}>
+                            <TouchableOpacity style={styles.voiceConfirmCancel} onPress={closeVoiceSummaryConfirmModal}>
+                                <Text style={styles.voiceConfirmCancelText}>Cancelar</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.voiceConfirmButton, !voiceSummaryConfirmModal.title.trim() && styles.voiceConfirmButtonDisabled]}
+                                disabled={!voiceSummaryConfirmModal.title.trim()}
+                                onPress={confirmVoiceSummaryShare}
+                            >
+                                <Text style={styles.voiceConfirmButtonText}>Confirmar envio</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
 
             {/* Footer */}
             <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.xs }]}>
@@ -5120,6 +5423,93 @@ const styles = StyleSheet.create({
         color: colors.secondary,
         fontWeight: 'bold',
         fontSize: typography.fontSize.sm,
+    },
+    voiceConfirmOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.45)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: spacing.md,
+    },
+    voiceConfirmContainer: {
+        width: '100%',
+        maxWidth: 560,
+        backgroundColor: colors.white,
+        borderRadius: borderRadius.lg,
+        padding: spacing.md,
+        gap: spacing.sm,
+    },
+    voiceConfirmHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: spacing.xs,
+    },
+    voiceConfirmTitle: {
+        color: colors.textPrimary,
+        fontWeight: typography.fontWeight.bold,
+        fontSize: typography.fontSize.lg,
+    },
+    voiceConfirmLabel: {
+        color: colors.textSecondary,
+        fontSize: typography.fontSize.sm,
+        fontWeight: typography.fontWeight.semibold,
+    },
+    voiceConfirmInput: {
+        borderWidth: 1,
+        borderColor: colors.slate300,
+        borderRadius: borderRadius.default,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: spacing.sm,
+        color: colors.textPrimary,
+        fontSize: typography.fontSize.base,
+        minHeight: 44,
+    },
+    voiceConfirmHint: {
+        color: colors.textSecondary,
+        fontSize: typography.fontSize.sm,
+        marginTop: spacing.xs,
+    },
+    voiceConfirmAudioLine: {
+        color: colors.textPrimary,
+        fontSize: typography.fontSize.sm,
+        marginTop: spacing.xs,
+        backgroundColor: colors.slate50,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        borderRadius: borderRadius.default,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: spacing.xs,
+    },
+    voiceConfirmActions: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+        gap: spacing.sm,
+        marginTop: spacing.sm,
+    },
+    voiceConfirmCancel: {
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+    },
+    voiceConfirmCancelText: {
+        color: colors.textSecondary,
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.medium,
+    },
+    voiceConfirmButton: {
+        backgroundColor: colors.primary,
+        borderRadius: borderRadius.default,
+        paddingHorizontal: spacing.md,
+        paddingVertical: spacing.sm,
+    },
+    voiceConfirmButtonDisabled: {
+        opacity: 0.5,
+    },
+    voiceConfirmButtonText: {
+        color: colors.white,
+        fontWeight: typography.fontWeight.bold,
+        fontSize: typography.fontSize.base,
     },
 
     // Fred Overlay Styles

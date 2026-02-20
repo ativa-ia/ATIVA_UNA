@@ -8,6 +8,7 @@ import {
     ActivityIndicator,
     Alert,
     Platform,
+    TextInput,
     Animated,
     LayoutAnimation,
     UIManager,
@@ -51,6 +52,7 @@ interface ActivityHistoryItem {
 }
 
 type FolderType = 'quizzes' | 'resumos' | 'suporte' | 'audio' | null;
+type SearchableFolder = Exclude<FolderType, null>;
 
 // ============ FOLDER CONFIG ============
 
@@ -94,6 +96,12 @@ export default function ContentHubScreen() {
 
     // UI state
     const [openFolder, setOpenFolder] = useState<FolderType>(null);
+    const [folderSearch, setFolderSearch] = useState<Record<SearchableFolder, string>>({
+        quizzes: '',
+        resumos: '',
+        suporte: '',
+        audio: '',
+    });
     const [exportingId, setExportingId] = useState<number | null>(null);
     const [audioModalVisible, setAudioModalVisible] = useState(false);
     const [audioLoading, setAudioLoading] = useState(false);
@@ -160,6 +168,56 @@ export default function ContentHubScreen() {
         });
     };
 
+    const normalizeSearchText = (value: string) =>
+        String(value || '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .trim();
+
+    const matchesSearch = (query: string, values: Array<string | number | null | undefined>) => {
+        const normalizedQuery = normalizeSearchText(query);
+        if (!normalizedQuery) return true;
+
+        return values.some((value) => normalizeSearchText(String(value || '')).includes(normalizedQuery));
+    };
+
+    const sanitizeSummaryText = (rawText: any): string => {
+        if (rawText == null) return 'Sem conteúdo';
+
+        let text = String(rawText).trim();
+
+        text = text
+            .replace(/^\s*\[\s*TYPE\s*:\s*SUM\w*\s*\]\s*/i, '')
+            .replace(/^\s*\[\s*TYPE\s*:\s*\w+\s*\]\s*/i, '')
+            .trim();
+
+        if (text.startsWith('{') || text.startsWith('[')) {
+            try {
+                const parsed = JSON.parse(text);
+                if (typeof parsed === 'string') {
+                    text = parsed;
+                } else if (parsed && typeof parsed === 'object') {
+                    text = String(
+                        parsed.summary_text
+                        || parsed.summary
+                        || parsed.text
+                        || parsed.output
+                        || ''
+                    );
+                }
+            } catch {
+                text = text
+                    .replace(/^\{\s*"text"\s*:\s*"?/i, '')
+                    .replace(/"\s*\}\s*$/i, '')
+                    .replace(/^"|"$/g, '');
+            }
+        }
+
+        text = text.replace(/\\n/g, '\n').trim();
+        return text || 'Sem conteúdo';
+    };
+
     // ============ PDF GENERATION ============
 
     const generateQuizHTML = (item: ActivityHistoryItem) => {
@@ -216,7 +274,7 @@ export default function ContentHubScreen() {
     const generateSummaryHTML = (item: ActivityHistoryItem) => {
         const { activity } = item;
         const date = formatDate(activity.created_at);
-        const summaryText = activity.content?.summary_text || activity.ai_generated_content || 'Sem conteúdo.';
+        const summaryText = sanitizeSummaryText(activity.content?.summary_text || activity.ai_generated_content);
         const formattedText = summaryText.replace(/\n/g, '<br>');
 
         return `
@@ -397,6 +455,17 @@ export default function ContentHubScreen() {
         const percentage = item.my_percentage ?? 0;
         const isGood = percentage >= 70;
 
+        const handleRetakeQuiz = () => {
+            router.push({
+                pathname: '/(student)/live-activity',
+                params: {
+                    activity: JSON.stringify(item.activity),
+                    practiceMode: '1',
+                    source: 'content-hub',
+                }
+            });
+        };
+
         return (
             <View key={item.activity.id} style={itemStyles.card}>
                 <View style={itemStyles.cardHeader}>
@@ -404,37 +473,48 @@ export default function ContentHubScreen() {
                         <Text style={itemStyles.cardTitle} numberOfLines={2}>{item.activity.title}</Text>
                         <Text style={itemStyles.cardDate}>{formatDate(item.activity.created_at)}</Text>
                     </View>
-                    <View style={[
-                        itemStyles.scoreBadge,
-                        { backgroundColor: isGood ? '#DCFCE7' : '#FEE2E2', borderColor: isGood ? '#86EFAC' : '#FECACA' }
-                    ]}>
-                        <Text style={[itemStyles.scoreText, { color: isGood ? '#166534' : '#991B1B' }]}>
-                            {Math.round(percentage)}%
-                        </Text>
+
+                    <View style={itemStyles.quizHeaderRight}>
+                        <View style={[
+                            itemStyles.scoreBadge,
+                            { backgroundColor: isGood ? '#DCFCE7' : '#FEE2E2', borderColor: isGood ? '#86EFAC' : '#FECACA' }
+                        ]}>
+                            <Text style={[itemStyles.scoreText, { color: isGood ? '#166534' : '#991B1B' }]}>
+                                {Math.round(percentage)}%
+                            </Text>
+                        </View>
+
+                        <View style={itemStyles.quizIconActionsRow}>
+                            <TouchableOpacity
+                                style={[itemStyles.quizIconButton, isExporting && { opacity: 0.6 }]}
+                                onPress={() => !isExporting && handleExportPDF(item)}
+                                disabled={isExporting}
+                            >
+                                {isExporting ? (
+                                    <ActivityIndicator size="small" color={colors.white} />
+                                ) : (
+                                    <MaterialIcons name="picture-as-pdf" size={15} color={colors.white} />
+                                )}
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[itemStyles.quizIconButton, itemStyles.quizPracticeIconButton]}
+                                onPress={handleRetakeQuiz}
+                            >
+                                <MaterialIcons name="replay" size={15} color={colors.primary} />
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
-
-                <TouchableOpacity
-                    style={[itemStyles.pdfButton, isExporting && { opacity: 0.6 }]}
-                    onPress={() => !isExporting && handleExportPDF(item)}
-                    disabled={isExporting}
-                >
-                    {isExporting ? (
-                        <ActivityIndicator size="small" color={colors.white} />
-                    ) : (
-                        <MaterialIcons name="picture-as-pdf" size={16} color={colors.white} />
-                    )}
-                    <Text style={itemStyles.pdfButtonText}>Exportar PDF</Text>
-                </TouchableOpacity>
             </View>
         );
     };
 
     const renderSummaryItem = (item: ActivityHistoryItem) => {
         const isExporting = exportingId === item.activity.id;
-        const previewText = item.activity.content?.summary_text
-            || item.activity.ai_generated_content
-            || 'Sem conteúdo';
+        const previewText = sanitizeSummaryText(
+            item.activity.content?.summary_text || item.activity.ai_generated_content
+        );
 
         return (
             <View key={item.activity.id} style={itemStyles.card}>
@@ -443,24 +523,22 @@ export default function ContentHubScreen() {
                         <Text style={itemStyles.cardTitle} numberOfLines={2}>{item.activity.title}</Text>
                         <Text style={itemStyles.cardDate}>{formatDate(item.activity.created_at)}</Text>
                     </View>
+                    <TouchableOpacity
+                        style={[itemStyles.summaryIconButton, isExporting && { opacity: 0.6 }]}
+                        onPress={() => !isExporting && handleExportPDF(item)}
+                        disabled={isExporting}
+                    >
+                        {isExporting ? (
+                            <ActivityIndicator size="small" color={colors.white} />
+                        ) : (
+                            <MaterialIcons name="picture-as-pdf" size={16} color={colors.white} />
+                        )}
+                    </TouchableOpacity>
                 </View>
 
                 <Text style={itemStyles.previewText} numberOfLines={3}>
                     {previewText}
                 </Text>
-
-                <TouchableOpacity
-                    style={[itemStyles.pdfButton, { backgroundColor: '#F59E0B' }, isExporting && { opacity: 0.6 }]}
-                    onPress={() => !isExporting && handleExportPDF(item)}
-                    disabled={isExporting}
-                >
-                    {isExporting ? (
-                        <ActivityIndicator size="small" color={colors.white} />
-                    ) : (
-                        <MaterialIcons name="picture-as-pdf" size={16} color={colors.white} />
-                    )}
-                    <Text style={itemStyles.pdfButtonText}>Exportar PDF</Text>
-                </TouchableOpacity>
             </View>
         );
     };
@@ -495,7 +573,9 @@ export default function ContentHubScreen() {
                             <Text style={itemStyles.cardDate}>{material.size}</Text>
                         )}
                     </View>
-                    <MaterialIcons name="open-in-new" size={18} color={colors.textSecondary} />
+                    <View style={itemStyles.materialActionButton}>
+                        <MaterialIcons name="open-in-new" size={15} color={colors.white} />
+                    </View>
                 </View>
             </TouchableOpacity>
         );
@@ -505,26 +585,60 @@ export default function ContentHubScreen() {
         if (!openFolder) return null;
 
         const config = FOLDER_CONFIG[openFolder];
+        const searchValue = folderSearch[openFolder as SearchableFolder] || '';
 
         let content: React.ReactNode = null;
         let isEmpty = false;
 
         switch (openFolder) {
             case 'quizzes':
-                isEmpty = quizzes.length === 0;
-                content = quizzes.map(renderQuizItem);
+                const filteredQuizzes = quizzes.filter((item) =>
+                    matchesSearch(searchValue, [
+                        item.activity.title,
+                        item.activity.created_at,
+                        formatDate(item.activity.created_at),
+                        item.status,
+                    ])
+                );
+                isEmpty = filteredQuizzes.length === 0;
+                content = filteredQuizzes.map(renderQuizItem);
                 break;
             case 'resumos':
-                isEmpty = summaries.length === 0;
-                content = summaries.map(renderSummaryItem);
+                const filteredSummaries = summaries.filter((item) =>
+                    matchesSearch(searchValue, [
+                        item.activity.title,
+                        item.activity.created_at,
+                        formatDate(item.activity.created_at),
+                        item.activity.content?.summary_text,
+                        item.activity.ai_generated_content,
+                    ])
+                );
+                isEmpty = filteredSummaries.length === 0;
+                content = filteredSummaries.map(renderSummaryItem);
                 break;
             case 'suporte':
-                isEmpty = materials.length === 0;
-                content = materials.map(renderMaterialItem);
+                const filteredMaterials = materials.filter((item) =>
+                    matchesSearch(searchValue, [
+                        item.title,
+                        item.uploadDate,
+                        formatDate(item.uploadDate),
+                        item.type,
+                    ])
+                );
+                isEmpty = filteredMaterials.length === 0;
+                content = filteredMaterials.map(renderMaterialItem);
                 break;
             case 'audio':
-                isEmpty = audioMaterials.length === 0;
-                content = audioMaterials.map(renderMaterialItem);
+                const filteredAudio = audioMaterials.filter((item) =>
+                    matchesSearch(searchValue, [
+                        item.title,
+                        item.uploadDate,
+                        formatDate(item.uploadDate),
+                        item.type,
+                    ])
+                );
+                isEmpty = filteredAudio.length === 0;
+                content = filteredAudio.map(renderMaterialItem);
                 break;
         }
 
@@ -537,10 +651,40 @@ export default function ContentHubScreen() {
                     </Text>
                 </View>
 
+                <View style={sectionStyles.searchWrap}>
+                    <MaterialIcons name="search" size={18} color={colors.slate400} />
+                    <TextInput
+                        value={searchValue}
+                        onChangeText={(text) =>
+                            setFolderSearch(prev => ({
+                                ...prev,
+                                [openFolder]: text,
+                            }))
+                        }
+                        placeholder={`Buscar em ${config.title} por nome ou data...`}
+                        placeholderTextColor={colors.slate400}
+                        style={sectionStyles.searchInput}
+                    />
+                    {!!searchValue && (
+                        <TouchableOpacity
+                            onPress={() =>
+                                setFolderSearch(prev => ({
+                                    ...prev,
+                                    [openFolder]: '',
+                                }))
+                            }
+                        >
+                            <MaterialIcons name="close" size={18} color={colors.slate400} />
+                        </TouchableOpacity>
+                    )}
+                </View>
+
                 {isEmpty ? (
                     <View style={sectionStyles.emptyState}>
                         <MaterialIcons name="inbox" size={40} color={colors.slate300} />
-                        <Text style={sectionStyles.emptyText}>Nenhum conteúdo encontrado</Text>
+                        <Text style={sectionStyles.emptyText}>
+                            {searchValue ? 'Nenhum resultado para a busca' : 'Nenhum conteúdo encontrado'}
+                        </Text>
                     </View>
                 ) : (
                     <View style={sectionStyles.itemsList}>
@@ -839,14 +983,18 @@ const itemStyles = StyleSheet.create({
         marginTop: 2,
     },
     scoreBadge: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
+        height: 30,
+        minWidth: 46,
+        paddingHorizontal: 10,
+        paddingVertical: 0,
         borderRadius: borderRadius.full,
         borderWidth: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     scoreText: {
         fontWeight: 'bold' as const,
-        fontSize: typography.fontSize.sm,
+        fontSize: typography.fontSize.xs,
     },
     previewText: {
         fontSize: typography.fontSize.sm,
@@ -859,15 +1007,46 @@ const itemStyles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: colors.danger,
-        paddingVertical: 8,
+        paddingVertical: 10,
         borderRadius: borderRadius.default,
         gap: 6,
-        marginTop: spacing.sm,
+        marginTop: 0,
     },
     pdfButtonText: {
         fontSize: typography.fontSize.sm,
         fontWeight: '600' as const,
         color: colors.white,
+    },
+    quizHeaderRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+    },
+    quizIconActionsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+    },
+    quizIconButton: {
+        width: 30,
+        height: 30,
+        borderRadius: 9,
+        backgroundColor: colors.danger,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    quizPracticeIconButton: {
+        backgroundColor: colors.white,
+        borderWidth: 1,
+        borderColor: colors.primary,
+    },
+    summaryIconButton: {
+        width: 34,
+        height: 34,
+        borderRadius: 10,
+        backgroundColor: '#F59E0B',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     materialIcon: {
         width: 44,
@@ -875,6 +1054,14 @@ const itemStyles = StyleSheet.create({
         borderRadius: 12,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    materialActionButton: {
+        width: 34,
+        height: 34,
+        borderRadius: 10,
+        backgroundColor: '#10b981',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
 });
 
@@ -900,6 +1087,24 @@ const sectionStyles = StyleSheet.create({
         paddingBottom: spacing.sm,
         borderBottomWidth: 1,
         borderBottomColor: colors.slate100,
+    },
+    searchWrap: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        borderRadius: borderRadius.default,
+        paddingHorizontal: spacing.sm,
+        paddingVertical: spacing.xs,
+        backgroundColor: colors.white,
+        marginBottom: spacing.md,
+        gap: spacing.xs,
+    },
+    searchInput: {
+        flex: 1,
+        fontSize: typography.fontSize.sm,
+        color: colors.textPrimary,
+        paddingVertical: 4,
     },
     sectionTitle: {
         fontSize: typography.fontSize.base,
