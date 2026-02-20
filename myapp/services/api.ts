@@ -1312,6 +1312,18 @@ export const sharePresentationDocumentToStudents = async (presentationCode: stri
 
 // ========== SOCRATIC ASSISTANT API ==========
 
+export interface SocraticSessionData {
+    id: number;
+    user_id: number;
+    subject_id: number;
+    title: string;
+    status: string;
+    message_count: number;
+    messages_data?: Array<{ role: string; content: string; timestamp: string }>;
+    created_at: string;
+    updated_at: string;
+}
+
 // Refinar texto transcrito (pós-processamento do STT)
 export const refineTranscription = async (text: string): Promise<{
     success: boolean;
@@ -1335,19 +1347,82 @@ export const refineTranscription = async (text: string): Promise<{
     }
 };
 
-// Chat socrático - enviar mensagem e receber pergunta desafiadora
-export const socraticChat = async (
-    subjectName: string,
-    messages: Array<{ role: string; content: string }>,
-    studentText: string
-): Promise<{
+// Criar nova sessão socrática
+export const createSocraticSession = async (subjectId: number, title?: string): Promise<{
     success: boolean;
-    response?: string;
+    session?: SocraticSessionData;
     error?: string;
 }> => {
     try {
         const token = await AsyncStorage.getItem('authToken');
-        const response = await fetch(`${API_URL}/socratic/chat`, {
+        const response = await fetch(`${API_URL}/socratic/sessions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ subject_id: subjectId, title }),
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Erro ao criar sessão socrática:', error);
+        return { success: false, error: 'Erro ao criar sessão' };
+    }
+};
+
+// Listar sessões socráticas do aluno
+export const getSocraticSessions = async (subjectId?: number): Promise<{
+    success: boolean;
+    sessions?: SocraticSessionData[];
+    error?: string;
+}> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        const url = subjectId
+            ? `${API_URL}/socratic/sessions?subject_id=${subjectId}`
+            : `${API_URL}/socratic/sessions`;
+        const response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Erro ao listar sessões:', error);
+        return { success: false, error: 'Erro ao listar sessões' };
+    }
+};
+
+// Obter sessão específica com mensagens
+export const getSocraticSession = async (sessionId: number): Promise<{
+    success: boolean;
+    session?: SocraticSessionData;
+    error?: string;
+}> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/socratic/sessions/${sessionId}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Erro ao buscar sessão:', error);
+        return { success: false, error: 'Erro ao buscar sessão' };
+    }
+};
+
+// Chat socrático dentro de uma sessão
+export const socraticChat = async (
+    sessionId: number,
+    subjectName: string,
+    studentText: string
+): Promise<{
+    success: boolean;
+    response?: string;
+    session_id?: number;
+    error?: string;
+}> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/socratic/sessions/${sessionId}/chat`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1355,7 +1430,6 @@ export const socraticChat = async (
             },
             body: JSON.stringify({
                 subject_name: subjectName,
-                messages,
                 student_text: studentText,
             }),
         });

@@ -58,6 +58,92 @@ def _sanitize_summary_text(raw_text):
     return str(text).strip()
 
 
+def _sanitize_activity_summary_payload(activity_data: dict) -> dict:
+    if not isinstance(activity_data, dict):
+        return activity_data
+
+    if activity_data.get('activity_type') != 'summary':
+        return activity_data
+
+    content = activity_data.get('content')
+    if not isinstance(content, dict):
+        content = {}
+
+    sanitized_summary = _sanitize_summary_text(
+        content.get('summary_text') or activity_data.get('ai_generated_content')
+    )
+
+    content['summary_text'] = sanitized_summary
+    activity_data['content'] = content
+    activity_data['ai_generated_content'] = sanitized_summary
+
+    return activity_data
+
+
+def _normalize_text(value: str) -> str:
+    if not value:
+        return ''
+    return re.sub(r'\s+', ' ', str(value).strip().lower())
+
+
+def _build_next_summary_audio_title(subject_name: str, subject_id: int) -> str:
+    safe_subject_name = (subject_name or 'Disciplina').strip()
+
+    existing_titles = (
+        db.session.query(StudyMaterial.title)
+        .filter(
+            StudyMaterial.subject_id == subject_id,
+            StudyMaterial.type == 'audio',
+            StudyMaterial.title.isnot(None)
+        )
+        .all()
+    )
+
+    pattern = re.compile(
+        rf'^{re.escape(safe_subject_name)}\s*-\s*resumo\s+em\s+a[uú]dio\s+(\d+)$',
+        flags=re.IGNORECASE
+    )
+
+    max_index = 0
+    for (title_value,) in existing_titles:
+        if not title_value:
+            continue
+        match = pattern.match(str(title_value).strip())
+        if not match:
+            continue
+        try:
+            max_index = max(max_index, int(match.group(1)))
+        except Exception:
+            pass
+
+    return f'{safe_subject_name} - resumo em audio {max_index + 1}'
+
+
+def _should_autogenerate_summary_title(provided_title: str, subject_name: str) -> bool:
+    normalized_title = _normalize_text(provided_title)
+    if not normalized_title:
+        return True
+
+    generic_titles = {
+        'resumo da aula',
+        'resumo / resposta',
+        'resumo',
+        'summary'
+    }
+    if normalized_title in generic_titles:
+        return True
+
+    normalized_subject = _normalize_text(subject_name or 'disciplina')
+    auto_pattern = re.compile(
+        rf'^{re.escape(normalized_subject)}\s*-\s*resumo\s+em\s+a(u|ú)dio(?:\s+\d+)?$',
+        flags=re.IGNORECASE
+    )
+    if auto_pattern.match(normalized_title):
+        return True
+
+    return False
+
+
 def _build_tts_url() -> str:
     tts_url = (os.getenv('TTS_API_URL') or '').strip()
     if not tts_url:
@@ -70,8 +156,8 @@ def _generate_summary_audio(summary_text: str, audio_options: dict) -> bytes:
     token = (os.getenv('TTS_API_TOKEN') or '').strip()
 
     payload = {
-        'text': summary_text,
-        'voice': audio_options.get('voice') or 'pt_BR-faber-medium',
+           'text': summary_text,
+           'voice': audio_options.get('voice') or 'pt_BR-jeff-medium',
         'mode': audio_options.get('mode') or 'summary',
         'bg_id': audio_options.get('bg_id'),
         'bg_volume': audio_options.get('bg_volume', 0.10)
@@ -858,10 +944,16 @@ def share_summary(current_user, activity_id):
     if activity.activity_type != 'summary':
         return jsonify({'success': False, 'error': 'Esta ação é apenas para resumos'}), 400
     
+    subject_name = activity.session.subject.name if activity.session.subject else 'Disciplina'
+
     # Atualizar título se fornecido
     data = request.get_json() or {}
-    if 'title' in data and data['title']:
-        activity.title = data['title']
+    requested_title = (data.get('title') or '').strip()
+
+    if _should_autogenerate_summary_title(requested_title, subject_name):
+        activity.title = _build_next_summary_audio_title(subject_name, activity.session.subject_id)
+    else:
+        activity.title = requested_title
 
     audio_config = data.get('audio') or {}
     should_generate_audio = bool(audio_config.get('enabled'))
@@ -883,7 +975,12 @@ def share_summary(current_user, activity_id):
             return jsonify({'success': False, 'error': 'Resumo sem conteúdo para gerar áudio'}), 400
 
         try:
-            audio_bytes = _generate_summary_audio(summary_text, audio_config)
+            audio_bytes = _generate_summary_audio(summary_text, {
+                'voice': audio_config.get('voice') or 'pt_BR-jeff-medium',
+                'mode': audio_config.get('mode'),
+                'bg_id': audio_config.get('bg_id'),
+                'bg_volume': audio_config.get('bg_volume', 0.10)
+            })
             file_key, audio_url = _upload_audio_to_b2(audio_bytes, activity.session.subject_id, activity.id)
 
             # Persistir metadata no content JSON da activity
@@ -892,7 +989,7 @@ def share_summary(current_user, activity_id):
 
             activity.content['summary_audio'] = {
                 'status': 'ready',
-                'voice': audio_config.get('voice') or 'pt_BR-faber-medium',
+                'voice': audio_config.get('voice') or 'pt_BR-jeff-medium',
                 'mode': audio_config.get('mode') or 'summary',
                 'bg_id': audio_config.get('bg_id'),
                 'bg_volume': audio_config.get('bg_volume', 0.10),
@@ -927,7 +1024,7 @@ def share_summary(current_user, activity_id):
                     activity.content = {}
                 activity.content['summary_audio'] = {
                     'status': 'failed',
-                    'voice': audio_config.get('voice') or 'pt_BR-faber-medium',
+                    'voice': audio_config.get('voice') or 'pt_BR-jeff-medium',
                     'mode': audio_config.get('mode') or 'summary',
                     'bg_id': audio_config.get('bg_id'),
                     'bg_volume': audio_config.get('bg_volume', 0.10),
@@ -941,7 +1038,6 @@ def share_summary(current_user, activity_id):
 
     # Auto-criar notificação para os alunos
     try:
-        subject_name = activity.session.subject.name if activity.session.subject else 'Disciplina'
         notif = Notification(
             title=f'📝 Novo Resumo: {activity.title}',
             message=f'O professor compartilhou um resumo em {subject_name}.',
@@ -1290,6 +1386,7 @@ def get_active_activity(current_user, subject_id):
             # Se não respondeu ou só tem progresso parcial, mostra activity
             # Se tiver partial, podemos passar previous answers se quisermos (TODO)
              activity_data = activity.to_dict(include_responses=False)
+             activity_data = _sanitize_activity_summary_payload(activity_data)
              activity_data['subject_name'] = activity.session.subject.name if activity.session.subject else "Disciplina"
              
              return jsonify({
@@ -1392,7 +1489,7 @@ def get_student_history(current_user, subject_id):
                     status = 'missed'
                     
                 history.append({
-                    'activity': activity.to_dict(include_responses=False),
+                    'activity': _sanitize_activity_summary_payload(activity.to_dict(include_responses=False)),
                     'status': status,
                     'my_score': response.score if response else None,
                     'my_percentage': response.percentage if response else None
