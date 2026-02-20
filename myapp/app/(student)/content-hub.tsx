@@ -573,7 +573,9 @@ export default function ContentHubScreen() {
                             <Text style={itemStyles.cardDate}>{material.size}</Text>
                         )}
                     </View>
-                    <MaterialIcons name="open-in-new" size={18} color={colors.textSecondary} />
+                    <View style={itemStyles.materialActionButton}>
+                        <MaterialIcons name="open-in-new" size={15} color={colors.white} />
+                    </View>
                 </View>
             </TouchableOpacity>
         );
@@ -1052,6 +1054,14 @@ const itemStyles = StyleSheet.create({
         borderRadius: 12,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    materialActionButton: {
+        width: 34,
+        height: 34,
+        borderRadius: 10,
+        backgroundColor: '#10b981',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
 });
 
