@@ -830,7 +830,19 @@ export const broadcastActivity = async (activityId: number, title?: string): Pro
 };
 
 // Compartilhar resumo com alunos
-export const shareSummary = async (activityId: number, title?: string): Promise<{ success: boolean; activity: LiveActivity }> => {
+export interface ShareSummaryAudioOptions {
+    enabled?: boolean;
+    voice?: string;
+    mode?: 'summary' | 'normal' | 'fast';
+    bg_id?: string | null;
+    bg_volume?: number;
+}
+
+export const shareSummary = async (
+    activityId: number,
+    title?: string,
+    audio?: ShareSummaryAudioOptions
+): Promise<{ success: boolean; activity: LiveActivity; audio?: { enabled?: boolean; distributed_count?: number; error?: string | null } }> => {
     const token = await AsyncStorage.getItem('authToken');
 
     const response = await fetch(`${API_URL}/transcription/activities/${activityId}/share`, {
@@ -839,7 +851,7 @@ export const shareSummary = async (activityId: number, title?: string): Promise<
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ title })
+        body: JSON.stringify({ title, audio })
     });
 
     return response.json();
@@ -1143,8 +1155,21 @@ export const getStudentMaterials = async (): Promise<Material[]> => {
         type: item.type || 'document',
         uploadDate: item.upload_date || item.created_at || new Date().toISOString(),
         size: item.file_size || item.size || undefined,
-        url: item.content_url || item.url
+        url: item.content_url || item.url,
+        subjectId: item.subject_id || undefined,
     }));
+};
+
+export const getAudioMaterialSignedUrl = async (materialId: string | number): Promise<{ success: boolean; audio_url?: string; expires_in?: number; error?: string }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/materials/${materialId}/audio-url`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    return response.json();
 };
 
 // ========== SETTINGS API ==========
