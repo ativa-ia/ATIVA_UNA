@@ -1,56 +1,33 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
-import { API_URL } from '@/services/api';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getMyNotifications, AppNotification } from '@/services/api';
 
-interface Notification {
-    id: number;
-    title: string;
-    message: string;
-    type: 'quiz' | 'material' | 'general';
-    created_at: string;
-    subject_id: number;
-}
+const TYPE_CONFIG: Record<string, { icon: keyof typeof MaterialIcons.glyphMap; color: string; bg: string; label: string }> = {
+    quiz: { icon: 'quiz', color: '#6366F1', bg: '#EEF2FF', label: 'Quiz' },
+    summary: { icon: 'description', color: '#059669', bg: '#ECFDF5', label: 'Resumo' },
+    open_question: { icon: 'help-outline', color: '#D97706', bg: '#FFFBEB', label: 'Pergunta' },
+    material: { icon: 'book', color: '#2563EB', bg: '#EFF6FF', label: 'Material' },
+    general: { icon: 'notifications', color: '#6B7280', bg: '#F3F4F6', label: 'Geral' },
+};
 
 export default function StudentNotificationsScreen() {
     const insets = useSafeAreaInsets();
-    const [notifications, setNotifications] = useState<Notification[]>([]);
+    const [notifications, setNotifications] = useState<AppNotification[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
-    const [userId, setUserId] = useState<number | null>(null);
-
-    const fetchNotifications = async () => {
+    const fetchNotifications = async (isRefresh = false) => {
         try {
-            const token = await AsyncStorage.getItem('authToken');
-
-            // Primeiro, buscar o ID do usuário logado
-            const meResponse = await fetch(`${API_URL}/auth/me`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const meData = await meResponse.json();
-
-            if (!meData.success || !meData.user) {
-                console.error('Usuário não encontrado');
-                setLoading(false);
-                return;
-            }
-
-            const studentId = meData.user.id;
-            setUserId(studentId);
-
-            // Buscar notificações do aluno
-            const response = await fetch(`${API_URL}/notifications/student/${studentId}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const data = await response.json();
+            if (isRefresh) setRefreshing(true);
+            const data = await getMyNotifications();
             if (data.success) {
                 setNotifications(data.notifications);
             }
@@ -62,45 +39,59 @@ export default function StudentNotificationsScreen() {
         }
     };
 
-    useEffect(() => {
-        fetchNotifications();
-    }, []);
+    // Refresh on focus
+    useFocusEffect(
+        useCallback(() => {
+            fetchNotifications();
+        }, [])
+    );
 
-    const onRefresh = () => {
-        setRefreshing(true);
-        fetchNotifications();
+    const formatDate = (dateStr: string) => {
+        const date = new Date(dateStr);
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffMin = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMin < 1) return 'Agora';
+        if (diffMin < 60) return `${diffMin}min atrás`;
+        if (diffHours < 24) return `${diffHours}h atrás`;
+        if (diffDays < 7) return `${diffDays}d atrás`;
+        return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
     };
 
-    const getIconForType = (type: string) => {
-        switch (type) {
-            case 'quiz': return 'quiz';
-            case 'material': return 'book';
-            default: return 'notifications';
-        }
-    };
+    const renderItem = ({ item }: { item: AppNotification }) => {
+        const config = TYPE_CONFIG[item.type] || TYPE_CONFIG.general;
 
-    const renderItem = ({ item }: { item: Notification }) => (
-        <View style={styles.card}>
-            <View style={styles.cardHeader}>
-                <View style={[styles.iconContainer, { backgroundColor: item.type === 'quiz' ? colors.primaryOpacity20 : colors.zinc100 }]}>
-                    <MaterialIcons
-                        name={getIconForType(item.type)}
-                        size={24}
-                        color={item.type === 'quiz' ? colors.primary : colors.zinc600}
-                    />
-                </View>
-                <View style={styles.headerText}>
-                    <Text style={styles.cardTitle}>{item.title}</Text>
-                    <Text style={styles.cardDate}>
-                        {new Date(item.created_at).toLocaleDateString('pt-BR', {
-                            day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
-                        })}
-                    </Text>
+        return (
+            <View style={styles.card}>
+                <View style={styles.row}>
+                    <View style={[styles.iconCircle, { backgroundColor: config.bg }]}>
+                        <MaterialIcons name={config.icon} size={20} color={config.color} />
+                    </View>
+
+                    <View style={styles.textArea}>
+                        <View style={styles.titleRow}>
+                            <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
+                            <Text style={styles.time}>{formatDate(item.created_at)}</Text>
+                        </View>
+
+                        <Text style={styles.message} numberOfLines={2}>{item.message}</Text>
+
+                        {item.subject_name && (
+                            <View style={styles.badgeRow}>
+                                <View style={[styles.badge, { backgroundColor: config.bg }]}>
+                                    <Text style={[styles.badgeText, { color: config.color }]}>{config.label}</Text>
+                                </View>
+                                <Text style={styles.subject}>· {item.subject_name}</Text>
+                            </View>
+                        )}
+                    </View>
                 </View>
             </View>
-            <Text style={styles.cardMessage}>{item.message}</Text>
-        </View>
-    );
+        );
+    };
 
     return (
         <View style={styles.container}>
@@ -125,12 +116,15 @@ export default function StudentNotificationsScreen() {
                         keyExtractor={item => item.id.toString()}
                         contentContainerStyle={styles.listContent}
                         refreshControl={
-                            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                            <RefreshControl refreshing={refreshing} onRefresh={() => fetchNotifications(true)} />
                         }
                         ListEmptyComponent={
                             <View style={styles.emptyContainer}>
                                 <MaterialIcons name="notifications-none" size={64} color={colors.zinc300} />
-                                <Text style={styles.emptyText}>Nenhuma notificação ainda</Text>
+                                <Text style={styles.emptyTitle}>Nenhuma notificação</Text>
+                                <Text style={styles.emptySubtext}>
+                                    Quando o professor enviar atividades, elas aparecerão aqui.
+                                </Text>
                             </View>
                         }
                     />
@@ -174,62 +168,101 @@ const styles = StyleSheet.create({
     },
     listContent: {
         padding: spacing.base,
-        gap: spacing.md,
+        gap: spacing.sm,
     },
+    // Card
     card: {
         backgroundColor: colors.white,
         borderRadius: borderRadius.lg,
         padding: spacing.base,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
         shadowRadius: 4,
-        elevation: 2,
+        elevation: 1,
         borderWidth: 1,
         borderColor: colors.zinc100,
     },
-    cardHeader: {
+    row: {
         flexDirection: 'row',
-        gap: spacing.sm,
-        marginBottom: spacing.sm,
+        gap: spacing.md,
     },
-    iconContainer: {
+    iconCircle: {
         width: 40,
         height: 40,
-        borderRadius: 20,
+        borderRadius: 12,
         justifyContent: 'center',
         alignItems: 'center',
     },
-    headerText: {
+    textArea: {
         flex: 1,
-        justifyContent: 'center',
     },
-    cardTitle: {
-        fontSize: typography.fontSize.base,
+    titleRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 2,
+    },
+    title: {
+        fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.semibold,
         color: colors.slate800,
         fontFamily: typography.fontFamily.display,
+        flex: 1,
+        marginRight: spacing.sm,
     },
-    cardDate: {
+    time: {
+        fontSize: typography.fontSize.xs,
+        color: colors.zinc400,
+        fontFamily: typography.fontFamily.body,
+    },
+    message: {
+        fontSize: typography.fontSize.sm,
+        color: colors.zinc600,
+        fontFamily: typography.fontFamily.body,
+        lineHeight: 19,
+        marginBottom: spacing.xs,
+    },
+    badgeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.xs,
+    },
+    badge: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 6,
+    },
+    badgeText: {
+        fontSize: 11,
+        fontWeight: '600',
+        fontFamily: typography.fontFamily.body,
+    },
+    subject: {
         fontSize: typography.fontSize.xs,
         color: colors.zinc500,
         fontFamily: typography.fontFamily.body,
     },
-    cardMessage: {
-        fontSize: typography.fontSize.sm,
-        color: colors.zinc600,
-        fontFamily: typography.fontFamily.body,
-        lineHeight: 20,
-    },
+    // Empty state
     emptyContainer: {
         alignItems: 'center',
         justifyContent: 'center',
-        paddingTop: 60,
+        paddingTop: 80,
+        paddingHorizontal: 40,
     },
-    emptyText: {
+    emptyTitle: {
         marginTop: spacing.md,
         fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.semibold,
         color: colors.zinc500,
+        fontFamily: typography.fontFamily.display,
+    },
+    emptySubtext: {
+        marginTop: spacing.xs,
+        fontSize: typography.fontSize.sm,
+        color: colors.zinc400,
         fontFamily: typography.fontFamily.body,
+        textAlign: 'center',
+        lineHeight: 20,
     },
 });

@@ -1,7 +1,7 @@
 """
 Rotas da API de Transcrição ao Vivo com Atividades
 """
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, Response
 from app.middleware.auth_middleware import token_required
 from app.models.transcription_session import (
     TranscriptionSession,
@@ -11,6 +11,7 @@ from app.models.transcription_session import (
 )
 from app.models.presentation import PresentationSession
 from app.models.enrollment import Enrollment
+from app.models.teaching import Teaching
 from app.models.subject import Subject
 from app.models.user import User
 from app import db
@@ -18,8 +19,209 @@ from app.models.notification import Notification
 from app.models.study_material import StudyMaterial
 from datetime import datetime
 import json
+import os
+import uuid
+import re
+import requests
+import boto3
+from botocore.config import Config
+from botocore.exceptions import ClientError
+from sqlalchemy.orm.attributes import flag_modified
 
 transcription_bp = Blueprint('transcription', __name__)
+
+
+def _sanitize_summary_text(raw_text):
+    if raw_text is None:
+        return ''
+
+    text = str(raw_text).strip()
+
+    # Remove [TYPE:SUMMARY], [TYPE:SUMARY], [TYPE:SUMARRY], etc.
+    text = re.sub(r'^\s*\[\s*TYPE\s*:\s*SUM\w*\s*\]\s*', '', text, flags=re.IGNORECASE)
+
+    # Se vier JSON como string, tenta extrair campos conhecidos
+    if text.startswith('{'):
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                text = (
+                    parsed.get('summary_text')
+                    or parsed.get('summary')
+                    or parsed.get('text')
+                    or parsed.get('output')
+                    or text
+                )
+        except Exception:
+            pass
+
+    return str(text).strip()
+
+
+def _build_tts_url() -> str:
+    tts_url = (os.getenv('TTS_API_URL') or '').strip()
+    if not tts_url:
+        raise RuntimeError('TTS_API_URL não configurada')
+    return tts_url
+
+
+def _generate_summary_audio(summary_text: str, audio_options: dict) -> bytes:
+    tts_url = _build_tts_url()
+    token = (os.getenv('TTS_API_TOKEN') or '').strip()
+
+    payload = {
+        'text': summary_text,
+        'voice': audio_options.get('voice') or 'pt_BR-faber-medium',
+        'mode': audio_options.get('mode') or 'summary',
+        'bg_id': audio_options.get('bg_id'),
+        'bg_volume': audio_options.get('bg_volume', 0.10)
+    }
+
+    headers = {}
+    if token:
+        headers['Authorization'] = f'Bearer {token}'
+
+    response = requests.post(tts_url, json=payload, headers=headers, timeout=180)
+    if response.status_code >= 400:
+        raise RuntimeError(f'TTS falhou: HTTP {response.status_code} - {response.text[:400]}')
+
+    if not response.content:
+        raise RuntimeError('TTS retornou áudio vazio')
+
+    return response.content
+
+
+def _upload_audio_to_b2(audio_bytes: bytes, subject_id: int, activity_id: int) -> tuple[str, str]:
+    key_id = (os.getenv('B2_KEY_ID') or '').strip()
+    app_key = (os.getenv('B2_APPLICATION_KEY') or '').strip()
+    bucket = (os.getenv('B2_BUCKET_NAME') or '').strip()
+    endpoint = (os.getenv('B2_ENDPOINT') or '').strip()
+    prefix = (os.getenv('B2_SUMMARY_AUDIO_PREFIX') or 'summaries').strip().strip('/')
+
+    missing = []
+    if not key_id:
+        missing.append('B2_KEY_ID')
+    if not app_key:
+        missing.append('B2_APPLICATION_KEY')
+    if not bucket:
+        missing.append('B2_BUCKET_NAME')
+    if not endpoint:
+        missing.append('B2_ENDPOINT')
+
+    if missing:
+        raise RuntimeError(f'Configuração B2 incompleta. Faltando: {", ".join(missing)}')
+
+    # Ex: https://s3.us-east-005.backblazeb2.com -> us-east-005
+    region_name = 'us-east-005'
+    try:
+        endpoint_host = endpoint.replace('https://', '').replace('http://', '')
+        host_parts = endpoint_host.split('.')
+        if len(host_parts) >= 2 and host_parts[0] == 's3':
+            region_name = host_parts[1]
+    except Exception:
+        pass
+
+    object_key = f"{prefix}/{subject_id}/{activity_id}/{uuid.uuid4().hex}.mp3"
+
+    s3 = boto3.client(
+        's3',
+        endpoint_url=endpoint,
+        aws_access_key_id=key_id,
+        aws_secret_access_key=app_key,
+        region_name=region_name,
+        config=Config(
+            signature_version='s3v4',
+            s3={'addressing_style': 'path'}
+        )
+    )
+
+    try:
+        s3.put_object(
+            Bucket=bucket,
+            Key=object_key,
+            Body=audio_bytes,
+            ContentType='audio/mpeg'
+        )
+    except ClientError as error:
+        error_code = error.response.get('Error', {}).get('Code', 'Unknown')
+        error_msg = error.response.get('Error', {}).get('Message', str(error))
+        raise RuntimeError(f'Erro B2 ({error_code}): {error_msg}')
+
+    public_base = (os.getenv('B2_PUBLIC_BASE_URL') or '').strip().rstrip('/')
+    if public_base:
+        audio_url = f"{public_base}/{object_key}"
+    else:
+        audio_url = f"{endpoint.rstrip('/')}/{bucket}/{object_key}"
+
+    return object_key, audio_url
+
+
+def _build_b2_client_and_bucket():
+    key_id = (os.getenv('B2_KEY_ID') or '').strip()
+    app_key = (os.getenv('B2_APPLICATION_KEY') or '').strip()
+    bucket = (os.getenv('B2_BUCKET_NAME') or '').strip()
+    endpoint = (os.getenv('B2_ENDPOINT') or '').strip()
+
+    missing = []
+    if not key_id:
+        missing.append('B2_KEY_ID')
+    if not app_key:
+        missing.append('B2_APPLICATION_KEY')
+    if not bucket:
+        missing.append('B2_BUCKET_NAME')
+    if not endpoint:
+        missing.append('B2_ENDPOINT')
+    if missing:
+        raise RuntimeError(f'Configuração B2 incompleta. Faltando: {", ".join(missing)}')
+
+    region_name = 'us-east-005'
+    try:
+        endpoint_host = endpoint.replace('https://', '').replace('http://', '')
+        host_parts = endpoint_host.split('.')
+        if len(host_parts) >= 2 and host_parts[0] == 's3':
+            region_name = host_parts[1]
+    except Exception:
+        pass
+
+    client = boto3.client(
+        's3',
+        endpoint_url=endpoint,
+        aws_access_key_id=key_id,
+        aws_secret_access_key=app_key,
+        region_name=region_name,
+        config=Config(
+            signature_version='s3v4',
+            s3={'addressing_style': 'path'}
+        )
+    )
+
+    return client, bucket
+
+
+def _extract_b2_key(content_url: str) -> str:
+    if not content_url:
+        return ''
+
+    if content_url.startswith('b2://'):
+        return content_url.replace('b2://', '', 1)
+
+    bucket = (os.getenv('B2_BUCKET_NAME') or '').strip()
+    marker = f"/{bucket}/"
+    if marker in content_url:
+        return content_url.split(marker, 1)[1]
+
+    return ''
+
+
+def _get_audio_bytes_from_b2(file_key: str) -> bytes:
+    client, bucket = _build_b2_client_and_bucket()
+    try:
+        obj = client.get_object(Bucket=bucket, Key=file_key)
+        return obj['Body'].read()
+    except ClientError as error:
+        error_code = error.response.get('Error', {}).get('Code', 'Unknown')
+        error_msg = error.response.get('Error', {}).get('Message', str(error))
+        raise RuntimeError(f'Erro B2 ({error_code}): {error_msg}')
 
 
 # ==================== SESSÕES ====================
@@ -396,6 +598,15 @@ def save_generated_activity(current_user, session_id):
     content = data.get('content', {})
     ai_generated_content = data.get('ai_generated_content', '')
     time_limit = data.get('time_limit', 0)
+
+    if activity_type == 'summary':
+        # Normalizar texto de resumo para não salvar tags de orquestração do n8n
+        if isinstance(content, dict):
+            content['summary_text'] = _sanitize_summary_text(content.get('summary_text') or ai_generated_content)
+        else:
+            content = {'summary_text': _sanitize_summary_text(ai_generated_content)}
+
+        ai_generated_content = _sanitize_summary_text(ai_generated_content or content.get('summary_text'))
     
     if not time_limit and activity_type == 'quiz' and isinstance(content, dict) and 'questions' in content:
         time_limit = len(content['questions']) * 60
@@ -556,6 +767,31 @@ def broadcast_activity(current_user, activity_id):
         subject_id=activity.session.subject_id
     ).count()
 
+    # Auto-criar notificação para os alunos
+    try:
+        subject_name = activity.session.subject.name if activity.session.subject else 'Disciplina'
+        if activity.activity_type == 'quiz':
+            notif_title = f'🎯 Novo Quiz: {activity.title}'
+            notif_message = f'O professor enviou um quiz em {subject_name}. Responda agora!'
+            notif_type = 'quiz'
+        else:
+            notif_title = f'💬 Pergunta do Professor'
+            notif_message = f'Há uma nova pergunta em {subject_name}. Participe!'
+            notif_type = 'open_question'
+
+        notif = Notification(
+            title=notif_title,
+            message=notif_message,
+            type=notif_type,
+            subject_id=activity.session.subject_id,
+            teacher_id=current_user.id,
+            sent_to_students=True
+        )
+        db.session.add(notif)
+        db.session.commit()
+    except Exception as e:
+        print(f'[NOTIF] Erro ao criar notificação de broadcast: {e}')
+
     # --- ATIVA-IA FIX: Sincronizar com a tela de apresentação ---
     # Quando o professor dá "broadcast", deve aparecer na tela automaticamente
     # [DISABLED] Separating student broadcast from presentation display
@@ -626,6 +862,9 @@ def share_summary(current_user, activity_id):
     data = request.get_json() or {}
     if 'title' in data and data['title']:
         activity.title = data['title']
+
+    audio_config = data.get('audio') or {}
+    should_generate_audio = bool(audio_config.get('enabled'))
     
     activity.shared_with_students = True
     
@@ -634,6 +873,87 @@ def share_summary(current_user, activity_id):
     activity.starts_at = datetime.utcnow()
     
     db.session.commit()
+
+    distributed_audio_count = 0
+    audio_error = None
+
+    if should_generate_audio:
+        summary_text = (activity.content or {}).get('summary_text') or activity.ai_generated_content
+        if not summary_text:
+            return jsonify({'success': False, 'error': 'Resumo sem conteúdo para gerar áudio'}), 400
+
+        try:
+            audio_bytes = _generate_summary_audio(summary_text, audio_config)
+            file_key, audio_url = _upload_audio_to_b2(audio_bytes, activity.session.subject_id, activity.id)
+
+            # Persistir metadata no content JSON da activity
+            if not activity.content:
+                activity.content = {}
+
+            activity.content['summary_audio'] = {
+                'status': 'ready',
+                'voice': audio_config.get('voice') or 'pt_BR-faber-medium',
+                'mode': audio_config.get('mode') or 'summary',
+                'bg_id': audio_config.get('bg_id'),
+                'bg_volume': audio_config.get('bg_volume', 0.10),
+                'file_key': file_key,
+                'url': audio_url,
+                'mime_type': 'audio/mpeg',
+                'created_at': datetime.utcnow().isoformat()
+            }
+            flag_modified(activity, 'content')
+
+            # Distribuir na pasta "Áudio & Podcasts" dos alunos
+            enrollments = Enrollment.query.filter_by(subject_id=activity.session.subject_id).all()
+            for enrollment in enrollments:
+                material = StudyMaterial(
+                    student_id=enrollment.student_id,
+                    subject_id=activity.session.subject_id,
+                    activity_id=activity.id,
+                    title=activity.title,
+                    type='audio',
+                    content_url=f'b2://{file_key}',
+                    file_size=None
+                )
+                db.session.add(material)
+                distributed_audio_count += 1
+
+            db.session.commit()
+        except Exception as audio_exception:
+            audio_error = str(audio_exception)
+
+            try:
+                if not activity.content:
+                    activity.content = {}
+                activity.content['summary_audio'] = {
+                    'status': 'failed',
+                    'voice': audio_config.get('voice') or 'pt_BR-faber-medium',
+                    'mode': audio_config.get('mode') or 'summary',
+                    'bg_id': audio_config.get('bg_id'),
+                    'bg_volume': audio_config.get('bg_volume', 0.10),
+                    'error': audio_error,
+                    'updated_at': datetime.utcnow().isoformat()
+                }
+                flag_modified(activity, 'content')
+                db.session.commit()
+            except Exception:
+                pass
+
+    # Auto-criar notificação para os alunos
+    try:
+        subject_name = activity.session.subject.name if activity.session.subject else 'Disciplina'
+        notif = Notification(
+            title=f'📝 Novo Resumo: {activity.title}',
+            message=f'O professor compartilhou um resumo em {subject_name}.',
+            type='summary',
+            subject_id=activity.session.subject_id,
+            teacher_id=current_user.id,
+            sent_to_students=True
+        )
+        db.session.add(notif)
+        db.session.commit()
+    except Exception as e:
+        print(f'[NOTIF] Erro ao criar notificação de resumo: {e}')
 
     # --- ATIVA-IA FIX: Sincronizar Resumo com a tela de apresentação ---
     try:
@@ -666,8 +986,100 @@ def share_summary(current_user, activity_id):
     return jsonify({
         'success': True,
         'message': 'Resumo compartilhado com os alunos',
-        'activity': activity.to_dict()
+        'activity': activity.to_dict(),
+        'audio': {
+            'enabled': should_generate_audio,
+            'distributed_count': distributed_audio_count,
+            'error': audio_error
+        }
     })
+
+
+@transcription_bp.route('/materials/<int:material_id>/audio-url', methods=['GET'])
+@token_required
+def get_audio_material_url(current_user, material_id):
+    material = StudyMaterial.query.get(material_id)
+
+    if not material:
+        return jsonify({'success': False, 'error': 'Material não encontrado'}), 404
+
+    if material.type != 'audio':
+        return jsonify({'success': False, 'error': 'Material não é áudio'}), 400
+
+    if current_user.role == 'student' and material.student_id != current_user.id:
+        return jsonify({'success': False, 'error': 'Não autorizado'}), 403
+
+    if current_user.role == 'teacher':
+        teaching = Teaching.query.filter_by(
+            teacher_id=current_user.id,
+            subject_id=material.subject_id
+        ).first()
+        if not teaching:
+            return jsonify({'success': False, 'error': 'Não autorizado'}), 403
+
+    key = _extract_b2_key(material.content_url)
+    if not key:
+        return jsonify({'success': False, 'error': 'Chave do áudio não encontrada'}), 400
+
+    try:
+        client, bucket = _build_b2_client_and_bucket()
+        expires = 600
+        signed_url = client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': bucket, 'Key': key},
+            ExpiresIn=expires
+        )
+
+        return jsonify({
+            'success': True,
+            'audio_url': signed_url,
+            'expires_in': expires
+        })
+    except Exception as error:
+        return jsonify({'success': False, 'error': f'Erro ao gerar URL assinada: {str(error)}'}), 500
+
+
+@transcription_bp.route('/materials/<int:material_id>/audio-download', methods=['GET'])
+@token_required
+def download_audio_material(current_user, material_id):
+    material = StudyMaterial.query.get(material_id)
+
+    if not material:
+        return jsonify({'success': False, 'error': 'Material não encontrado'}), 404
+
+    if material.type != 'audio':
+        return jsonify({'success': False, 'error': 'Material não é áudio'}), 400
+
+    if current_user.role == 'student' and material.student_id != current_user.id:
+        return jsonify({'success': False, 'error': 'Não autorizado'}), 403
+
+    if current_user.role == 'teacher':
+        teaching = Teaching.query.filter_by(
+            teacher_id=current_user.id,
+            subject_id=material.subject_id
+        ).first()
+        if not teaching:
+            return jsonify({'success': False, 'error': 'Não autorizado'}), 403
+
+    key = _extract_b2_key(material.content_url)
+    if not key:
+        return jsonify({'success': False, 'error': 'Chave do áudio não encontrada'}), 400
+
+    try:
+        audio_bytes = _get_audio_bytes_from_b2(key)
+        filename_base = (material.title or 'audio').strip().replace('"', '')
+        filename = f"{filename_base}.mp3"
+
+        return Response(
+            audio_bytes,
+            mimetype='audio/mpeg',
+            headers={
+                'Content-Disposition': f'attachment; filename="{filename}"',
+                'Cache-Control': 'no-store'
+            }
+        )
+    except Exception as error:
+        return jsonify({'success': False, 'error': f'Erro ao baixar áudio: {str(error)}'}), 500
 
 
 @transcription_bp.route('/activities/<int:activity_id>/end', methods=['PUT'])

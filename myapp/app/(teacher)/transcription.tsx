@@ -58,6 +58,7 @@ import MediaControlPanel from '@/components/presentation/MediaControlPanel';
 import { useRouter } from 'expo-router';
 import ConfirmationModal from '@/components/modals/ConfirmationModal';
 import InputModal from '@/components/modals/InputModal';
+import SummaryAudioOptionsModal, { SummaryAudioOptions } from '@/components/modals/SummaryAudioOptionsModal';
 import VideoListModal, { VideoItem } from '@/components/modals/VideoListModal';
 import DocumentListModal, { DocumentItem } from '@/components/modals/DocumentListModal';
 import FredHelpModal from '@/components/help/FredHelpModal';
@@ -264,6 +265,14 @@ export default function TranscriptionScreen() {
         onConfirm: (text: string) => { },
     });
 
+    const [summaryAudioModalVisible, setSummaryAudioModalVisible] = useState(false);
+    const [summaryAudioOptions, setSummaryAudioOptions] = useState<SummaryAudioOptions>({
+        voice: 'pt_BR-faber-medium',
+        mode: 'summary',
+        bg_id: 'lofi_calm',
+        bg_volume: 0.10,
+    });
+
     const closeInputModal = () => setInputModal(prev => ({ ...prev, visible: false }));
 
     // Video List Modal State (for multiple videos from RAG)
@@ -287,8 +296,10 @@ export default function TranscriptionScreen() {
 
         let text = String(rawText);
 
-        // 1. Remover tags [TYPE:SUMMARY] ou [TYPE: SUMMARY]
-        text = text.replace(/^\[TYPE:\s*SUMMARY\]\s*/i, '');
+        // 1. Remover tags [TYPE:SUMMARY], [TYPE:SUMARY], [TYPE:SUMARRY], etc.
+        text = text
+            .replace(/^\s*\[\s*TYPE\s*:\s*SUM\w*\s*\]\s*/i, '')
+            .replace(/^\s*\[\s*TYPE\s*:\s*\w+\s*\]\s*/i, '');
 
         // 2. Tentar parsear se for JSON com campo "text"
         if (text.trim().startsWith('{')) {
@@ -2747,26 +2758,31 @@ export default function TranscriptionScreen() {
     // Compartilhar resumo
     const handleShareSummary = async () => {
         if (!currentActivity) return;
-
-        setInputModal({
-            visible: true,
-            title: 'Título do Resumo',
-            message: 'Defina um título para este resumo.',
-            placeholder: 'Ex: Resumo da Aula 1',
-            initialValue: currentActivity?.title || '',
-            onConfirm: async (text) => {
-                closeInputModal();
-                performShareSummary(text);
-            }
-        });
+        setSummaryAudioModalVisible(true);
     };
 
-    const performShareSummary = async (title: string) => {
+    const performShareSummary = async (title: string, audioOptions?: SummaryAudioOptions) => {
         setFredCommand('Enviando resumo aos alunos...');
 
         try {
-            await shareSummary(currentActivity!.id, title);
-            setFredCommand('✅ Resumo enviado aos alunos!');
+            const response = await shareSummary(currentActivity!.id, title, {
+                enabled: !!audioOptions,
+                voice: audioOptions?.voice,
+                mode: audioOptions?.mode,
+                bg_id: audioOptions?.bg_id,
+                bg_volume: audioOptions?.bg_volume,
+            });
+
+            if (response?.audio?.error) {
+                setFredCommand('⚠️ Resumo enviado, mas houve falha no áudio');
+                Alert.alert(
+                    'Áudio não gerado',
+                    `Resumo enviado, mas o áudio falhou: ${response.audio.error}`
+                );
+            } else {
+                setFredCommand('✅ Resumo enviado aos alunos!');
+            }
+
             setTimeout(() => setFredCommand(null), 3000);
             setShowSummaryModal(false);
             // Retomar sessão
@@ -3669,6 +3685,20 @@ Pressione o botão do microfone para começar a falar."
                 initialValue={inputModal.initialValue}
                 onConfirm={inputModal.onConfirm}
                 onCancel={closeInputModal}
+            />
+
+            <SummaryAudioOptionsModal
+                visible={summaryAudioModalVisible}
+                initialTitle={currentActivity?.title || 'Resumo da Aula'}
+                initialValue={summaryAudioOptions}
+                onCancel={() => {
+                    setSummaryAudioModalVisible(false);
+                }}
+                onConfirm={({ title, options }) => {
+                    setSummaryAudioOptions(options);
+                    setSummaryAudioModalVisible(false);
+                    performShareSummary(title || currentActivity?.title || 'Resumo da Aula', options);
+                }}
             />
 
             {/* Footer */}
