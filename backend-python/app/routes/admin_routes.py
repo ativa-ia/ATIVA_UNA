@@ -224,3 +224,125 @@ def enroll_all_students(current_user):
             'message': 'Erro ao criar matrículas em massa',
             'error': str(e)
         }), 500
+
+@admin_bp.route('/users/<int:user_id>', methods=['DELETE'])
+@admin_required
+def delete_user(current_user, user_id):
+    """Deletar um usuário do sistema"""
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'success': False, 'message': 'Usuário não encontrado'}), 404
+    
+    if user.id == current_user.id:
+        return jsonify({'success': False, 'message': 'Você não pode deletar a si mesmo'}), 400
+
+    try:
+        # Delete related enrollments and teachings first
+        Enrollment.query.filter_by(student_id=user_id).delete()
+        Teaching.query.filter_by(teacher_id=user_id).delete()
+        db.session.delete(user)
+        db.session.commit()
+        return jsonify({'success': True, 'message': f'Usuário "{user.name}" deletado com sucesso'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@admin_bp.route('/subjects/<int:subject_id>', methods=['DELETE'])
+@admin_required
+def delete_subject(current_user, subject_id):
+    """Deletar uma disciplina do sistema"""
+    subject = Subject.query.get(subject_id)
+    if not subject:
+        return jsonify({'success': False, 'message': 'Disciplina não encontrada'}), 404
+
+    try:
+        # Delete related enrollments and teachings first
+        Enrollment.query.filter_by(subject_id=subject_id).delete()
+        Teaching.query.filter_by(subject_id=subject_id).delete()
+        db.session.delete(subject)
+        db.session.commit()
+        return jsonify({'success': True, 'message': f'Disciplina "{subject.name}" deletada com sucesso'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@admin_bp.route('/unenroll', methods=['DELETE'])
+@admin_required
+def unenroll_student(current_user):
+    """Desmatricular um aluno de uma disciplina"""
+    data = request.get_json()
+    student_id = data.get('student_id')
+    subject_id = data.get('subject_id')
+
+    if not all([student_id, subject_id]):
+        return jsonify({'success': False, 'message': 'IDs de aluno e disciplina obrigatórios'}), 400
+
+    enrollment = Enrollment.query.filter_by(student_id=student_id, subject_id=subject_id).first()
+    if not enrollment:
+        return jsonify({'success': False, 'message': 'Matrícula não encontrada'}), 404
+
+    try:
+        db.session.delete(enrollment)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Aluno desmatriculado com sucesso'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@admin_bp.route('/unteach', methods=['DELETE'])
+@admin_required
+def remove_teacher(current_user):
+    """Remover um professor de uma disciplina"""
+    data = request.get_json()
+    teacher_id = data.get('teacher_id')
+    subject_id = data.get('subject_id')
+
+    if not all([teacher_id, subject_id]):
+        return jsonify({'success': False, 'message': 'IDs de professor e disciplina obrigatórios'}), 400
+
+    teaching = Teaching.query.filter_by(teacher_id=teacher_id, subject_id=subject_id).first()
+    if not teaching:
+        return jsonify({'success': False, 'message': 'Atribuição não encontrada'}), 404
+
+    try:
+        db.session.delete(teaching)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Professor removido da disciplina com sucesso'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@admin_bp.route('/subjects/<int:subject_id>/enrollments', methods=['GET'])
+@admin_required
+def get_subject_enrollments(current_user, subject_id):
+    """Listar alunos matriculados em uma disciplina"""
+    subject = Subject.query.get(subject_id)
+    if not subject:
+        return jsonify({'success': False, 'message': 'Disciplina não encontrada'}), 404
+
+    enrollments = Enrollment.query.filter_by(subject_id=subject_id).all()
+    students = []
+    for e in enrollments:
+        student = User.query.get(e.student_id)
+        if student:
+            students.append({'id': student.id, 'name': student.name, 'email': student.email})
+
+    return jsonify({'success': True, 'students': students}), 200
+
+@admin_bp.route('/subjects/<int:subject_id>/teachings', methods=['GET'])
+@admin_required
+def get_subject_teachings(current_user, subject_id):
+    """Listar professores atribuídos a uma disciplina"""
+    subject = Subject.query.get(subject_id)
+    if not subject:
+        return jsonify({'success': False, 'message': 'Disciplina não encontrada'}), 404
+
+    teachings = Teaching.query.filter_by(subject_id=subject_id).all()
+    teachers = []
+    for t in teachings:
+        teacher = User.query.get(t.teacher_id)
+        if teacher:
+            teachers.append({'id': teacher.id, 'name': teacher.name, 'email': teacher.email})
+
+    return jsonify({'success': True, 'teachers': teachers}), 200
+
