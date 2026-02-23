@@ -63,6 +63,12 @@ export default function StudentDashboardScreen() {
         };
     }, []);
 
+    useFocusEffect(
+        useCallback(() => {
+            setActiveNavId('dashboard');
+        }, [])
+    );
+
     // Polling para atividades ativas (atualiza ao focar)
     useFocusEffect(
         useCallback(() => {

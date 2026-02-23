@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
     View,
     Text,
@@ -7,13 +7,14 @@ import {
     TouchableOpacity,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Calendar, LocaleConfig } from 'react-native-calendars';
 import { BottomNav, NavItem } from '@/components/navigation/BottomNav';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
+import { CalendarEventItem, getCalendarEvents } from '@/services/api';
 
 // Configurar idioma Português
 LocaleConfig.locales['pt-br'] = {
@@ -41,10 +42,56 @@ LocaleConfig.defaultLocale = 'pt-br';
 export default function CalendarScreen() {
     const [activeNavId, setActiveNavId] = useState('calendar');
     const [selectedDate, setSelectedDate] = useState('');
+    const [calendarEvents, setCalendarEvents] = useState<CalendarEventItem[]>([]);
+
+    const loadCalendarEvents = useCallback(async () => {
+        const result = await getCalendarEvents();
+        if (result.success) {
+            setCalendarEvents(result.events || []);
+        }
+    }, []);
+
+    useEffect(() => {
+        loadCalendarEvents();
+    }, [loadCalendarEvents]);
+
+    useFocusEffect(
+        useCallback(() => {
+            setActiveNavId('calendar');
+            loadCalendarEvents();
+        }, [])
+    );
+
+    const selectedDayEvents = useMemo(
+        () => calendarEvents.filter((item) => item.event_date === selectedDate),
+        [calendarEvents, selectedDate]
+    );
+
+    const markedDates = useMemo(() => {
+        const marks: Record<string, any> = {};
+
+        for (const item of calendarEvents) {
+            marks[item.event_date] = {
+                ...(marks[item.event_date] || {}),
+                marked: true,
+                dotColor: item.event_type === 'notice' ? colors.warning : colors.primary,
+            };
+        }
+
+        if (selectedDate) {
+            marks[selectedDate] = {
+                ...(marks[selectedDate] || {}),
+                selected: true,
+                selectedColor: colors.primary,
+            };
+        }
+
+        return marks;
+    }, [calendarEvents, selectedDate]);
 
     const navItems: NavItem[] = [
         { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
-        { id: 'materials', label: 'Materiais', iconName: 'folder-open' },
+        { id: 'socratic', label: 'Sócrates', iconName: 'psychology' },
         { id: 'calendar', label: 'Calendário', iconName: 'calendar-today' },
     ];
 
@@ -55,8 +102,8 @@ export default function CalendarScreen() {
             case 'dashboard':
                 router.push('./dashboard');
                 break;
-            case 'materials':
-                router.push('/(student)/materials');
+            case 'socratic':
+                router.push('/(student)/socratic');
                 break;
             case 'calendar':
                 break;
@@ -92,9 +139,7 @@ export default function CalendarScreen() {
                             onDayPress={day => {
                                 setSelectedDate(day.dateString);
                             }}
-                            markedDates={{
-                                [selectedDate]: { selected: true, disableTouchEvent: true }
-                            }}
+                            markedDates={markedDates}
                             theme={{
                                 backgroundColor: colors.white,
                                 calendarBackground: colors.white,
@@ -128,9 +173,21 @@ export default function CalendarScreen() {
                             <Text style={styles.eventsTitle}>
                                 Eventos em {selectedDate.split('-').reverse().join('/')}
                             </Text>
-                            <View style={styles.emptyEvent}>
-                                <Text style={styles.emptyEventText}>Nenhum evento agendado.</Text>
-                            </View>
+                            {selectedDayEvents.length === 0 ? (
+                                <View style={styles.emptyEvent}>
+                                    <Text style={styles.emptyEventText}>Nenhum evento agendado.</Text>
+                                </View>
+                            ) : (
+                                selectedDayEvents.map((event) => (
+                                    <View key={event.id} style={styles.eventItem}>
+                                        <View style={[styles.eventBadge, event.event_type === 'notice' ? styles.noticeBadge : styles.eventBadgePrimary]}>
+                                            <Text style={styles.eventBadgeText}>{event.event_type === 'notice' ? 'Aviso' : 'Evento'}</Text>
+                                        </View>
+                                        <Text style={styles.eventItemTitle}>{event.title}</Text>
+                                        {!!event.description && <Text style={styles.eventItemDescription}>{event.description}</Text>}
+                                    </View>
+                                ))
+                            )}
                         </View>
                     ) : (
                         <View style={styles.eventsContainer}>
@@ -237,5 +294,42 @@ const styles = StyleSheet.create({
         color: colors.textSecondary,
         textAlign: 'center',
         marginTop: spacing.xl,
+    }
+    ,
+    eventItem: {
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        borderRadius: borderRadius.md,
+        padding: spacing.sm,
+        marginBottom: spacing.sm,
+        backgroundColor: colors.white,
+    },
+    eventBadge: {
+        alignSelf: 'flex-start',
+        borderRadius: 999,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        marginBottom: spacing.xs,
+    },
+    eventBadgePrimary: {
+        backgroundColor: colors.primaryOpacity20,
+    },
+    noticeBadge: {
+        backgroundColor: 'rgba(245, 158, 11, 0.2)',
+    },
+    eventBadgeText: {
+        fontSize: 11,
+        fontWeight: '700',
+        color: colors.textPrimary,
+    },
+    eventItemTitle: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: '700',
+        color: colors.textPrimary,
+    },
+    eventItemDescription: {
+        marginTop: 4,
+        fontSize: typography.fontSize.sm,
+        color: colors.textSecondary,
     }
 });
