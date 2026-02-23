@@ -99,7 +99,7 @@ export default function StudentNotificationsScreen() {
                 colors={[colors.primary, '#3B82F6']}
                 style={[styles.header, { paddingTop: insets.top + spacing.sm }]}
             >
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.push('/(student)/dashboard')} style={styles.backButton}>
                     <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Notificações</Text>

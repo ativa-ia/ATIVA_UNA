@@ -76,7 +76,7 @@ export default function LiveActivityScreen() {
             Alert.alert(
                 "Atividade Encerrada",
                 "O tempo para esta atividade acabou ou o professor encerrou a sessão.",
-                [{ text: "Sair", onPress: () => router.back() }]
+                [{ text: "Sair", onPress: () => router.canGoBack() ? router.back() : router.push('/(student)/dashboard') }]
             );
             return;
         }
@@ -260,7 +260,7 @@ export default function LiveActivityScreen() {
                         text: 'OK',
                         onPress: () => {
                             setIsSubmitted(true);
-                            router.back();
+                            if (router.canGoBack()) { router.back(); } else { router.push('/(student)/dashboard'); }
                         }
                     }
                 ]);
@@ -280,7 +280,7 @@ export default function LiveActivityScreen() {
             <View style={[styles.container, { paddingTop: insets.top }]}>
                 <StatusBar style="dark" />
                 <Text style={styles.errorText}>Atividade não encontrada</Text>
-                <TouchableOpacity onPress={() => router.back()}>
+                <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.push('/(student)/dashboard')}>
                     <Text style={styles.backLink}>Voltar</Text>
                 </TouchableOpacity>
             </View>
@@ -344,7 +344,7 @@ export default function LiveActivityScreen() {
 
                     <TouchableOpacity
                         style={styles.resultButton}
-                        onPress={() => router.back()}
+                        onPress={() => router.canGoBack() ? router.back() : router.push('/(student)/dashboard')}
                     >
                         <Text style={styles.resultButtonText}>Voltar</Text>
                     </TouchableOpacity>
@@ -390,7 +390,7 @@ export default function LiveActivityScreen() {
 
                     </View>
                     <TouchableOpacity
-                        onPress={() => router.back()}
+                        onPress={() => router.canGoBack() ? router.back() : router.push('/(student)/dashboard')}
                         style={{ marginLeft: spacing.sm, padding: 4 }}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
@@ -513,7 +513,7 @@ export default function LiveActivityScreen() {
                         <Text style={styles.questionCounter}>Resumo da Aula</Text>
                     </View>
                     <TouchableOpacity
-                        onPress={() => router.back()}
+                        onPress={() => router.canGoBack() ? router.back() : router.push('/(student)/dashboard')}
                         style={{ padding: 4 }}
                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
@@ -541,14 +541,14 @@ export default function LiveActivityScreen() {
                                 const response = await submitActivityResponse(activity.id, { read: true });
                                 // Navigate back immediately if success or already read, no blocking Alert
                                 if (response.success || response.already_answered) {
-                                    router.back();
+                                    if (router.canGoBack()) { router.back(); } else { router.push('/(student)/dashboard'); }
                                 } else {
                                     // Only show alert on error, but still offer way out? No, just go back.
-                                    router.back();
+                                    if (router.canGoBack()) { router.back(); } else { router.push('/(student)/dashboard'); }
                                 }
                             } catch (e) {
                                 console.log(e);
-                                router.back();
+                                if (router.canGoBack()) { router.back(); } else { router.push('/(student)/dashboard'); }
                             } finally {
                                 setIsSubmitting(false);
                             }
@@ -617,7 +617,7 @@ export default function LiveActivityScreen() {
             <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
                 <TouchableOpacity
                     style={styles.cancelButton}
-                    onPress={() => router.back()}
+                    onPress={() => router.canGoBack() ? router.back() : router.push('/(student)/dashboard')}
                 >
                     <Text style={styles.cancelButtonText}>Cancelar</Text>
                 </TouchableOpacity>

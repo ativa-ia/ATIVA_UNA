@@ -61,7 +61,11 @@ export default function UploadMaterialScreen() {
     const isFormValid = title.trim().length > 0 && selectedFile && selectedClassId;
 
     const handleCancel = () => {
-        router.back();
+        if (router.canGoBack()) {
+            router.back();
+        } else {
+            router.push('/(teacher)/dashboard');
+        }
     };
 
     const handleSelectFile = async () => {
@@ -108,7 +112,7 @@ export default function UploadMaterialScreen() {
 
             if (result.success) {
                 Alert.alert('Sucesso', 'Material enviado com sucesso!', [
-                    { text: 'OK', onPress: () => router.back() }
+                    { text: 'OK', onPress: () => router.canGoBack() ? router.back() : router.push('/(teacher)/dashboard') }
                 ]);
             } else {
                 Alert.alert('Erro', result.error || 'Falha ao salvar material');

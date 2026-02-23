@@ -127,7 +127,18 @@ export default function ContentHubScreen() {
 
             const studentMaterials = Array.isArray(studentMaterialsRes) ? studentMaterialsRes : [];
 
-            setMaterials((materialsRes as Material[]) || []);
+            const baseMaterials = (materialsRes as Material[]) || [];
+
+            // Extract non-audio personal materials for this subject (e.g. low quiz score support)
+            const personalSupportMaterials = studentMaterials.filter((item: any) => {
+                const isCurrentSubject = (item.subjectId && subjectId) ? item.subjectId === subjectId : item.subject === subjectName;
+                return isCurrentSubject && item.type !== 'audio' && item.source === 'personal';
+            });
+
+            // Add a unique source property to base materials if they don't have one to prevent key clashes
+            const materialsWithSource = baseMaterials.map(m => ({ ...m, source: (m as any).source || 'class' }));
+
+            setMaterials([...materialsWithSource, ...personalSupportMaterials]);
 
             const audioOnly = studentMaterials.filter((item) => {
                 if (item.type !== 'audio') return false;
@@ -465,7 +476,7 @@ export default function ContentHubScreen() {
         );
     };
 
-    const renderMaterialItem = (material: Material) => {
+    const renderMaterialItem = (material: Material & { source?: string }) => {
         const iconMap: Record<string, keyof typeof MaterialIcons.glyphMap> = {
             pdf: 'picture-as-pdf',
             video: 'play-circle-outline',
@@ -474,9 +485,11 @@ export default function ContentHubScreen() {
             audio: 'headphones',
         };
 
+        const uniqueKey = material.source ? `${material.source}-${material.id}` : `material-${material.id}`;
+
         return (
             <TouchableOpacity
-                key={material.id}
+                key={uniqueKey}
                 style={itemStyles.card}
                 onPress={() => handleMaterialPress(material)}
                 activeOpacity={0.7}
@@ -564,7 +577,7 @@ export default function ContentHubScreen() {
             >
                 <TouchableOpacity
                     style={styles.backButton}
-                    onPress={() => router.back()}
+                    onPress={() => router.canGoBack() ? router.back() : router.push('/(student)/dashboard')}
                 >
                     <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
                 </TouchableOpacity>

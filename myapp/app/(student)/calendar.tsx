@@ -56,7 +56,7 @@ export default function CalendarScreen() {
                 router.push('./dashboard');
                 break;
             case 'materials':
-                router.push('/(student)/materials');
+                router.push('/(student)/content-hub');
                 break;
             case 'calendar':
                 break;
@@ -76,7 +76,7 @@ export default function CalendarScreen() {
                     <View style={styles.headerContent}>
                         <TouchableOpacity
                             style={styles.backButton}
-                            onPress={() => router.back()}
+                            onPress={() => router.canGoBack() ? router.back() : router.push('/(student)/dashboard')}
                         >
                             <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
                         </TouchableOpacity>
