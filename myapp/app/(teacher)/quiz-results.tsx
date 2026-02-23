@@ -237,7 +237,7 @@ export default function QuizResultsScreen() {
         } else {
             // Se não houver respostas, voltar direto
             console.log('[END QUIZ] Sem respostas, voltando direto');
-            router.back();
+            (router.canGoBack() ? router.back() : router.push('/(teacher)/dashboard'));
         }
     };
 
@@ -459,7 +459,7 @@ export default function QuizResultsScreen() {
         <View style={styles.container}>
             {/* Header */}
             <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-                <TouchableOpacity style={styles.backButton} onPress={() => router.canGoBack() ? router.back() : router.push('/(teacher)/dashboard')}>
+                <TouchableOpacity style={styles.backButton} onPress={() => router.canGoBack() ? (router.canGoBack() ? router.back() : router.push('/(teacher)/dashboard')) : router.push('/(teacher)/dashboard')}>
                     <MaterialIcons name="arrow-back-ios" size={20} color={colors.textPrimary} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Resultados ao Vivo</Text>

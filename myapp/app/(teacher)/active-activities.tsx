@@ -120,7 +120,7 @@ export default function ActiveActivitiesScreen() {
 
             {/* Header */}
             <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.push('/(teacher)/dashboard')} style={styles.backButton}>
                     <MaterialIcons name="arrow-back" size={24} color={colors.textPrimary} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Atividades Ativas</Text>

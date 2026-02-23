@@ -173,7 +173,7 @@ export default function LiveQuizScreen() {
         return (
             <View style={[styles.container, { paddingTop: insets.top }]}>
                 <Text style={styles.errorText}>Quiz não encontrado</Text>
-                <TouchableOpacity onPress={() => router.back()}>
+                <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.push('/(student)/dashboard')}>
                     <Text style={styles.backLink}>Voltar</Text>
                 </TouchableOpacity>
             </View>
@@ -230,7 +230,7 @@ export default function LiveQuizScreen() {
 
                     <TouchableOpacity
                         style={styles.resultButton}
-                        onPress={() => router.back()}
+                        onPress={() => router.canGoBack() ? router.back() : router.push('/(student)/dashboard')}
                     >
                         <Text style={styles.resultButtonText}>Voltar</Text>
                     </TouchableOpacity>

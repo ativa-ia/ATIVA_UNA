@@ -246,7 +246,7 @@ export default function ActivitiesScreen() {
             >
                 <TouchableOpacity
                     style={styles.backButton}
-                    onPress={() => router.back()}
+                    onPress={() => router.canGoBack() ? router.back() : router.push('/(student)/dashboard')}
                 >
                     <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
                 </TouchableOpacity>
