@@ -697,7 +697,7 @@ export default function SocraticScreen() {
                 <View style={styles.topControls}>
                     <TouchableOpacity
                         style={styles.iconButton}
-                        onPress={() => router.back()}
+                        onPress={() => router.canGoBack() ? router.back() : router.push('/(student)/dashboard')}
                     >
                         <MaterialIcons name="arrow-back" size={28} color="rgba(255,255,255,0.8)" />
                     </TouchableOpacity>
