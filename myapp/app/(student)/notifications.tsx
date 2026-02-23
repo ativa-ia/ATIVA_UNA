@@ -8,13 +8,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
-import { getMyNotifications, AppNotification } from '@/services/api';
+import { getMyNotifications, deleteMyNotification, AppNotification } from '@/services/api';
 
 const TYPE_CONFIG: Record<string, { icon: keyof typeof MaterialIcons.glyphMap; color: string; bg: string; label: string }> = {
     quiz: { icon: 'quiz', color: '#6366F1', bg: '#EEF2FF', label: 'Quiz' },
     summary: { icon: 'description', color: '#059669', bg: '#ECFDF5', label: 'Resumo' },
     open_question: { icon: 'help-outline', color: '#D97706', bg: '#FFFBEB', label: 'Pergunta' },
     material: { icon: 'book', color: '#2563EB', bg: '#EFF6FF', label: 'Material' },
+    notice: { icon: 'campaign', color: '#D97706', bg: '#FFFBEB', label: 'Aviso' },
     general: { icon: 'notifications', color: '#6B7280', bg: '#F3F4F6', label: 'Geral' },
 };
 
@@ -23,26 +24,47 @@ export default function StudentNotificationsScreen() {
     const [notifications, setNotifications] = useState<AppNotification[]>([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [loadingMore, setLoadingMore] = useState(false);
+    const [page, setPage] = useState(1);
+    const [hasNext, setHasNext] = useState(true);
 
-    const fetchNotifications = async (isRefresh = false) => {
+    const PER_PAGE = 15;
+
+    const fetchNotifications = async (nextPage = 1, isRefresh = false) => {
         try {
             if (isRefresh) setRefreshing(true);
-            const data = await getMyNotifications();
+            if (nextPage > 1) setLoadingMore(true);
+
+            const data = await getMyNotifications({ page: nextPage, per_page: PER_PAGE });
             if (data.success) {
-                setNotifications(data.notifications);
+                setNotifications(prev => (nextPage === 1 ? data.notifications : [...prev, ...data.notifications]));
+                setPage(nextPage);
+                setHasNext(Boolean(data.pagination?.has_next));
             }
         } catch (error) {
             console.error('Erro ao buscar notificações:', error);
         } finally {
             setLoading(false);
             setRefreshing(false);
+            setLoadingMore(false);
         }
+    };
+
+    const handleDeleteNotification = async (notificationId: number) => {
+        const result = await deleteMyNotification(notificationId);
+        if (!result.success) return;
+        setNotifications(prev => prev.filter(item => item.id !== notificationId));
+    };
+
+    const handleLoadMore = () => {
+        if (loading || refreshing || loadingMore || !hasNext) return;
+        fetchNotifications(page + 1);
     };
 
     // Refresh on focus
     useFocusEffect(
         useCallback(() => {
-            fetchNotifications();
+            fetchNotifications(1, true);
         }, [])
     );
 
@@ -88,6 +110,10 @@ export default function StudentNotificationsScreen() {
                             </View>
                         )}
                     </View>
+
+                    <TouchableOpacity style={styles.removeButton} onPress={() => handleDeleteNotification(item.id)}>
+                        <MaterialIcons name="close" size={18} color={colors.zinc400} />
+                    </TouchableOpacity>
                 </View>
             </View>
         );
@@ -99,7 +125,7 @@ export default function StudentNotificationsScreen() {
                 colors={[colors.primary, '#3B82F6']}
                 style={[styles.header, { paddingTop: insets.top + spacing.sm }]}
             >
-                <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+                <TouchableOpacity onPress={() => router.canGoBack() ? router.back() : router.push('/(student)/dashboard')} style={styles.backButton}>
                     <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Notificações</Text>
@@ -115,9 +141,12 @@ export default function StudentNotificationsScreen() {
                         renderItem={renderItem}
                         keyExtractor={item => item.id.toString()}
                         contentContainerStyle={styles.listContent}
+                        onEndReached={handleLoadMore}
+                        onEndReachedThreshold={0.3}
                         refreshControl={
-                            <RefreshControl refreshing={refreshing} onRefresh={() => fetchNotifications(true)} />
+                            <RefreshControl refreshing={refreshing} onRefresh={() => fetchNotifications(1, true)} />
                         }
+                        ListFooterComponent={loadingMore ? <ActivityIndicator size="small" color={colors.primary} style={{ marginVertical: spacing.md }} /> : null}
                         ListEmptyComponent={
                             <View style={styles.emptyContainer}>
                                 <MaterialIcons name="notifications-none" size={64} color={colors.zinc300} />
@@ -193,6 +222,14 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    removeButton: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: colors.zinc100,
     },
     textArea: {
         flex: 1,
