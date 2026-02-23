@@ -6,6 +6,7 @@ from flask_compress import Compress
 # socketio.init_app(app)
 from app.config import config
 import os
+import time
 
 import logging
 
@@ -18,6 +19,8 @@ db = SQLAlchemy()
 migrate = Migrate()
 compress = Compress()
 # socketio = SocketIO(cors_allowed_origins="*")  # Permitir conexões do React Native
+
+_app_start_time = time.time()  # Track server start time for uptime
 
 
 def create_app(config_name=None):
@@ -104,12 +107,52 @@ def create_app(config_name=None):
             logger.error(f"Health Check DB Error: {e}")
             db_status = "offline"
 
+        # Verificar OpenAI API
+        openai_status = "offline"
+        try:
+            api_key = os.getenv('OPENAI_API_KEY', '')
+            if not api_key:
+                openai_status = "no_key"
+            elif not api_key.startswith('sk-'):
+                openai_status = "invalid_key"
+            else:
+                import requests as http_requests
+                check = http_requests.get(
+                    'https://api.openai.com/v1/models',
+                    headers={'Authorization': f'Bearer {api_key}'},
+                    timeout=5
+                )
+                if check.status_code == 200:
+                    openai_status = "online"
+                elif check.status_code == 401:
+                    openai_status = "unauthorized"
+                else:
+                    openai_status = "error"
+        except Exception as e:
+            logger.error(f"Health Check OpenAI Error: {e}")
+            openai_status = "offline"
+
+        # Calcular Uptime
+        uptime_seconds = int(time.time() - _app_start_time)
+        hours, remainder = divmod(uptime_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        uptime_str = f"{hours}h {minutes}m {seconds}s"
+
+        overall = 'ok'
+        if db_status != 'online' or openai_status not in ('online',):
+            overall = 'degraded'
+        if db_status != 'online' and openai_status not in ('online',):
+            overall = 'critical'
+
         response = {
-            'status': 'ok' if db_status == 'online' else 'degraded',
+            'status': overall,
             'services': {
                 'api': 'online',
-                'database': db_status
+                'database': db_status,
+                'openai': openai_status
             },
+            'uptime': uptime_str,
+            'uptime_seconds': uptime_seconds,
             'version': '1.0.0'
         }
         
