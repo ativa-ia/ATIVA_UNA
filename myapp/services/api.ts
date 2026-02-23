@@ -1447,19 +1447,34 @@ export interface AppNotification {
     id: number;
     title: string;
     message: string;
-    type: 'quiz' | 'summary' | 'open_question' | 'material' | 'general';
-    subject_id: number;
-    teacher_id: number;
-    subject_name: string | null;
-    teacher_name: string | null;
+    type: 'quiz' | 'summary' | 'open_question' | 'material' | 'general' | 'notice';
+    subject_id?: number;
+    teacher_id?: number;
+    subject_name?: string | null;
+    teacher_name?: string | null;
     created_at: string;
-    sent_to_students: boolean;
+    sent_to_students?: boolean;
 }
 
-export const getMyNotifications = async (): Promise<{ success: boolean; notifications: AppNotification[] }> => {
+export const getMyNotifications = async (params?: { page?: number; per_page?: number }): Promise<{
+    success: boolean;
+    notifications: AppNotification[];
+    pagination?: {
+        page: number;
+        per_page: number;
+        total: number;
+        total_pages: number;
+        has_next: boolean;
+    };
+}> => {
     try {
         const token = await AsyncStorage.getItem('authToken');
-        const response = await fetch(`${API_URL}/notifications/mine`, {
+        const queryParams = new URLSearchParams();
+        if (params?.page) queryParams.append('page', String(params.page));
+        if (params?.per_page) queryParams.append('per_page', String(params.per_page));
+        const queryString = queryParams.toString();
+
+        const response = await fetch(`${API_URL}/notifications/mine${queryString ? `?${queryString}` : ''}`, {
             headers: {
                 'Authorization': `Bearer ${token}`,
             },
@@ -1468,5 +1483,127 @@ export const getMyNotifications = async (): Promise<{ success: boolean; notifica
     } catch (error) {
         console.error('Erro ao buscar notificações:', error);
         return { success: false, notifications: [] };
+    }
+};
+
+export const deleteMyNotification = async (notificationId: number): Promise<{ success: boolean; message?: string }> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/notifications/mine/${notificationId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Erro ao excluir notificação:', error);
+        return { success: false, message: 'Erro ao excluir notificação' };
+    }
+};
+
+// ========== CALENDAR EVENTS API ==========
+
+export interface CalendarEventItem {
+    id: number;
+    title: string;
+    description?: string | null;
+    event_date: string;
+    event_type: 'event' | 'notice';
+    target_role: 'student' | 'teacher' | 'both';
+    created_by: number;
+    created_at: string;
+    is_active: boolean;
+}
+
+export const getCalendarEvents = async (params?: { role?: 'student' | 'teacher' | 'both'; date?: string; month?: string }): Promise<{ success: boolean; events: CalendarEventItem[]; message?: string }> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        const queryParams = new URLSearchParams();
+
+        if (params?.role) queryParams.append('role', params.role);
+        if (params?.date) queryParams.append('date', params.date);
+        if (params?.month) queryParams.append('month', params.month);
+
+        const queryString = queryParams.toString();
+        const url = `${API_URL}/calendar-events${queryString ? `?${queryString}` : ''}`;
+
+        const response = await fetch(url, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        return response.json();
+    } catch (error) {
+        console.error('Erro ao buscar eventos do calendário:', error);
+        return { success: false, events: [], message: 'Erro ao buscar eventos' };
+    }
+};
+
+export const createCalendarEvent = async (payload: {
+    title: string;
+    description?: string;
+    event_date: string;
+    event_type: 'event' | 'notice';
+    target_role: 'student' | 'teacher' | 'both';
+}): Promise<{ success: boolean; message?: string; event?: CalendarEventItem }> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/calendar-events`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify(payload),
+        });
+
+        return response.json();
+    } catch (error) {
+        console.error('Erro ao criar evento do calendário:', error);
+        return { success: false, message: 'Erro ao criar evento/aviso' };
+    }
+};
+
+export const updateCalendarEvent = async (eventId: number, payload: {
+    title: string;
+    description?: string;
+    event_date: string;
+    event_type: 'event' | 'notice';
+    target_role: 'student' | 'teacher' | 'both';
+}): Promise<{ success: boolean; message?: string; event?: CalendarEventItem }> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/calendar-events/${eventId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify(payload),
+        });
+
+        return response.json();
+    } catch (error) {
+        console.error('Erro ao atualizar evento do calendário:', error);
+        return { success: false, message: 'Erro ao atualizar evento/aviso' };
+    }
+};
+
+export const deleteCalendarEvent = async (eventId: number): Promise<{ success: boolean; message?: string }> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/calendar-events/${eventId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
+        });
+
+        return response.json();
+    } catch (error) {
+        console.error('Erro ao remover evento do calendário:', error);
+        return { success: false, message: 'Erro ao remover evento/aviso' };
     }
 };

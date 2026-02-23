@@ -19,6 +19,8 @@ from app.models.transcription_session import (
     LiveActivityResponse
 )
 from app.models.socratic import SocraticSession
+from app.models.calendar_event import CalendarEvent
+from app.models.user_notification import UserNotification
 
 __all__ = [
     'User',
@@ -39,4 +41,6 @@ __all__ = [
     'LiveActivity',
     'LiveActivityResponse',
     'SocraticSession',
+    'CalendarEvent',
+    'UserNotification',
 ]

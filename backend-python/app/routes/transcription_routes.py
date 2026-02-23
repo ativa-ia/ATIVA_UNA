@@ -15,7 +15,7 @@ from app.models.teaching import Teaching
 from app.models.subject import Subject
 from app.models.user import User
 from app import db
-from app.models.notification import Notification
+from app.models.user_notification import UserNotification
 from app.models.study_material import StudyMaterial
 from datetime import datetime
 import json
@@ -26,9 +26,39 @@ import requests
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
+from sqlalchemy import inspect
 from sqlalchemy.orm.attributes import flag_modified
 
 transcription_bp = Blueprint('transcription', __name__)
+
+
+def _ensure_user_notifications_table():
+    inspector = inspect(db.engine)
+    if not inspector.has_table(UserNotification.__tablename__):
+        UserNotification.__table__.create(bind=db.engine)
+
+
+def _fanout_user_notifications(subject_id: int, title: str, message: str, notif_type: str, source_type: str, source_id: int = None):
+    try:
+        _ensure_user_notifications_table()
+        student_ids = [row[0] for row in db.session.query(Enrollment.student_id).filter_by(subject_id=subject_id).all()]
+        if not student_ids:
+            return
+
+        inbox_items = [
+            UserNotification(
+                recipient_user_id=student_id,
+                title=title,
+                message=message,
+                type=notif_type,
+                source_type=source_type,
+                source_id=source_id,
+            )
+            for student_id in student_ids
+        ]
+        db.session.bulk_save_objects(inbox_items)
+    except Exception as fanout_error:
+        print(f'[NOTIF] Erro no fanout de inbox: {fanout_error}')
 
 
 def _sanitize_summary_text(raw_text):
@@ -865,15 +895,14 @@ def broadcast_activity(current_user, activity_id):
             notif_message = f'Há uma nova pergunta em {subject_name}. Participe!'
             notif_type = 'open_question'
 
-        notif = Notification(
+        _fanout_user_notifications(
+            subject_id=activity.session.subject_id,
             title=notif_title,
             message=notif_message,
-            type=notif_type,
-            subject_id=activity.session.subject_id,
-            teacher_id=current_user.id,
-            sent_to_students=True
+            notif_type=notif_type,
+            source_type='transcription_broadcast',
+            source_id=activity.id,
         )
-        db.session.add(notif)
         db.session.commit()
     except Exception as e:
         print(f'[NOTIF] Erro ao criar notificação de broadcast: {e}')
@@ -1038,15 +1067,16 @@ def share_summary(current_user, activity_id):
 
     # Auto-criar notificação para os alunos
     try:
-        notif = Notification(
-            title=f'📝 Novo Resumo: {activity.title}',
-            message=f'O professor compartilhou um resumo em {subject_name}.',
-            type='summary',
+        summary_title = f'📝 Novo Resumo: {activity.title}'
+        summary_message = f'O professor compartilhou um resumo em {subject_name}.'
+        _fanout_user_notifications(
             subject_id=activity.session.subject_id,
-            teacher_id=current_user.id,
-            sent_to_students=True
+            title=summary_title,
+            message=summary_message,
+            notif_type='summary',
+            source_type='transcription_summary',
+            source_id=activity.id,
         )
-        db.session.add(notif)
         db.session.commit()
     except Exception as e:
         print(f'[NOTIF] Erro ao criar notificação de resumo: {e}')
@@ -2162,7 +2192,6 @@ def distribute_material(current_user, activity_id):
     """
     try:
         from app.models.study_material import StudyMaterial
-        from app.models.notification import Notification
         from werkzeug.utils import secure_filename
         from datetime import datetime
         import os

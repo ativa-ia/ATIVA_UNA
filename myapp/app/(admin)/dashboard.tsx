@@ -7,13 +7,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
-import { API_URL, getAllSettings, updateSetting } from '@/services/api';
+import { API_URL, getAllSettings, updateSetting, getCalendarEvents, createCalendarEvent, deleteCalendarEvent, updateCalendarEvent } from '@/services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SystemHealth } from '@/components/admin/SystemHealth';
 import { AIConfiguration } from '@/components/admin/AIConfiguration';
 
-type Tab = 'overview' | 'users' | 'subjects' | 'enroll' | 'teach';
+type Tab = 'overview' | 'users' | 'subjects' | 'enroll' | 'teach' | 'events';
 type RoleFilter = 'all' | 'student' | 'teacher' | 'admin';
+type EventType = 'event' | 'notice';
+type EventTargetRole = 'student' | 'teacher' | 'both';
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
     { key: 'overview', label: 'Visão Geral', icon: 'dashboard' },
@@ -21,6 +23,7 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
     { key: 'subjects', label: 'Disciplinas', icon: 'menu-book' },
     { key: 'enroll', label: 'Matrículas', icon: 'school' },
     { key: 'teach', label: 'Professores', icon: 'work' },
+    { key: 'events', label: 'Eventos', icon: 'event-note' },
 ];
 
 const ROLE_FILTERS: { key: RoleFilter; label: string }[] = [
@@ -58,6 +61,17 @@ export default function AdminDashboard() {
     const [teachSearch, setTeachSearch] = useState({ teacher: '', subject: '' });
     const [teachPick, setTeachPick] = useState<{ teacherId: number | null; subjectId: number | null }>({ teacherId: null, subjectId: null });
 
+    // Calendar events / notices
+    const [calendarEvents, setCalendarEvents] = useState<any[]>([]);
+    const [eventForm, setEventForm] = useState<{ title: string; description: string; eventDate: string; eventType: EventType; targetRole: EventTargetRole }>({
+        title: '',
+        description: '',
+        eventDate: '',
+        eventType: 'event',
+        targetRole: 'both',
+    });
+    const [editingEventId, setEditingEventId] = useState<number | null>(null);
+
     // Subject detail modal
     const [detailSubject, setDetailSubject] = useState<any>(null);
     const [detailStudents, setDetailStudents] = useState<any[]>([]);
@@ -91,6 +105,10 @@ export default function AdminDashboard() {
             const subjectsData = await subjectsRes.json();
             if (usersData.success) setUsers(usersData.users);
             if (subjectsData.success) setSubjects(subjectsData.subjects);
+
+            const eventsRes = await getCalendarEvents();
+            if (eventsRes.success) setCalendarEvents(eventsRes.events || []);
+
             if (storedRole === 'super_admin') {
                 const settingsRes = await getAllSettings();
                 if (settingsRes.success) setSettingsList(settingsRes.settings);
@@ -189,6 +207,79 @@ export default function AdminDashboard() {
         return formatted.charAt(0).toUpperCase() + formatted.slice(1);
     };
 
+    const getISODateFromOffset = (daysOffset: number) => {
+        const date = new Date();
+        date.setDate(date.getDate() + daysOffset);
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const applyQuickEventDate = (daysOffset: number) => {
+        setEventForm({ ...eventForm, eventDate: getISODateFromOffset(daysOffset) });
+    };
+
+    const handleCreateEvent = async () => {
+        if (!eventForm.title.trim() || !eventForm.eventDate.trim()) {
+            Alert.alert('Campos obrigatórios', 'Informe título e data no formato YYYY-MM-DD.');
+            return;
+        }
+
+        setLoading(true);
+        try {
+            const payload = {
+                title: eventForm.title.trim(),
+                description: eventForm.description.trim(),
+                event_date: eventForm.eventDate.trim(),
+                event_type: eventForm.eventType,
+                target_role: eventForm.targetRole,
+            };
+
+            const result = editingEventId
+                ? await updateCalendarEvent(editingEventId, payload)
+                : await createCalendarEvent(payload);
+
+            if (!result.success) {
+                Alert.alert('Erro', result.message || 'Não foi possível salvar o evento/aviso.');
+                return;
+            }
+
+            Alert.alert('Sucesso', result.message || 'Evento/aviso salvo com sucesso.');
+            setEventForm({
+                title: '',
+                description: '',
+                eventDate: '',
+                eventType: 'event',
+                targetRole: 'both',
+            });
+            setEditingEventId(null);
+            fetchData();
+        } catch (error) {
+            Alert.alert('Erro', 'Falha ao salvar evento/aviso.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeleteEvent = async (eventId: number) => {
+        setLoading(true);
+        try {
+            const result = await deleteCalendarEvent(eventId);
+            if (!result.success) {
+                Alert.alert('Erro', result.message || 'Não foi possível remover o evento.');
+                return;
+            }
+
+            Alert.alert('Sucesso', result.message || 'Evento/aviso removido com sucesso.');
+            fetchData();
+        } catch (error) {
+            Alert.alert('Erro', 'Falha ao remover evento/aviso.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // ============ Computed Stats ============
     const studentCount = visibleUsers.filter(u => u.role === 'student').length;
     const teacherCount = visibleUsers.filter(u => u.role === 'teacher').length;
@@ -253,6 +344,12 @@ export default function AdminDashboard() {
                             <MaterialIcons name="assignment-ind" size={22} color="#f59e0b" />
                         </View>
                         <Text style={styles.quickActionLabel}>Atribuir Prof</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.quickAction} onPress={() => setActiveTab('events')} activeOpacity={0.7}>
+                        <View style={[styles.quickActionIcon, { backgroundColor: '#06b6d415' }]}>
+                            <MaterialIcons name="event-note" size={22} color="#06b6d4" />
+                        </View>
+                        <Text style={styles.quickActionLabel}>Eventos/Avisos</Text>
                     </TouchableOpacity>
                 </View>
             </View>
@@ -592,6 +689,168 @@ export default function AdminDashboard() {
         );
     };
 
+    const renderEvents = () => {
+        const sortedEvents = [...calendarEvents].sort((a, b) => (a.event_date > b.event_date ? 1 : -1));
+
+        return (
+            <View style={styles.tabContent}>
+                <View style={styles.card}>
+                    <Text style={styles.cardTitle}>{editingEventId ? 'Editar Evento/Aviso' : 'Criar Evento/Aviso'}</Text>
+                    <View style={styles.formFields}>
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Título"
+                            placeholderTextColor={colors.zinc400}
+                            value={eventForm.title}
+                            onChangeText={(t) => setEventForm({ ...eventForm, title: t })}
+                        />
+                        <TextInput
+                            style={[styles.input, { minHeight: 80, textAlignVertical: 'top' }]}
+                            placeholder="Descrição (opcional)"
+                            placeholderTextColor={colors.zinc400}
+                            multiline
+                            value={eventForm.description}
+                            onChangeText={(t) => setEventForm({ ...eventForm, description: t })}
+                        />
+                        <TextInput
+                            style={styles.input}
+                            placeholder="Data (YYYY-MM-DD)"
+                            placeholderTextColor={colors.zinc400}
+                            value={eventForm.eventDate}
+                            onChangeText={(t) => setEventForm({ ...eventForm, eventDate: t })}
+                            autoCapitalize="none"
+                        />
+                        <View style={styles.dateQuickRow}>
+                            {[
+                                { label: 'Hoje', days: 0 },
+                                { label: 'Amanhã', days: 1 },
+                                { label: '+7 dias', days: 7 },
+                            ].map((quick) => {
+                                const quickDate = getISODateFromOffset(quick.days);
+                                const isActive = eventForm.eventDate === quickDate;
+
+                                return (
+                                    <TouchableOpacity
+                                        key={quick.label}
+                                        style={[styles.dateQuickChip, isActive && styles.dateQuickChipActive]}
+                                        onPress={() => applyQuickEventDate(quick.days)}
+                                    >
+                                        <Text style={[styles.dateQuickChipText, isActive && styles.dateQuickChipTextActive]}>{quick.label}</Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+
+                        <View style={styles.roleRow}>
+                            {[
+                                { key: 'event', label: 'Evento' },
+                                { key: 'notice', label: 'Aviso' },
+                            ].map((item) => (
+                                <TouchableOpacity
+                                    key={item.key}
+                                    style={[styles.roleChip, eventForm.eventType === item.key && styles.roleChipActive]}
+                                    onPress={() => setEventForm({ ...eventForm, eventType: item.key as EventType })}
+                                >
+                                    <Text style={[styles.roleChipText, eventForm.eventType === item.key && styles.roleChipTextActive]}>{item.label}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        <View style={styles.roleRow}>
+                            {[
+                                { key: 'student', label: 'Alunos' },
+                                { key: 'teacher', label: 'Professores' },
+                                { key: 'both', label: 'Ambos' },
+                            ].map((item) => (
+                                <TouchableOpacity
+                                    key={item.key}
+                                    style={[styles.roleChip, eventForm.targetRole === item.key && styles.roleChipActive]}
+                                    onPress={() => setEventForm({ ...eventForm, targetRole: item.key as EventTargetRole })}
+                                >
+                                    <Text style={[styles.roleChipText, eventForm.targetRole === item.key && styles.roleChipTextActive]}>{item.label}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        <TouchableOpacity style={styles.primaryButton} onPress={handleCreateEvent}>
+                            <MaterialIcons name="event-available" size={18} color={colors.white} />
+                            <Text style={styles.primaryButtonText}>{editingEventId ? 'Salvar Alterações' : 'Publicar no Calendário'}</Text>
+                        </TouchableOpacity>
+                        {editingEventId && (
+                            <TouchableOpacity
+                                style={[styles.primaryButton, { backgroundColor: colors.slate400 }]}
+                                onPress={() => {
+                                    setEditingEventId(null);
+                                    setEventForm({
+                                        title: '',
+                                        description: '',
+                                        eventDate: '',
+                                        eventType: 'event',
+                                        targetRole: 'both',
+                                    });
+                                }}
+                            >
+                                <MaterialIcons name="close" size={18} color={colors.white} />
+                                <Text style={styles.primaryButtonText}>Cancelar Edição</Text>
+                            </TouchableOpacity>
+                        )}
+                    </View>
+                </View>
+
+                <View style={[styles.card, { marginTop: spacing.md }]}>
+                    <Text style={styles.cardTitle}>Eventos e Avisos ({sortedEvents.length})</Text>
+                    {sortedEvents.length === 0 && (
+                        <Text style={styles.emptyText}>Nenhum evento/aviso cadastrado.</Text>
+                    )}
+
+                    {sortedEvents.map((event) => (
+                        <View key={event.id} style={styles.listRow}>
+                            <View style={styles.listRowLeft}>
+                                <View style={[styles.avatar, { backgroundColor: event.event_type === 'notice' ? '#f59e0b20' : '#4f46e520' }]}>
+                                    <MaterialIcons
+                                        name={event.event_type === 'notice' ? 'campaign' : 'event'}
+                                        size={18}
+                                        color={event.event_type === 'notice' ? '#f59e0b' : '#4f46e5'}
+                                    />
+                                </View>
+                                <View>
+                                    <Text style={styles.listRowTitle}>{event.title}</Text>
+                                    <Text style={styles.listRowSub}>
+                                        {event.event_date} • {event.event_type === 'notice' ? 'Aviso' : 'Evento'} • {event.target_role === 'both' ? 'Alunos e Professores' : event.target_role === 'student' ? 'Alunos' : 'Professores'}
+                                    </Text>
+                                    {!!event.description && (
+                                        <Text style={styles.listRowSub}>{event.description}</Text>
+                                    )}
+                                </View>
+                            </View>
+                            <TouchableOpacity
+                                style={styles.deleteBtn}
+                                onPress={() => {
+                                    setEditingEventId(event.id);
+                                    setEventForm({
+                                        title: event.title || '',
+                                        description: event.description || '',
+                                        eventDate: event.event_date || '',
+                                        eventType: event.event_type === 'notice' ? 'notice' : 'event',
+                                        targetRole: event.target_role === 'teacher' ? 'teacher' : event.target_role === 'both' ? 'both' : 'student',
+                                    });
+                                }}
+                            >
+                                <MaterialIcons name="edit" size={18} color={colors.primary} />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.deleteBtn}
+                                onPress={() => confirmDelete(`o evento "${event.title}"`, () => handleDeleteEvent(event.id))}
+                            >
+                                <MaterialIcons name="delete-outline" size={18} color="#ef4444" />
+                            </TouchableOpacity>
+                        </View>
+                    ))}
+                </View>
+            </View>
+        );
+    };
+
     const renderTabContent = () => {
         switch (activeTab) {
             case 'overview': return renderOverview();
@@ -599,6 +858,7 @@ export default function AdminDashboard() {
             case 'subjects': return renderSubjects();
             case 'enroll': return renderEnroll();
             case 'teach': return renderTeach();
+            case 'events': return renderEvents();
             default: return null;
         }
     };
@@ -771,6 +1031,28 @@ const styles = StyleSheet.create({
     },
     cardTitle: { fontSize: typography.fontSize.sm, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.sm },
     formFields: { gap: spacing.sm },
+    dateQuickRow: { flexDirection: 'row', gap: spacing.sm },
+    dateQuickChip: {
+        flex: 1,
+        backgroundColor: '#f1f5f9',
+        borderRadius: borderRadius.md,
+        paddingVertical: 10,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+    },
+    dateQuickChipActive: {
+        backgroundColor: '#4f46e5',
+        borderColor: '#4f46e5',
+    },
+    dateQuickChipText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: colors.textSecondary,
+    },
+    dateQuickChipTextActive: {
+        color: colors.white,
+    },
     input: {
         backgroundColor: '#f1f5f9', paddingHorizontal: spacing.md, paddingVertical: 12,
         borderRadius: borderRadius.md, color: colors.textPrimary, fontSize: typography.fontSize.sm,
