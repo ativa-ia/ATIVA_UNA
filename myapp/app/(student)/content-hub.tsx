@@ -68,7 +68,7 @@ const FOLDER_CONFIG = {
         color: '#F59E0B',
     },
     suporte: {
-        title: 'Material de Suporte',
+        title: 'Material de Reforço',
         icon: 'menu-book' as keyof typeof MaterialIcons.glyphMap,
         color: '#10b981',
     },
