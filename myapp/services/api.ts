@@ -1157,6 +1157,7 @@ export const getStudentMaterials = async (): Promise<Material[]> => {
         size: item.file_size || item.size || undefined,
         url: item.content_url || item.url,
         subjectId: item.subject_id || undefined,
+        source: item.source || undefined,
     }));
 };
 
