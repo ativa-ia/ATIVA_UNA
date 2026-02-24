@@ -43,14 +43,14 @@ export default function SummaryToast({
             Animated.parallel([
                 Animated.spring(translateY, {
                     toValue: 0,
-                    useNativeDriver: true,
+                    useNativeDriver: false,
                     tension: 80,
                     friction: 12,
                 }),
                 Animated.timing(opacity, {
                     toValue: 1,
                     duration: 250,
-                    useNativeDriver: true,
+                    useNativeDriver: false,
                 }),
             ]).start();
 
@@ -74,12 +74,12 @@ export default function SummaryToast({
             Animated.timing(translateY, {
                 toValue: -120,
                 duration: 300,
-                useNativeDriver: true,
+                useNativeDriver: false,
             }),
             Animated.timing(opacity, {
                 toValue: 0,
                 duration: 300,
-                useNativeDriver: true,
+                useNativeDriver: false,
             }),
         ]).start(() => {
             onDismiss?.();

@@ -712,13 +712,13 @@ export default function TranscriptionScreen() {
                         toValue: 1.2,
                         duration: 500,
                         easing: Easing.ease,
-                        useNativeDriver: true,
+                        useNativeDriver: false,
                     }),
                     Animated.timing(pulseAnim, {
                         toValue: 1,
                         duration: 500,
                         easing: Easing.ease,
-                        useNativeDriver: true,
+                        useNativeDriver: false,
                     }),
                 ])
             );
