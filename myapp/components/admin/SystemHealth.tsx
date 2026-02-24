@@ -49,8 +49,8 @@ export const SystemHealth = () => {
     const startPulse = (statusColor: string) => {
         Animated.loop(
             Animated.sequence([
-                Animated.timing(pulseAnim, { toValue: 0.4, duration: 1000, useNativeDriver: true }),
-                Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+                Animated.timing(pulseAnim, { toValue: 0.4, duration: 1000, useNativeDriver: false }),
+                Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: false }),
             ])
         ).start();
     };

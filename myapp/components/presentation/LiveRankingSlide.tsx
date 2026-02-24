@@ -82,7 +82,7 @@ function RaceCar({ student, index, trackWidth }: { student: RankingStudent; inde
         // Animação de movimento horizontal
         Animated.spring(progressAnim, {
             toValue: targetPosition,
-            useNativeDriver: true,
+            useNativeDriver: false,
             tension: 40,
             friction: 8,
         }).start();
@@ -90,7 +90,7 @@ function RaceCar({ student, index, trackWidth }: { student: RankingStudent; inde
         // Animação de troca de posição (vertical)
         Animated.spring(laneAnim, {
             toValue: index * LANE_HEIGHT,
-            useNativeDriver: true,
+            useNativeDriver: false,
             tension: 50,
             friction: 9,
         }).start();
@@ -101,12 +101,12 @@ function RaceCar({ student, index, trackWidth }: { student: RankingStudent; inde
                 Animated.timing(bounceAnim, {
                     toValue: -3,
                     duration: 300,
-                    useNativeDriver: true,
+                    useNativeDriver: false,
                 }),
                 Animated.timing(bounceAnim, {
                     toValue: 0,
                     duration: 300,
-                    useNativeDriver: true,
+                    useNativeDriver: false,
                 }),
             ])
         ).start();

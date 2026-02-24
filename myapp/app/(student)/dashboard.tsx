@@ -145,12 +145,12 @@ export default function StudentDashboardScreen() {
                     Animated.timing(pulseAnim, {
                         toValue: 1.05,
                         duration: 800,
-                        useNativeDriver: true,
+                        useNativeDriver: false,
                     }),
                     Animated.timing(pulseAnim, {
                         toValue: 1,
                         duration: 800,
-                        useNativeDriver: true,
+                        useNativeDriver: false,
                     }),
                 ])
             ).start();

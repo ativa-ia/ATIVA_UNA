@@ -29,7 +29,7 @@ export const FolderCard: React.FC<FolderCardProps> = ({
     const handlePressIn = () => {
         Animated.spring(scaleAnim, {
             toValue: 0.95,
-            useNativeDriver: true,
+            useNativeDriver: false,
             speed: 50,
             bounciness: 4,
         }).start();
@@ -38,7 +38,7 @@ export const FolderCard: React.FC<FolderCardProps> = ({
     const handlePressOut = () => {
         Animated.spring(scaleAnim, {
             toValue: 1,
-            useNativeDriver: true,
+            useNativeDriver: false,
             speed: 50,
             bounciness: 4,
         }).start();

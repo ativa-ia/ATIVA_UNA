@@ -37,12 +37,12 @@ function Spotlight({ delay, side }: { delay: number; side: 'left' | 'right' }) {
                     toValue: 1,
                     duration: 2000,
                     delay: delay,
-                    useNativeDriver: true,
+                    useNativeDriver: false,
                 }),
                 Animated.timing(rotateAnim, {
                     toValue: 0,
                     duration: 2000,
-                    useNativeDriver: true,
+                    useNativeDriver: false,
                 }),
             ])
         ).start();
@@ -82,12 +82,12 @@ function ShineEffect() {
                 Animated.timing(shineAnim, {
                     toValue: 200,
                     duration: 1000,
-                    useNativeDriver: true,
+                    useNativeDriver: false,
                 }),
                 Animated.timing(shineAnim, { // Reset quickly invisible
                     toValue: -100,
                     duration: 0,
-                    useNativeDriver: true
+                    useNativeDriver: false
                 })
             ])
         ).start();
@@ -118,13 +118,13 @@ function PodiumPlace({ student, position, height, delay }: PodiumPlaceProps) {
             Animated.parallel([
                 Animated.spring(slideAnim, {
                     toValue: 0,
-                    useNativeDriver: true,
+                    useNativeDriver: false,
                     tension: 50,
                     friction: 8,
                 }),
                 Animated.spring(scaleAnim, {
                     toValue: 1,
-                    useNativeDriver: true,
+                    useNativeDriver: false,
                     tension: 50,
                     friction: 8,
                 }),
@@ -232,20 +232,20 @@ function ConfettiPiece({ index }: { index: number }) {
                 toValue: height + 100, // Fall off screen
                 duration: randomDuration,
                 delay: randomDelay,
-                useNativeDriver: true,
+                useNativeDriver: false,
             }),
             Animated.timing(rotateAnim, {
                 toValue: 360 * (2 + Math.random() * 2),
                 duration: randomDuration,
                 delay: randomDelay,
-                useNativeDriver: true,
+                useNativeDriver: false,
             }),
             Animated.sequence([
                 Animated.delay(randomDelay + randomDuration * 0.7),
                 Animated.timing(opacityAnim, {
                     toValue: 0,
                     duration: randomDuration * 0.3,
-                    useNativeDriver: true,
+                    useNativeDriver: false,
                 }),
             ]),
             // Sway animation
@@ -254,12 +254,12 @@ function ConfettiPiece({ index }: { index: number }) {
                     Animated.timing(swayAnim, {
                         toValue: 20,
                         duration: 1000 + Math.random() * 500,
-                        useNativeDriver: true,
+                        useNativeDriver: false,
                     }),
                     Animated.timing(swayAnim, {
                         toValue: -20,
                         duration: 1000 + Math.random() * 500,
-                        useNativeDriver: true,
+                        useNativeDriver: false,
                     })
                 ])
             )
