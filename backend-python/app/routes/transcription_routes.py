@@ -653,8 +653,25 @@ def generate_summary(current_user, session_id):
     db.session.flush()
     
     try:
-        # Gerar resumo via IA (retorna string)
+        # Gerar material de reforço via IA (retorna JSON string)
         summary_text = generate_summary(session.full_transcript, session.title)
+        
+        # Tentar parsear como JSON estruturado (novo formato)
+        summary_content = None
+        try:
+            import re as _re
+            clean_text = _re.sub(r'```json\s*|\s*```', '', summary_text).strip()
+            parsed = json.loads(clean_text)
+            if isinstance(parsed, dict) and 'topic' in parsed:
+                # Novo formato estruturado
+                summary_content = parsed
+                summary_content['_format'] = 'structured'
+        except Exception:
+            pass
+        
+        # Fallback: formato legado (texto puro)
+        if summary_content is None:
+            summary_content = {'summary_text': summary_text}
         
         # Criar atividade
         activity = LiveActivity(
@@ -662,7 +679,7 @@ def generate_summary(current_user, session_id):
             checkpoint_id=checkpoint.id,
             activity_type='summary',
             title=f'Resumo - {session.title}',
-            content={'summary_text': summary_text},
+            content=summary_content,
             ai_generated_content=summary_text,
             status='waiting',
             shared_with_students=False
