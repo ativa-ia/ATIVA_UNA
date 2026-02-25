@@ -377,6 +377,38 @@ export default function AdminDashboard() {
                     <SystemHealth />
                     <AIConfiguration />
 
+                    {/* Login Mode Toggle */}
+                    <View style={styles.card}>
+                        <Text style={styles.cardTitle}>Sistema de Login</Text>
+                        <Text style={{ fontSize: 12, color: colors.zinc400, marginBottom: spacing.sm }}>
+                            Define como os usuários acessam o sistema
+                        </Text>
+                        <View style={styles.roleRow}>
+                            {[
+                                { key: 'quick_access', label: 'Acesso Rápido', icon: 'flash-on' as const },
+                                { key: 'traditional', label: 'Login Tradicional', icon: 'lock' as const },
+                            ].map(mode => {
+                                const currentMode = settingsList.find(s => s.key === 'DEFAULT_LOGIN_MODE')?.value || 'quick_access';
+                                const isActive = currentMode === mode.key;
+                                return (
+                                    <TouchableOpacity
+                                        key={mode.key}
+                                        style={[styles.roleChip, isActive && styles.roleChipActive, { flexDirection: 'row', gap: 4, flex: 1, justifyContent: 'center' }]}
+                                        onPress={() => handleAction('settings', {
+                                            key: 'DEFAULT_LOGIN_MODE',
+                                            value: mode.key,
+                                            description: 'Modo de login padrão: quick_access ou traditional',
+                                            is_public: true
+                                        })}
+                                    >
+                                        <MaterialIcons name={mode.icon} size={16} color={isActive ? colors.white : colors.zinc400} />
+                                        <Text style={[styles.roleChipText, isActive && styles.roleChipTextActive]}>{mode.label}</Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+                    </View>
+
                     <View style={styles.card}>
                         <Text style={styles.cardTitle}>Palavra de Ativação</Text>
                         <View style={styles.inlineForm}>

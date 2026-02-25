@@ -27,8 +27,10 @@ def register():
         user = User.create_user(
             email=data['email'],
             password=data['password'],
-            role=data['role'],
-            name=data['name']
+            role=data.get('role', 'student'),
+            name=data['name'],
+            registration_number=data.get('registration_number'),
+            course_id=data.get('course_id')
         )
         
         # Auto-matrícula para estudantes
