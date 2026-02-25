@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
     View,
     Text,
@@ -6,7 +6,6 @@ import {
     ScrollView,
     SafeAreaView,
     TouchableOpacity,
-    Switch,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -21,8 +20,6 @@ import { clearAuth } from '@/services/api';
  * Tela de configurações do aplicativo (MVP - apenas logout)
  */
 export default function SettingsScreen() {
-    const [darkMode, setDarkMode] = useState(true);
-
     const handleLogout = async () => {
         await clearAuth();
         router.replace('/(auth)/login');
@@ -55,53 +52,21 @@ export default function SettingsScreen() {
                     contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
                 >
-                    {/* Aparência */}
-                    <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Aparência</Text>
-
-                        <View style={styles.settingItem}>
-                            <View style={styles.settingInfo}>
-                                <MaterialIcons name="dark-mode" size={24} color={colors.primary} />
-                                <View style={styles.settingText}>
-                                    <Text style={styles.settingLabel}>Modo Escuro</Text>
-                                    <Text style={styles.settingDescription}>
-                                        Ativar tema escuro
-                                    </Text>
-                                </View>
-                            </View>
-                            <Switch
-                                value={darkMode}
-                                onValueChange={setDarkMode}
-                                trackColor={{ false: colors.slate300, true: colors.primary }}
-                                thumbColor={colors.white}
-                            />
-                        </View>
-                    </View>
-
                     {/* Sobre */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Sobre</Text>
 
-                        <TouchableOpacity style={styles.settingItem} activeOpacity={0.7}>
+                        <TouchableOpacity
+                            style={styles.settingItem}
+                            activeOpacity={0.7}
+                            onPress={() => router.push('/about')}
+                        >
                             <View style={styles.settingInfo}>
                                 <MaterialIcons name="info" size={24} color={colors.primary} />
                                 <View style={styles.settingText}>
                                     <Text style={styles.settingLabel}>Sobre o App</Text>
                                     <Text style={styles.settingDescription}>
-                                        Versão 1.0.0
-                                    </Text>
-                                </View>
-                            </View>
-                            <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
-                        </TouchableOpacity>
-
-                        <TouchableOpacity style={styles.settingItem} activeOpacity={0.7}>
-                            <View style={styles.settingInfo}>
-                                <MaterialIcons name="description" size={24} color={colors.primary} />
-                                <View style={styles.settingText}>
-                                    <Text style={styles.settingLabel}>Termos de Uso</Text>
-                                    <Text style={styles.settingDescription}>
-                                        Ler termos e condições
+                                        Conheça o propósito do ATIVA IA
                                     </Text>
                                 </View>
                             </View>
