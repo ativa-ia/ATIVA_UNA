@@ -288,7 +288,13 @@ export default function SocraticScreen() {
             const response = await fetch(TTS_API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text }),
+                body: JSON.stringify({
+                    text,
+                    voice: 'pt_BR-jeff-medium',
+                    mode: 'summary',
+                    bg_id: null,
+                    bg_volume: 0,
+                }),
             });
             if (!response.ok) {
                 console.error('TTS API error:', response.status);
