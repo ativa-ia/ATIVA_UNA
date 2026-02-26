@@ -15,3 +15,4 @@ auth_bp.route('/forgot-password', methods=['POST'])(auth_controller.forgot_passw
 auth_bp.route('/me', methods=['GET'])(token_required(auth_controller.get_me))
 auth_bp.route('/update-profile', methods=['PUT'])(token_required(auth_controller.update_profile))
 auth_bp.route('/change-password', methods=['PUT'])(token_required(auth_controller.change_password))
+auth_bp.route('/support', methods=['POST'])(token_required(auth_controller.send_support_message))

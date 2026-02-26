@@ -140,6 +140,10 @@ Se for usar, registre no app/__init__.py.
 - SUPABASE_URL=...
 - SUPABASE_ANON_KEY=... (ou SUPABASE_SERVICE_KEY)
 
+- RESEND_API_KEY=...
+- SUPPORT_EMAIL_TO=
+- SUPPORT_EMAIL_FROM=(ou email do seu dominio verificado no Resend)
+
 ## Como rodar
 
 1) Criar ambiente virtual

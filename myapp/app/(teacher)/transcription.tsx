@@ -13,6 +13,8 @@ import {
     Modal,
     ActivityIndicator,
     useWindowDimensions,
+    LayoutAnimation,
+    UIManager,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -74,7 +76,7 @@ export default function TranscriptionScreen() {
     const router = useRouter();
     // ... rest of component
     // const { user } = useAuth(); // Se precisar do user
-    const { width } = useWindowDimensions();
+    const { width, height } = useWindowDimensions();
     const isMobile = width < 768; // Breakpoint para mobile/tablet
     const insets = useSafeAreaInsets();
     const params = useLocalSearchParams();
@@ -124,7 +126,7 @@ export default function TranscriptionScreen() {
     const mainContentWrapperProps = isMobile
         ? {
             style: { flex: 1 },
-            contentContainerStyle: { padding: 16, paddingBottom: 100, gap: 16 },
+            contentContainerStyle: { padding: 16, paddingBottom: 12, gap: 16, flexGrow: 1 },
             keyboardShouldPersistTaps: 'handled' as 'handled'
         }
         : {
@@ -226,6 +228,19 @@ export default function TranscriptionScreen() {
     const [showMediaControls, setShowMediaControls] = useState(false);
     const [presentationContentType, setPresentationContentType] = useState<'video' | 'document' | null>(null);
 
+    const mobileLeftPanelStyle = isMobile
+        ? {
+            width: '100%' as const,
+            flex: isTranscriptionCollapsed ? 1 : 0,
+            minHeight: isTranscriptionCollapsed ? Math.max(260, Math.floor(height * 0.45)) : 200,
+        }
+        : null;
+
+    const leftPanelResponsiveStyle = [
+        styles.leftPanel,
+        mobileLeftPanelStyle,
+    ];
+
     const mobileRightPanelStyle = isMobile
         ? { width: '100%' as const, flex: isTranscriptionCollapsed ? 0 : 1, minHeight: isTranscriptionCollapsed ? 92 : 250 }
         : null;
@@ -251,6 +266,27 @@ export default function TranscriptionScreen() {
 
     const [triggerWord, setTriggerWord] = useState('Fred'); // Default
     const [fredCommand, setFredCommand] = useState<string | null>(null); // State for Fred Popup
+
+    useEffect(() => {
+        if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+            UIManager.setLayoutAnimationEnabledExperimental(true);
+        }
+    }, []);
+
+    const animatePanels = useCallback(() => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    }, []);
+
+    const toggleTranscriptionCollapse = useCallback(() => {
+        animatePanels();
+        setIsTranscriptionCollapsed((prev) => !prev);
+    }, [animatePanels]);
+
+    const expandTranscription = useCallback(() => {
+        if (!isTranscriptionCollapsed) return;
+        animatePanels();
+        setIsTranscriptionCollapsed(false);
+    }, [animatePanels, isTranscriptionCollapsed]);
 
     // Tutorial removido - tutorialSteps
 
@@ -3463,8 +3499,8 @@ export default function TranscriptionScreen() {
             <MainContentWrapper {...mainContentWrapperProps}>
                 {/* Painel Esquerdo - Conteúdo Gerado */}
                 {/* No mobile, se não tiver conteúdo gerado (modo 'none'), pode esconder esse painel ou deixá-lo menor */}
-                {(displayMode !== 'none' || !isMobile) && (
-                    <View style={[styles.leftPanel, isMobile && { width: '100%', flex: 0, minHeight: 200 }]}>
+                {(displayMode !== 'none' || !isMobile || isTranscriptionCollapsed) && (
+                    <View style={leftPanelResponsiveStyle}>
                         <View style={styles.panelHeader}>
                             <MaterialIcons
                                 name={displayMode === 'quiz' ? 'quiz' : 'summarize'}
@@ -3754,22 +3790,33 @@ export default function TranscriptionScreen() {
                 {/* Painel Direito - Transcrição */}
                 <View style={rightPanelResponsiveStyle}>
                     <View style={styles.panelHeader}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <View style={styles.transcriptionHeaderLeft}>
                             <MaterialIcons name="mic" size={20} color={colors.primary} />
                             <Text style={styles.panelTitle}>Transcrição</Text>
                         </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                            <Text style={styles.wordCount}>{wordCount} palavras</Text>
+                        <View style={styles.transcriptionHeaderRight}>
+                            <Text
+                                style={[
+                                    styles.wordCount,
+                                    isTranscriptionCollapsed && !isMobile ? styles.wordCountCompactDesktop : null,
+                                ]}
+                                numberOfLines={1}
+                            >
+                                {isTranscriptionCollapsed && !isMobile ? `${wordCount}p` : `${wordCount} palavras`}
+                            </Text>
                             <TouchableOpacity
-                                style={styles.compactButton}
-                                onPress={() => setIsTranscriptionCollapsed(prev => !prev)}
+                                style={[
+                                    styles.compactButton,
+                                    isTranscriptionCollapsed && !isMobile ? styles.compactButtonCollapsedDesktop : null,
+                                ]}
+                                onPress={toggleTranscriptionCollapse}
                             >
                                 <MaterialIcons
                                     name={isTranscriptionCollapsed ? 'expand-more' : 'expand-less'}
                                     size={20}
                                     color={isTranscriptionCollapsed ? colors.primary : colors.slate500}
                                 />
-                                {!isMobile && (
+                                {!isMobile && !isTranscriptionCollapsed && (
                                     <Text style={[styles.compactButtonText, isTranscriptionCollapsed && styles.compactButtonTextActive]}>
                                         {isTranscriptionCollapsed ? 'Expandir' : 'Compactar'}
                                     </Text>
@@ -3785,9 +3832,12 @@ export default function TranscriptionScreen() {
 
                     {isTranscriptionCollapsed ? (
                         <TouchableOpacity
-                            style={styles.transcriptionCollapsedInfo}
+                            style={[
+                                styles.transcriptionCollapsedInfo,
+                                !isMobile ? styles.transcriptionCollapsedInfoDesktop : null,
+                            ]}
                             activeOpacity={0.8}
-                            onPress={() => setIsTranscriptionCollapsed(false)}
+                            onPress={expandTranscription}
                         >
                             <View style={styles.collapsedHeaderRow}>
                                 <View style={styles.collapsedBadge}>
@@ -3796,7 +3846,7 @@ export default function TranscriptionScreen() {
                                 </View>
                             </View>
 
-                            <Text style={styles.collapsedPreviewText}>
+                            <Text style={styles.collapsedPreviewText} numberOfLines={isMobile ? 3 : 8}>
                                 {collapsedPreview || 'Nenhum conteúdo transcrito ainda.'}
                             </Text>
 
@@ -4340,6 +4390,12 @@ const styles = StyleSheet.create({
     wordCount: {
         fontSize: typography.fontSize.sm,
         color: colors.textSecondary,
+        flexShrink: 1,
+    },
+    wordCountCompactDesktop: {
+        minWidth: 34,
+        textAlign: 'right',
+        fontSize: typography.fontSize.xs,
     },
     infoText: {
         fontSize: typography.fontSize.sm,
@@ -4379,9 +4435,10 @@ const styles = StyleSheet.create({
         elevation: 4,
     },
     rightPanelCollapsedDesktop: {
-        flex: 0.42,
-        minWidth: 320,
-        maxWidth: 460,
+        flex: 0,
+        width: 290,
+        minWidth: 260,
+        maxWidth: 320,
     },
     panelHeader: {
         flexDirection: 'row',
@@ -4398,6 +4455,19 @@ const styles = StyleSheet.create({
         fontWeight: typography.fontWeight.semibold,
         color: colors.textPrimary,
     },
+    transcriptionHeaderLeft: {
+        flex: 1,
+        minWidth: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    transcriptionHeaderRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        flexShrink: 0,
+    },
     panelScroll: {
         flex: 1,
     },
@@ -4408,6 +4478,7 @@ const styles = StyleSheet.create({
     compactButton: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
         gap: 4,
         backgroundColor: colors.primaryOpacity20,
         borderRadius: borderRadius.default,
@@ -4415,6 +4486,10 @@ const styles = StyleSheet.create({
         paddingVertical: 4,
         borderWidth: 1,
         borderColor: colors.primaryOpacity30,
+        minWidth: 38,
+    },
+    compactButtonCollapsedDesktop: {
+        paddingHorizontal: 6,
     },
     compactButtonText: {
         fontSize: typography.fontSize.sm,
@@ -4434,6 +4509,11 @@ const styles = StyleSheet.create({
         paddingVertical: spacing.sm,
         paddingHorizontal: spacing.base,
         gap: spacing.sm,
+    },
+    transcriptionCollapsedInfoDesktop: {
+        paddingVertical: spacing.md,
+        minHeight: 220,
+        justifyContent: 'space-between',
     },
     collapsedHeaderRow: {
         flexDirection: 'row',
