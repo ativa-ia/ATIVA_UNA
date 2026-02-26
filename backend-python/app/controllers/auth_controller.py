@@ -1,12 +1,73 @@
+import json
 from flask import request, jsonify
 from marshmallow import ValidationError
 from app.models.user import User
 from app.models.subject import Subject
 from app.models.enrollment import Enrollment
 from app.models.teaching import Teaching
+from app.models.system_setting import SystemSetting
 from app.utils.jwt_utils import generate_token
 from app.schemas.user_schema import register_schema, login_schema, forgot_password_schema
 from app import db
+
+
+def _perform_auto_enrollment(user):
+    """Lógica compartilhada de auto-matrícula.
+    Consulta as configurações ENABLE_AUTO_ENROLLMENT e AUTO_ENROLLMENT_SUBJECTS
+    antes de matricular o aluno.
+    Retorna a quantidade de matrículas criadas (não faz commit).
+    """
+    # Verificar se auto-matrícula está habilitada
+    enable_setting = SystemSetting.query.get('ENABLE_AUTO_ENROLLMENT')
+    if enable_setting and enable_setting.value.lower() == 'false':
+        print(f'ℹ️ Auto-matrícula desabilitada para {user.email}')
+        return 0
+
+    # Verificar quais disciplinas matricular
+    subjects_setting = SystemSetting.query.get('AUTO_ENROLLMENT_SUBJECTS')
+    
+    if subjects_setting and subjects_setting.value and subjects_setting.value != 'all':
+        try:
+            subject_ids = json.loads(subjects_setting.value)
+            if isinstance(subject_ids, list) and len(subject_ids) > 0:
+                subjects = Subject.query.filter(Subject.id.in_(subject_ids)).all()
+            else:
+                subjects = Subject.query.all()
+        except (json.JSONDecodeError, TypeError):
+            subjects = Subject.query.all()
+    else:
+        subjects = Subject.query.all()
+
+    if not subjects:
+        print(f'⚠️ Nenhuma disciplina disponível para auto-matrícula de {user.email}')
+        return 0
+
+    from app.models.class_model import Class
+    default_class = Class.query.first()
+
+    if not default_class:
+        print(f'⚠️ Nenhuma turma disponível para auto-matrícula de {user.email}')
+        return 0
+
+    enrollments_created = 0
+    for subject in subjects:
+        # Evitar duplicatas
+        existing = Enrollment.query.filter_by(
+            student_id=user.id, subject_id=subject.id
+        ).first()
+        if not existing:
+            enrollment = Enrollment(
+                student_id=user.id,
+                subject_id=subject.id,
+                class_id=default_class.id
+            )
+            db.session.add(enrollment)
+            enrollments_created += 1
+
+    if enrollments_created > 0:
+        print(f'✅ Auto-matrícula: {enrollments_created} disciplinas para {user.email}')
+    
+    return enrollments_created
 
 
 def register():
@@ -33,33 +94,9 @@ def register():
             course_id=data.get('course_id')
         )
         
-        # Auto-matrícula para estudantes
+        # Auto-matrícula para estudantes (consulta configurações)
         if user.role == 'student':
-            # Buscar todas as disciplinas disponíveis
-            all_subjects = Subject.query.all()
-            
-            if all_subjects:
-                # Buscar primeira turma disponível
-                from app.models.class_model import Class
-                default_class = Class.query.first()
-                
-                if default_class:
-                    # Criar matrículas para cada disciplina
-                    enrollments_created = 0
-                    for subject in all_subjects:
-                        enrollment = Enrollment(
-                            student_id=user.id,
-                            subject_id=subject.id,
-                            class_id=default_class.id  # Usar primeira turma disponível
-                        )
-                        db.session.add(enrollment)
-                        enrollments_created += 1
-                    
-                    print(f'✅ Auto-matrícula no registro: {enrollments_created} disciplinas para aluno {user.email}')
-                else:
-                    print(f'⚠️ Nenhuma turma disponível para auto-matrícula de {user.email}')
-            else:
-                print(f'⚠️ Nenhuma disciplina disponível para auto-matrícula de {user.email}')
+            _perform_auto_enrollment(user)
         
         # Commit do usuário e matrículas
         db.session.commit()
@@ -337,25 +374,8 @@ def quick_access():
                 name=name
             )
             
-            # Auto-matrícula em todas as disciplinas
-            all_subjects = Subject.query.all()
-            
-            if all_subjects:
-                from app.models.class_model import Class
-                default_class = Class.query.first()
-                
-                if default_class:
-                    enrollments_created = 0
-                    for subject in all_subjects:
-                        enrollment = Enrollment(
-                            student_id=user.id,
-                            subject_id=subject.id,
-                            class_id=default_class.id
-                        )
-                        db.session.add(enrollment)
-                        enrollments_created += 1
-                    
-                    print(f'✅ Auto-matrícula quick access: {enrollments_created} disciplinas para {email}')
+            # Auto-matrícula (consulta configurações)
+            _perform_auto_enrollment(user)
             
             # Commit
             db.session.commit()
