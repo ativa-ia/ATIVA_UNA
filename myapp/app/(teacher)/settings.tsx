@@ -52,6 +52,28 @@ export default function SettingsScreen() {
                     contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
                 >
+                    {/* Conta */}
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Conta</Text>
+
+                        <TouchableOpacity
+                            style={styles.settingItem}
+                            activeOpacity={0.7}
+                            onPress={() => router.push('/profile-settings')}
+                        >
+                            <View style={styles.settingInfo}>
+                                <MaterialIcons name="person" size={24} color={colors.primary} />
+                                <View style={styles.settingText}>
+                                    <Text style={styles.settingLabel}>Perfil e Segurança</Text>
+                                    <Text style={styles.settingDescription}>
+                                        Alterar dados da conta e senha
+                                    </Text>
+                                </View>
+                            </View>
+                            <MaterialIcons name="chevron-right" size={24} color={colors.textSecondary} />
+                        </TouchableOpacity>
+                    </View>
+
                     {/* Ferramentas */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Ferramentas</Text>

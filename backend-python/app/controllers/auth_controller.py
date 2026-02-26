@@ -1,4 +1,7 @@
 import json
+import os
+import re
+import requests
 from flask import request, jsonify
 from marshmallow import ValidationError
 from app.models.user import User
@@ -9,6 +12,67 @@ from app.models.system_setting import SystemSetting
 from app.utils.jwt_utils import generate_token
 from app.schemas.user_schema import register_schema, login_schema, forgot_password_schema
 from app import db
+
+
+def _send_support_email(from_user, subject: str, message: str):
+    """Envia email de suporte via Resend API. Retorna (ok, error_message)."""
+    resend_api_key = (os.getenv('RESEND_API_KEY') or '').strip().strip('"').strip("'")
+    support_to = (os.getenv('SUPPORT_EMAIL_TO', 'suporte1ativa@gmail.com') or '').strip().strip('"').strip("'")
+    support_from = (os.getenv('SUPPORT_EMAIL_FROM', 'onboarding@resend.dev') or '').strip().strip('"').strip("'")
+
+    if not resend_api_key:
+        return False, 'Configuração de email indisponível no servidor (RESEND_API_KEY ausente)'
+
+    email_regex = r'^[^\s@]+@[^\s@]+\.[^\s@]+$'
+    if not re.match(email_regex, support_from):
+        return False, 'SUPPORT_EMAIL_FROM inválido. Use apenas um email, ex: onboarding@resend.dev'
+
+    if not re.match(email_regex, support_to):
+        return False, 'SUPPORT_EMAIL_TO inválido. Use apenas um email de destino'
+
+    email_subject = f'[ATIVA IA][SUPORTE] {subject.strip()}'
+    email_text = (
+        f'Nova solicitação de suporte enviada pelo app.\n\n'
+        f'Usuário ID: {from_user.id}\n'
+        f'Nome: {from_user.name}\n'
+        f'Email: {from_user.email}\n'
+        f'Papel: {from_user.role}\n\n'
+        f'Mensagem:\n{message.strip()}\n'
+    )
+
+    payload = {
+        'from': support_from,
+        'to': [support_to],
+        'subject': email_subject,
+        'text': email_text,
+        'reply_to': from_user.email,
+    }
+
+    try:
+        response = requests.post(
+            'https://api.resend.com/emails',
+            headers={
+                'Authorization': f'Bearer {resend_api_key}',
+                'Content-Type': 'application/json',
+            },
+            json=payload,
+            timeout=20,
+        )
+
+        if response.status_code >= 400:
+            print(f'Erro Resend [{response.status_code}]: {response.text}')
+            try:
+                error_json = response.json()
+                resend_message = error_json.get('message') or error_json.get('error') or response.text
+            except Exception:
+                resend_message = response.text
+
+            return False, f'Erro Resend ({response.status_code}): {resend_message}'
+
+        return True, None
+    except Exception as e:
+        print(f'Erro ao enviar email de suporte: {str(e)}')
+        return False, 'Não foi possível enviar o suporte no momento'
 
 
 def _perform_auto_enrollment(user):
@@ -401,4 +465,55 @@ def quick_access():
             'success': False,
             'message': 'Erro ao processar acesso',
             'error_detail': str(e)
+        }), 500
+
+
+def send_support_message(current_user):
+    """Recebe mensagem de suporte do app e envia por email sem app externo."""
+    try:
+        data = request.json or {}
+        subject = (data.get('subject') or '').strip()
+        message = (data.get('message') or '').strip()
+
+        if not subject:
+            return jsonify({
+                'success': False,
+                'message': 'Assunto é obrigatório'
+            }), 400
+
+        if not message:
+            return jsonify({
+                'success': False,
+                'message': 'Mensagem é obrigatória'
+            }), 400
+
+        if len(subject) > 120:
+            return jsonify({
+                'success': False,
+                'message': 'Assunto muito longo (máximo 120 caracteres)'
+            }), 400
+
+        if len(message) > 4000:
+            return jsonify({
+                'success': False,
+                'message': 'Mensagem muito longa (máximo 4000 caracteres)'
+            }), 400
+
+        ok, error_message = _send_support_email(current_user, subject, message)
+        if not ok:
+            return jsonify({
+                'success': False,
+                'message': error_message or 'Erro ao enviar suporte'
+            }), 500
+
+        return jsonify({
+            'success': True,
+            'message': 'Mensagem enviada para suporte com sucesso'
+        }), 200
+
+    except Exception as e:
+        print(f'Erro no envio de suporte: {str(e)}')
+        return jsonify({
+            'success': False,
+            'message': 'Erro ao processar solicitação de suporte'
         }), 500
