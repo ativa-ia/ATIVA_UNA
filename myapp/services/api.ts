@@ -548,6 +548,25 @@ export const autoEnrollStudent = async (): Promise<AutoEnrollResponse> => {
     return response.json();
 };
 
+// ========== COURSES API ==========
+
+export interface CourseOption {
+    id: number;
+    name: string;
+    code: string;
+    description?: string;
+}
+
+// Buscar cursos disponíveis (sem auth, para tela de cadastro)
+export const getPublicCourses = async (): Promise<{ success: boolean; courses: CourseOption[] }> => {
+    try {
+        const response = await fetch(`${API_URL}/courses/public`);
+        return response.json();
+    } catch (error) {
+        return { success: false, courses: [] };
+    }
+};
+
 
 // ========== PERFORMANCE API ==========
 
