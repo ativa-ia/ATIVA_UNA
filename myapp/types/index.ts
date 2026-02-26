@@ -33,6 +33,7 @@ export interface Material {
     size?: string;
     url?: string;
     subjectId?: number;
+    source?: string;
 }
 
 export interface Student {

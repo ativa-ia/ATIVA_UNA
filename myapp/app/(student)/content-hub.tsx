@@ -51,6 +51,16 @@ interface ActivityHistoryItem {
     my_percentage?: number;
 }
 
+interface StructuredSummary {
+    _format: 'structured';
+    topic: string;
+    essential_concept: string;
+    key_points: string[];
+    practical_example: string;
+    common_mistakes?: string[];
+    reflection: string;
+}
+
 type FolderType = 'quizzes' | 'resumos' | 'suporte' | 'audio' | null;
 type SearchableFolder = Exclude<FolderType, null>;
 
@@ -68,7 +78,7 @@ const FOLDER_CONFIG = {
         color: '#F59E0B',
     },
     suporte: {
-        title: 'Material de Suporte',
+        title: 'Material de Reforço',
         icon: 'menu-book' as keyof typeof MaterialIcons.glyphMap,
         color: '#10b981',
     },
@@ -103,6 +113,7 @@ export default function ContentHubScreen() {
         audio: '',
     });
     const [exportingId, setExportingId] = useState<number | null>(null);
+    const [exportingMaterialId, setExportingMaterialId] = useState<number | string | null>(null);
     const [audioModalVisible, setAudioModalVisible] = useState(false);
     const [audioLoading, setAudioLoading] = useState(false);
     const [selectedAudio, setSelectedAudio] = useState<{ id: string; title: string; url: string } | null>(null);
@@ -110,6 +121,11 @@ export default function ContentHubScreen() {
     const [isPlayingAudio, setIsPlayingAudio] = useState(false);
     const [audioPositionMs, setAudioPositionMs] = useState(0);
     const [audioDurationMs, setAudioDurationMs] = useState(0);
+    const [summaryDetailItem, setSummaryDetailItem] = useState<ActivityHistoryItem | null>(null);
+    const [quizDetailItem, setQuizDetailItem] = useState<ActivityHistoryItem | null>(null);
+    const [showQuizAnswers, setShowQuizAnswers] = useState(false);
+    const [supportViewerData, setSupportViewerData] = useState<{ title: string; content: string } | null>(null);
+    const [supportViewerLoading, setSupportViewerLoading] = useState(false);
 
     // ============ DATA LOADING ============
 
@@ -229,6 +245,25 @@ export default function ContentHubScreen() {
         return text || 'Sem conteúdo';
     };
 
+    /** Tenta extrair dados estruturados do content de uma atividade de resumo */
+    const parseStructuredSummary = (item: ActivityHistoryItem): StructuredSummary | null => {
+        const content = item.activity.content;
+        if (content && typeof content === 'object' && content._format === 'structured' && content.topic) {
+            return content as StructuredSummary;
+        }
+        // Tenta parsear o ai_generated_content como JSON estruturado (fallback)
+        try {
+            const raw = item.activity.ai_generated_content;
+            if (raw && raw.trim().startsWith('{')) {
+                const parsed = JSON.parse(raw);
+                if (parsed && parsed.topic) {
+                    return { ...parsed, _format: 'structured' } as StructuredSummary;
+                }
+            }
+        } catch { /* ignore */ }
+        return null;
+    };
+
     // ============ PDF GENERATION ============
 
     const generateQuizHTML = (item: ActivityHistoryItem) => {
@@ -285,9 +320,65 @@ export default function ContentHubScreen() {
     const generateSummaryHTML = (item: ActivityHistoryItem) => {
         const { activity } = item;
         const date = formatDate(activity.created_at);
+        const structured = parseStructuredSummary(item);
+
+        if (structured) {
+            const keyPointsHtml = (structured.key_points || []).map(p => `<li>${p}</li>`).join('');
+            const mistakesHtml = (structured.common_mistakes || []).map(m => `<li>${m}</li>`).join('');
+            return `
+            <html>
+            <head>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+                <style>
+                    body { font-family: 'Helvetica', sans-serif; color: #1e293b; padding: 24px; line-height: 1.7; background: #f8fafc; }
+                    h1 { color: #4f46e5; margin-bottom: 4px; font-size: 22px; }
+                    .meta { color: #64748b; font-size: 13px; margin-bottom: 24px; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; }
+                    .section { margin-bottom: 20px; padding: 16px; border-radius: 10px; }
+                    .concept { background: linear-gradient(135deg, #eef2ff, #e0e7ff); border-left: 4px solid #4f46e5; }
+                    .concept h2 { color: #4f46e5; font-size: 16px; margin: 0 0 8px 0; }
+                    .concept p { font-size: 15px; margin: 0; }
+                    .points { background: #f0fdf4; border-left: 4px solid #22c55e; }
+                    .points h2 { color: #16a34a; font-size: 16px; margin: 0 0 8px 0; }
+                    .points ul { margin: 0; padding-left: 20px; }
+                    .points li { margin-bottom: 6px; font-size: 14px; }
+                    .example { background: #fffbeb; border-left: 4px solid #f59e0b; }
+                    .example h2 { color: #d97706; font-size: 16px; margin: 0 0 8px 0; }
+                    .example p { font-size: 15px; margin: 0; }
+                    .mistakes { background: #fef2f2; border-left: 4px solid #ef4444; }
+                    .mistakes h2 { color: #dc2626; font-size: 16px; margin: 0 0 8px 0; }
+                    .mistakes ul { margin: 0; padding-left: 20px; }
+                    .mistakes li { margin-bottom: 6px; font-size: 14px; }
+                    .reflection { background: #faf5ff; border-left: 4px solid #a855f7; }
+                    .reflection h2 { color: #9333ea; font-size: 16px; margin: 0 0 8px 0; }
+                    .reflection p { font-size: 15px; margin: 0; font-style: italic; }
+                </style>
+            </head>
+            <body>
+                <h1>${structured.topic}</h1>
+                <div class="meta">
+                    <p>Disciplina: ${subjectName} · Data: ${date}</p>
+                </div>
+                <div class="section concept">
+                    <h2>📖 Conceito Essencial</h2>
+                    <p>${structured.essential_concept.replace(/\n/g, '<br>')}</p>
+                </div>
+                ${keyPointsHtml ? `<div class="section points"><h2>✅ Pontos-Chave</h2><ul>${keyPointsHtml}</ul></div>` : ''}
+                <div class="section example">
+                    <h2>💡 Exemplo Prático</h2>
+                    <p>${structured.practical_example.replace(/\n/g, '<br>')}</p>
+                </div>
+                ${mistakesHtml ? `<div class="section mistakes"><h2>⚠️ Erros Comuns</h2><ul>${mistakesHtml}</ul></div>` : ''}
+                <div class="section reflection">
+                    <h2>🤔 Para Refletir</h2>
+                    <p>${structured.reflection}</p>
+                </div>
+            </body>
+            </html>`;
+        }
+
+        // Fallback: formato legado
         const summaryText = sanitizeSummaryText(activity.content?.summary_text || activity.ai_generated_content);
         const formattedText = summaryText.replace(/\n/g, '<br>');
-
         return `
             <html>
             <head>
@@ -341,6 +432,80 @@ export default function ContentHubScreen() {
         }
     };
 
+    const handleMaterialExportPDF = async (material: Material) => {
+        try {
+            if (!material.url) return;
+            setExportingMaterialId(material.id);
+            const { API_URL } = require('@/services/api');
+            let fullUrl = material.url;
+            if (!material.url.startsWith('http')) {
+                const baseUrl = API_URL.replace('/api', '');
+                fullUrl = `${baseUrl}${material.url}`;
+            }
+
+            let textContent = '';
+            try {
+                const res = await fetch(fullUrl);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                textContent = await res.text();
+            } catch (fetchErr) {
+                console.error('Erro ao buscar conteúdo para PDF:', fetchErr);
+                Alert.alert('Erro', 'Não foi possível baixar o conteúdo do material.');
+                return;
+            }
+
+            const formattedText = textContent
+                .replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                .replace(/\n\n/g, '<br><br>')
+                .replace(/\n/g, '<br>');
+
+            const uploadDateStr = (material as any).uploadDate ? formatDate((material as any).uploadDate) : '';
+
+            const html = `
+            <html>
+            <head>
+                <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+                <style>
+                    body { font-family: 'Helvetica', sans-serif; color: #1e293b; padding: 24px; line-height: 1.7; background: #f8fafc; }
+                    h1 { color: #10b981; margin-bottom: 4px; font-size: 22px; }
+                    .meta { color: #64748b; font-size: 13px; margin-bottom: 24px; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; }
+                    .content-box { background: #fff; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 15px; }
+                </style>
+            </head>
+            <body>
+                <h1>${material.title}</h1>
+                <div class="meta">
+                    <p>Disciplina: ${subjectName} ${uploadDateStr ? '· Data: ' + uploadDateStr : ''}</p>
+                </div>
+                <div class="content-box">
+                    ${formattedText}
+                </div>
+            </body>
+            </html>
+            `;
+
+            if (Platform.OS === 'web') {
+                const printWindow = window.open('', '', 'width=800,height=600');
+                if (printWindow) {
+                    printWindow.document.write(html);
+                    printWindow.document.close();
+                    printWindow.focus();
+                    setTimeout(() => printWindow.print(), 500);
+                } else {
+                    Alert.alert('Atenção', 'Pop-up bloqueado. Permita pop-ups para gerar o PDF.');
+                }
+            } else {
+                const { uri } = await Print.printToFileAsync({ html });
+                await Sharing.shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
+            }
+        } catch (error) {
+            console.error('Erro PDF Material:', error);
+            Alert.alert('Erro', 'Falha ao gerar PDF do material.');
+        } finally {
+            setExportingMaterialId(null);
+        }
+    };
+
     // ============ MATERIAL HANDLING ============
 
     const handleMaterialPress = async (material: Material) => {
@@ -376,9 +541,33 @@ export default function ContentHubScreen() {
                 const baseUrl = API_URL.replace('/api', '');
                 fullUrl = `${baseUrl}${material.url}`;
             }
+
+            // Para documentos de texto (.md, .txt), buscar e mostrar in-app
+            const isTextDoc = material.type === 'document' || fullUrl.endsWith('.md') || fullUrl.endsWith('.txt');
+            if (isTextDoc) {
+                setSupportViewerLoading(true);
+                try {
+                    const res = await fetch(fullUrl);
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const textContent = await res.text();
+                    setSupportViewerData({
+                        title: material.title,
+                        content: textContent,
+                    });
+                } catch (fetchErr) {
+                    console.error('Erro ao buscar conteúdo:', fetchErr);
+                    // Fallback: abrir no navegador
+                    await Linking.openURL(fullUrl);
+                } finally {
+                    setSupportViewerLoading(false);
+                }
+                return;
+            }
+
             await Linking.openURL(fullUrl);
         } catch (error) {
             setAudioLoading(false);
+            setSupportViewerLoading(false);
             console.error('Erro ao abrir material:', error);
             Alert.alert('Erro', 'Não foi possível abrir o material.');
         }
@@ -477,84 +666,407 @@ export default function ContentHubScreen() {
             });
         };
 
-        return (
-            <View key={item.activity.id} style={itemStyles.card}>
-                <View style={itemStyles.cardHeader}>
-                    <View style={{ flex: 1 }}>
-                        <Text style={itemStyles.cardTitle} numberOfLines={2}>{item.activity.title}</Text>
-                        <Text style={itemStyles.cardDate}>{formatDate(item.activity.created_at)}</Text>
-                    </View>
+        const questionsCount = item.activity.content?.questions?.length || 0;
 
-                    <View style={itemStyles.quizHeaderRight}>
-                        <View style={[
-                            itemStyles.scoreBadge,
-                            { backgroundColor: isGood ? '#DCFCE7' : '#FEE2E2', borderColor: isGood ? '#86EFAC' : '#FECACA' }
-                        ]}>
-                            <Text style={[itemStyles.scoreText, { color: isGood ? '#166534' : '#991B1B' }]}>
-                                {Math.round(percentage)}%
-                            </Text>
+        return (
+            <TouchableOpacity
+                key={item.activity.id}
+                style={quizCardStyles.card}
+                onPress={() => {
+                    setQuizDetailItem(item);
+                    setShowQuizAnswers(false);
+                }}
+                activeOpacity={0.7}
+            >
+                <View style={quizCardStyles.accentBar} />
+
+                <View style={quizCardStyles.cardBody}>
+                    <View style={quizCardStyles.headerRow}>
+                        <View style={quizCardStyles.iconWrap}>
+                            <MaterialIcons name="quiz" size={20} color="#4f46e5" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={quizCardStyles.title} numberOfLines={2}>{item.activity.title}</Text>
+                            <Text style={quizCardStyles.date}>{formatDate(item.activity.created_at)}</Text>
                         </View>
 
-                        <View style={itemStyles.quizIconActionsRow}>
+                        <View style={quizCardStyles.actions}>
+                            <View style={[
+                                quizCardStyles.scoreBadge,
+                                { backgroundColor: isGood ? '#DCFCE7' : '#FEE2E2', borderColor: isGood ? '#86EFAC' : '#FECACA' }
+                            ]}>
+                                <Text style={[quizCardStyles.scoreText, { color: isGood ? '#166534' : '#991B1B' }]}>
+                                    {Math.round(percentage)}%
+                                </Text>
+                            </View>
                             <TouchableOpacity
-                                style={[itemStyles.quizIconButton, isExporting && { opacity: 0.6 }]}
-                                onPress={() => !isExporting && handleExportPDF(item)}
+                                style={[quizCardStyles.actionBtn, quizCardStyles.pdfBtn, isExporting && { opacity: 0.6 }]}
+                                onPress={(e) => {
+                                    e.stopPropagation?.();
+                                    !isExporting && handleExportPDF(item);
+                                }}
                                 disabled={isExporting}
                             >
                                 {isExporting ? (
                                     <ActivityIndicator size="small" color={colors.white} />
                                 ) : (
-                                    <MaterialIcons name="picture-as-pdf" size={15} color={colors.white} />
+                                    <MaterialIcons name="picture-as-pdf" size={14} color={colors.white} />
                                 )}
-                            </TouchableOpacity>
-
-                            <TouchableOpacity
-                                style={[itemStyles.quizIconButton, itemStyles.quizPracticeIconButton]}
-                                onPress={handleRetakeQuiz}
-                            >
-                                <MaterialIcons name="replay" size={15} color={colors.primary} />
                             </TouchableOpacity>
                         </View>
                     </View>
+
+                    <Text style={quizCardStyles.preview}>
+                        {questionsCount} {questionsCount === 1 ? 'questão' : 'questões'} resolvidas neste quiz.
+                    </Text>
+
+                    <View style={quizCardStyles.tapHint}>
+                        <Text style={quizCardStyles.tapHintText}>Toque para exibir</Text>
+                        <MaterialIcons name="arrow-forward-ios" size={10} color="#94a3b8" />
+                    </View>
                 </View>
-            </View>
+            </TouchableOpacity>
         );
     };
 
     const renderSummaryItem = (item: ActivityHistoryItem) => {
         const isExporting = exportingId === item.activity.id;
-        const previewText = sanitizeSummaryText(
-            item.activity.content?.summary_text || item.activity.ai_generated_content
-        );
+        const structured = parseStructuredSummary(item);
+        const previewText = structured
+            ? structured.essential_concept.substring(0, 120) + (structured.essential_concept.length > 120 ? '...' : '')
+            : sanitizeSummaryText(item.activity.content?.summary_text || item.activity.ai_generated_content).substring(0, 120) + '...';
 
         return (
-            <View key={item.activity.id} style={itemStyles.card}>
-                <View style={itemStyles.cardHeader}>
-                    <View style={{ flex: 1 }}>
-                        <Text style={itemStyles.cardTitle} numberOfLines={2}>{item.activity.title}</Text>
-                        <Text style={itemStyles.cardDate}>{formatDate(item.activity.created_at)}</Text>
-                    </View>
-                    <TouchableOpacity
-                        style={[itemStyles.summaryIconButton, isExporting && { opacity: 0.6 }]}
-                        onPress={() => !isExporting && handleExportPDF(item)}
-                        disabled={isExporting}
-                    >
-                        {isExporting ? (
-                            <ActivityIndicator size="small" color={colors.white} />
-                        ) : (
-                            <MaterialIcons name="picture-as-pdf" size={16} color={colors.white} />
-                        )}
-                    </TouchableOpacity>
-                </View>
+            <TouchableOpacity
+                key={item.activity.id}
+                style={summaryCardStyles.card}
+                onPress={() => setSummaryDetailItem(item)}
+                activeOpacity={0.7}
+            >
+                {/* Gradient accent bar */}
+                <View style={summaryCardStyles.accentBar} />
 
-                <Text style={itemStyles.previewText} numberOfLines={3}>
-                    {previewText}
-                </Text>
-            </View>
+                <View style={summaryCardStyles.cardBody}>
+                    <View style={summaryCardStyles.headerRow}>
+                        <View style={summaryCardStyles.iconWrap}>
+                            <MaterialIcons name="auto-stories" size={20} color="#F59E0B" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={summaryCardStyles.title} numberOfLines={2}>
+                                {structured ? structured.topic : item.activity.title}
+                            </Text>
+                            <Text style={summaryCardStyles.date}>{formatDate(item.activity.created_at)}</Text>
+                        </View>
+                        <View style={summaryCardStyles.actions}>
+                            <TouchableOpacity
+                                style={[summaryCardStyles.pdfBtn, isExporting && { opacity: 0.5 }]}
+                                onPress={(e) => {
+                                    e.stopPropagation?.();
+                                    !isExporting && handleExportPDF(item);
+                                }}
+                                disabled={isExporting}
+                            >
+                                {isExporting ? (
+                                    <ActivityIndicator size="small" color={colors.white} />
+                                ) : (
+                                    <MaterialIcons name="picture-as-pdf" size={14} color={colors.white} />
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+
+                    <Text style={summaryCardStyles.preview} numberOfLines={2}>{previewText}</Text>
+
+                    {structured && (
+                        <View style={summaryCardStyles.chips}>
+                            <View style={summaryCardStyles.chip}>
+                                <MaterialIcons name="check-circle" size={12} color="#22c55e" />
+                                <Text style={summaryCardStyles.chipText}>{structured.key_points?.length || 0} pontos</Text>
+                            </View>
+                            <View style={[summaryCardStyles.chip, { backgroundColor: '#fef3c7' }]}>
+                                <MaterialIcons name="lightbulb" size={12} color="#d97706" />
+                                <Text style={[summaryCardStyles.chipText, { color: '#92400e' }]}>Exemplo</Text>
+                            </View>
+                            <View style={[summaryCardStyles.chip, { backgroundColor: '#f3e8ff' }]}>
+                                <MaterialIcons name="psychology" size={12} color="#9333ea" />
+                                <Text style={[summaryCardStyles.chipText, { color: '#6b21a8' }]}>Reflexão</Text>
+                            </View>
+                        </View>
+                    )}
+
+                    <View style={summaryCardStyles.tapHint}>
+                        <Text style={summaryCardStyles.tapHintText}>Toque para ver completo</Text>
+                        <MaterialIcons name="arrow-forward-ios" size={10} color="#94a3b8" />
+                    </View>
+                </View>
+            </TouchableOpacity>
         );
     };
 
-    const renderMaterialItem = (material: Material & { source?: string }) => {
+    // ===== SUMMARY DETAIL MODAL =====
+    const renderSummaryDetailModal = () => {
+        if (!summaryDetailItem) return null;
+        const structured = parseStructuredSummary(summaryDetailItem);
+        const legacyText = !structured
+            ? sanitizeSummaryText(summaryDetailItem.activity.content?.summary_text || summaryDetailItem.activity.ai_generated_content)
+            : null;
+
+        return (
+            <Modal
+                visible={!!summaryDetailItem}
+                animationType="slide"
+                presentationStyle="pageSheet"
+                onRequestClose={() => setSummaryDetailItem(null)}
+            >
+                <View style={summaryModalStyles.container}>
+                    {/* Header */}
+                    <LinearGradient
+                        colors={['#f59e0b', '#d97706']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={summaryModalStyles.header}
+                    >
+                        <TouchableOpacity
+                            onPress={() => setSummaryDetailItem(null)}
+                            style={summaryModalStyles.closeBtn}
+                        >
+                            <MaterialIcons name="arrow-back" size={22} color="#fff" />
+                        </TouchableOpacity>
+                        <View style={{ flex: 1 }}>
+                            <Text style={summaryModalStyles.headerTitle} numberOfLines={2}>
+                                {structured ? structured.topic : summaryDetailItem.activity.title}
+                            </Text>
+                            <Text style={summaryModalStyles.headerSub}>
+                                {subjectName} · {formatDate(summaryDetailItem.activity.created_at)}
+                            </Text>
+                        </View>
+                    </LinearGradient>
+
+                    <ScrollView
+                        style={summaryModalStyles.scroll}
+                        contentContainerStyle={summaryModalStyles.scrollContent}
+                        showsVerticalScrollIndicator={false}
+                    >
+                        {structured ? (
+                            <>
+                                {/* Conceito Essencial */}
+                                <View style={[summaryModalStyles.section, { backgroundColor: '#eef2ff', borderLeftColor: '#4f46e5' }]}>
+                                    <View style={summaryModalStyles.sectionHeader}>
+                                        <MaterialIcons name="menu-book" size={20} color="#4f46e5" />
+                                        <Text style={[summaryModalStyles.sectionTitle, { color: '#4f46e5' }]}>Conceito Essencial</Text>
+                                    </View>
+                                    <Text style={summaryModalStyles.sectionBody}>{structured.essential_concept}</Text>
+                                </View>
+
+                                {/* Pontos-Chave */}
+                                <View style={[summaryModalStyles.section, { backgroundColor: '#f0fdf4', borderLeftColor: '#22c55e' }]}>
+                                    <View style={summaryModalStyles.sectionHeader}>
+                                        <MaterialIcons name="check-circle" size={20} color="#22c55e" />
+                                        <Text style={[summaryModalStyles.sectionTitle, { color: '#16a34a' }]}>Pontos-Chave</Text>
+                                    </View>
+                                    {(structured.key_points || []).map((point, idx) => (
+                                        <View key={idx} style={summaryModalStyles.listItem}>
+                                            <View style={summaryModalStyles.bullet} />
+                                            <Text style={summaryModalStyles.listText}>{point}</Text>
+                                        </View>
+                                    ))}
+                                </View>
+
+                                {/* Exemplo Prático */}
+                                <View style={[summaryModalStyles.section, { backgroundColor: '#fffbeb', borderLeftColor: '#f59e0b' }]}>
+                                    <View style={summaryModalStyles.sectionHeader}>
+                                        <MaterialIcons name="lightbulb" size={20} color="#f59e0b" />
+                                        <Text style={[summaryModalStyles.sectionTitle, { color: '#d97706' }]}>Exemplo Prático</Text>
+                                    </View>
+                                    <Text style={summaryModalStyles.sectionBody}>{structured.practical_example}</Text>
+                                </View>
+
+                                {/* Erros Comuns */}
+                                {structured.common_mistakes && structured.common_mistakes.length > 0 && (
+                                    <View style={[summaryModalStyles.section, { backgroundColor: '#fef2f2', borderLeftColor: '#ef4444' }]}>
+                                        <View style={summaryModalStyles.sectionHeader}>
+                                            <MaterialIcons name="warning" size={20} color="#ef4444" />
+                                            <Text style={[summaryModalStyles.sectionTitle, { color: '#dc2626' }]}>Erros Comuns</Text>
+                                        </View>
+                                        {structured.common_mistakes.map((mistake, idx) => (
+                                            <View key={idx} style={summaryModalStyles.listItem}>
+                                                <MaterialIcons name="close" size={14} color="#ef4444" style={{ marginTop: 2 }} />
+                                                <Text style={summaryModalStyles.listText}>{mistake}</Text>
+                                            </View>
+                                        ))}
+                                    </View>
+                                )}
+
+                                {/* Reflexão */}
+                                <View style={[summaryModalStyles.section, { backgroundColor: '#faf5ff', borderLeftColor: '#a855f7' }]}>
+                                    <View style={summaryModalStyles.sectionHeader}>
+                                        <MaterialIcons name="psychology" size={20} color="#a855f7" />
+                                        <Text style={[summaryModalStyles.sectionTitle, { color: '#9333ea' }]}>Para Refletir</Text>
+                                    </View>
+                                    <Text style={[summaryModalStyles.sectionBody, { fontStyle: 'italic', fontSize: 16 }]}>
+                                        {structured.reflection}
+                                    </Text>
+                                </View>
+                            </>
+                        ) : (
+                            /* Fallback para resumos legado */
+                            <View style={[summaryModalStyles.section, { backgroundColor: '#fffbeb', borderLeftColor: '#f59e0b' }]}>
+                                <Text style={summaryModalStyles.sectionBody}>{legacyText}</Text>
+                            </View>
+                        )}
+                    </ScrollView>
+                </View>
+            </Modal>
+        );
+    };
+
+    // ===== QUIZ DETAIL MODAL =====
+    const renderQuizDetailModal = () => {
+        if (!quizDetailItem) return null;
+
+        const questions = quizDetailItem.activity.content?.questions || [];
+        const percentage = quizDetailItem.my_percentage ?? 0;
+        const isGood = percentage >= 70;
+
+        const handleRetakeQuiz = () => {
+            setQuizDetailItem(null);
+            router.push({
+                pathname: '/(student)/live-activity',
+                params: {
+                    activity: JSON.stringify(quizDetailItem.activity),
+                    practiceMode: '1',
+                    source: 'content-hub',
+                }
+            });
+        };
+
+        return (
+            <Modal
+                visible={!!quizDetailItem}
+                animationType="slide"
+                presentationStyle="pageSheet"
+                onRequestClose={() => setQuizDetailItem(null)}
+            >
+                <View style={summaryModalStyles.container}>
+                    {/* Header: indigo gradient for quizzes */}
+                    <LinearGradient
+                        colors={['#4f46e5', '#3730a3']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={summaryModalStyles.header}
+                    >
+                        <TouchableOpacity
+                            onPress={() => setQuizDetailItem(null)}
+                            style={summaryModalStyles.closeBtn}
+                        >
+                            <MaterialIcons name="arrow-back" size={22} color="#fff" />
+                        </TouchableOpacity>
+                        <View style={{ flex: 1 }}>
+                            <Text style={summaryModalStyles.headerTitle} numberOfLines={2}>
+                                {quizDetailItem.activity.title}
+                            </Text>
+                            <Text style={summaryModalStyles.headerSub}>
+                                {subjectName} · {formatDate(quizDetailItem.activity.created_at)}
+                            </Text>
+                        </View>
+                        <View style={[
+                            quizCardStyles.scoreBadge,
+                            { backgroundColor: isGood ? '#DCFCE7' : '#FEE2E2', borderColor: isGood ? '#86EFAC' : '#FECACA', height: 36, paddingHorizontal: 12 }
+                        ]}>
+                            <Text style={[quizCardStyles.scoreText, { color: isGood ? '#166534' : '#991B1B', fontSize: 14 }]}>
+                                {Math.round(percentage)}%
+                            </Text>
+                        </View>
+                    </LinearGradient>
+
+                    {/* Quiz Actions Header */}
+                    <View style={quizDetailStyles.actionsHeader}>
+                        <TouchableOpacity
+                            style={quizDetailStyles.retakeButton}
+                            onPress={handleRetakeQuiz}
+                        >
+                            <MaterialIcons name="replay" size={18} color="#fff" />
+                            <Text style={quizDetailStyles.retakeButtonText}>Refazer Quiz</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[quizDetailStyles.toggleAnswersBtn, showQuizAnswers && quizDetailStyles.toggleAnswersBtnActive]}
+                            onPress={() => setShowQuizAnswers(!showQuizAnswers)}
+                        >
+                            <MaterialIcons
+                                name={showQuizAnswers ? "visibility-off" : "visibility"}
+                                size={18}
+                                color={showQuizAnswers ? "#4f46e5" : "#64748b"}
+                            />
+                            <Text style={[quizDetailStyles.toggleAnswersText, showQuizAnswers && quizDetailStyles.toggleAnswersTextActive]}>
+                                {showQuizAnswers ? 'Ocultar Respostas' : 'Revelar Respostas'}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    <ScrollView
+                        style={summaryModalStyles.scroll}
+                        contentContainerStyle={[summaryModalStyles.scrollContent, { paddingTop: 8 }]}
+                        showsVerticalScrollIndicator={false}
+                    >
+                        {questions.map((q: any, qIdx: number) => {
+                            return (
+                                <View key={qIdx} style={[summaryModalStyles.section, quizDetailStyles.questionCard]}>
+                                    <View style={quizDetailStyles.questionHeader}>
+                                        <View style={quizDetailStyles.questionNumberBadge}>
+                                            <Text style={quizDetailStyles.questionNumberText}>{qIdx + 1}</Text>
+                                        </View>
+                                        <Text style={quizDetailStyles.questionText}>{q.question}</Text>
+                                    </View>
+
+                                    <View style={quizDetailStyles.optionsList}>
+                                        {q.options.map((opt: string, optIdx: number) => {
+                                            const isCorrect = optIdx === q.correct;
+                                            const showAsCorrect = showQuizAnswers && isCorrect;
+
+                                            return (
+                                                <View
+                                                    key={optIdx}
+                                                    style={[
+                                                        quizDetailStyles.optionItem,
+                                                        showAsCorrect && quizDetailStyles.optionItemCorrect
+                                                    ]}
+                                                >
+                                                    <View style={[
+                                                        quizDetailStyles.optionLetterBadge,
+                                                        showAsCorrect && quizDetailStyles.optionLetterBadgeCorrect
+                                                    ]}>
+                                                        <Text style={[
+                                                            quizDetailStyles.optionLetterText,
+                                                            showAsCorrect && quizDetailStyles.optionLetterTextCorrect
+                                                        ]}>
+                                                            {String.fromCharCode(65 + optIdx)}
+                                                        </Text>
+                                                    </View>
+                                                    <Text style={[
+                                                        quizDetailStyles.optionText,
+                                                        showAsCorrect && quizDetailStyles.optionTextCorrect
+                                                    ]}>
+                                                        {opt}
+                                                    </Text>
+                                                    {showAsCorrect && (
+                                                        <MaterialIcons name="check-circle" size={18} color="#22c55e" style={{ marginLeft: 'auto' }} />
+                                                    )}
+                                                </View>
+                                            );
+                                        })}
+                                    </View>
+                                </View>
+                            );
+                        })}
+                    </ScrollView>
+                </View>
+            </Modal>
+        );
+    };
+
+    const renderMaterialItem = (material: Material & { source?: string }, folderType: 'suporte' | 'audio' = 'suporte') => {
+        const isExporting = exportingMaterialId === material.id;
         const iconMap: Record<string, keyof typeof MaterialIcons.glyphMap> = {
             pdf: 'picture-as-pdf',
             video: 'play-circle-outline',
@@ -565,29 +1077,85 @@ export default function ContentHubScreen() {
 
         const uniqueKey = material.source ? `${material.source}-${material.id}` : `material-${material.id}`;
 
+        const isTextDoc = material.type === 'document' || (material.url && (material.url.endsWith('.md') || material.url.endsWith('.txt')));
+
+        const isAudio = folderType === 'audio';
+        const cardColors = isAudio ? {
+            border: '#ddd6fe',
+            shadow: '#8b5cf6',
+            accent: '#8b5cf6',
+            iconBg: '#f3e8ff'
+        } : {
+            border: '#a7f3d0',
+            shadow: '#10b981',
+            accent: '#10b981',
+            iconBg: '#d1fae5'
+        };
+
         return (
             <TouchableOpacity
                 key={uniqueKey}
-                style={itemStyles.card}
+                style={[materialCardStyles.card, { borderColor: cardColors.border, shadowColor: cardColors.shadow }]}
                 onPress={() => handleMaterialPress(material)}
                 activeOpacity={0.7}
             >
-                <View style={itemStyles.cardHeader}>
-                    <View style={[itemStyles.materialIcon, { backgroundColor: '#10b98120' }]}>
-                        <MaterialIcons
-                            name={iconMap[material.type] || 'description'}
-                            size={22}
-                            color="#10b981"
-                        />
+                <View style={[materialCardStyles.accentBar, { backgroundColor: cardColors.accent }]} />
+
+                <View style={materialCardStyles.cardBody}>
+                    <View style={materialCardStyles.headerRow}>
+                        <View style={[materialCardStyles.iconWrap, { backgroundColor: cardColors.iconBg }]}>
+                            <MaterialIcons
+                                name={iconMap[material.type] || 'description'}
+                                size={20}
+                                color={cardColors.accent}
+                            />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={materialCardStyles.title} numberOfLines={2}>{material.title}</Text>
+                            <Text style={materialCardStyles.date}>
+                                {(material as any).uploadDate ? formatDate((material as any).uploadDate) : (material.size || 'Material')}
+                            </Text>
+                        </View>
+                        <View style={materialCardStyles.actions}>
+                            {isTextDoc && (
+                                <TouchableOpacity
+                                    style={[materialCardStyles.actionBtn, { backgroundColor: cardColors.accent }, isExporting && { opacity: 0.5 }]}
+                                    onPress={(e) => {
+                                        e.stopPropagation?.();
+                                        !isExporting && handleMaterialExportPDF(material);
+                                    }}
+                                    disabled={isExporting}
+                                >
+                                    {isExporting ? (
+                                        <ActivityIndicator size="small" color={colors.white} />
+                                    ) : (
+                                        <MaterialIcons name="picture-as-pdf" size={14} color={colors.white} />
+                                    )}
+                                </TouchableOpacity>
+                            )}
+                            <TouchableOpacity
+                                style={[materialCardStyles.actionBtn, { backgroundColor: cardColors.accent }]}
+                                onPress={(e) => {
+                                    e.stopPropagation?.();
+                                    handleMaterialPress(material);
+                                }}
+                            >
+                                <MaterialIcons name={material.type === 'audio' ? 'play-arrow' : "open-in-new"} size={14} color={colors.white} />
+                            </TouchableOpacity>
+                        </View>
                     </View>
-                    <View style={{ flex: 1 }}>
-                        <Text style={itemStyles.cardTitle} numberOfLines={2}>{material.title}</Text>
-                        {material.size && (
-                            <Text style={itemStyles.cardDate}>{material.size}</Text>
-                        )}
-                    </View>
-                    <View style={itemStyles.materialActionButton}>
-                        <MaterialIcons name="open-in-new" size={15} color={colors.white} />
+
+                    <Text style={materialCardStyles.preview} numberOfLines={2}>
+                        {material.type === 'document' ? 'Documento de texto' :
+                            material.type === 'pdf' ? 'Arquivo em PDF' :
+                                material.type === 'audio' ? 'Faixa de áudio' :
+                                    material.type === 'video' ? 'Vídeo externo' :
+                                        'Link de material adicional'}
+                    </Text>
+
+                    <View style={materialCardStyles.tapHint}>
+                        <Text style={materialCardStyles.tapHintText}>Toque para abrir</Text>
+                        <MaterialIcons name="arrow-forward-ios" size={10} color="#94a3b8" />
                     </View>
                 </View>
             </TouchableOpacity>
@@ -639,7 +1207,7 @@ export default function ContentHubScreen() {
                     ])
                 );
                 isEmpty = filteredMaterials.length === 0;
-                content = filteredMaterials.map(renderMaterialItem);
+                content = filteredMaterials.map(m => renderMaterialItem(m, 'suporte'));
                 break;
             case 'audio':
                 const filteredAudio = audioMaterials.filter((item) =>
@@ -651,7 +1219,7 @@ export default function ContentHubScreen() {
                     ])
                 );
                 isEmpty = filteredAudio.length === 0;
-                content = filteredAudio.map(renderMaterialItem);
+                content = filteredAudio.map(m => renderMaterialItem(m, 'audio'));
                 break;
         }
 
@@ -787,6 +1355,64 @@ export default function ContentHubScreen() {
                     {/* Expanded Folder Content */}
                     {renderFolderContent()}
                 </ScrollView>
+            )}
+
+            {/* Summary Detail Modal */}
+            {renderSummaryDetailModal()}
+
+            {/* Quiz Detail Modal */}
+            {renderQuizDetailModal()}
+
+            {/* Support Material Viewer Modal */}
+            <Modal
+                visible={!!supportViewerData}
+                animationType="slide"
+                presentationStyle="pageSheet"
+                onRequestClose={() => setSupportViewerData(null)}
+            >
+                <View style={supportViewerStyles.container}>
+                    <LinearGradient
+                        colors={['#10b981', '#059669']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={supportViewerStyles.header}
+                    >
+                        <TouchableOpacity
+                            onPress={() => setSupportViewerData(null)}
+                            style={supportViewerStyles.closeBtn}
+                        >
+                            <MaterialIcons name="arrow-back" size={22} color="#fff" />
+                        </TouchableOpacity>
+                        <View style={{ flex: 1 }}>
+                            <Text style={supportViewerStyles.headerTitle} numberOfLines={2}>
+                                {supportViewerData?.title || 'Material de Reforço'}
+                            </Text>
+                            <Text style={supportViewerStyles.headerSub}>{subjectName}</Text>
+                        </View>
+                    </LinearGradient>
+
+                    <ScrollView
+                        style={supportViewerStyles.scroll}
+                        contentContainerStyle={supportViewerStyles.scrollContent}
+                        showsVerticalScrollIndicator={false}
+                    >
+                        <View style={supportViewerStyles.contentCard}>
+                            <Text style={supportViewerStyles.contentText}>
+                                {supportViewerData?.content || ''}
+                            </Text>
+                        </View>
+                    </ScrollView>
+                </View>
+            </Modal>
+
+            {/* Loading overlay for support viewer */}
+            {supportViewerLoading && (
+                <View style={supportViewerStyles.loadingOverlay}>
+                    <View style={supportViewerStyles.loadingCard}>
+                        <ActivityIndicator size="large" color="#10b981" />
+                        <Text style={supportViewerStyles.loadingText}>Carregando material...</Text>
+                    </View>
+                </View>
             )}
 
             <Modal
@@ -1250,5 +1876,572 @@ const audioStyles = StyleSheet.create({
         color: colors.white,
         fontWeight: typography.fontWeight.semibold,
         fontSize: typography.fontSize.sm,
+    },
+});
+
+// ============ SUMMARY CARD STYLES ============
+const summaryCardStyles = StyleSheet.create({
+    card: {
+        backgroundColor: colors.white,
+        borderRadius: 14,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: '#fde68a',
+        shadowColor: '#f59e0b',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    accentBar: {
+        height: 4,
+        backgroundColor: '#f59e0b',
+    },
+    cardBody: {
+        padding: 14,
+    },
+    headerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    iconWrap: {
+        width: 38,
+        height: 38,
+        borderRadius: 10,
+        backgroundColor: '#fef3c7',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    title: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#1e293b',
+        lineHeight: 20,
+    },
+    date: {
+        fontSize: 11,
+        color: '#94a3b8',
+        marginTop: 2,
+    },
+    actions: {
+        flexDirection: 'row',
+        gap: 6,
+    },
+    pdfBtn: {
+        width: 30,
+        height: 30,
+        borderRadius: 8,
+        backgroundColor: '#ef4444',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    preview: {
+        fontSize: 13,
+        color: '#64748b',
+        lineHeight: 19,
+        marginTop: 10,
+    },
+    chips: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 6,
+        marginTop: 10,
+    },
+    chip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        backgroundColor: '#dcfce7',
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 12,
+    },
+    chipText: {
+        fontSize: 11,
+        fontWeight: '600',
+        color: '#166534',
+    },
+    tapHint: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: 4,
+        marginTop: 10,
+    },
+    tapHintText: {
+        fontSize: 11,
+        color: '#94a3b8',
+    },
+});
+
+// ============ SUMMARY DETAIL MODAL STYLES ============
+const summaryModalStyles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: '#f8fafc',
+    },
+    header: {
+        paddingTop: 50,
+        paddingBottom: 20,
+        paddingHorizontal: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 14,
+    },
+    closeBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255,255,255,0.25)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    headerTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#fff',
+        lineHeight: 24,
+    },
+    headerSub: {
+        fontSize: 12,
+        color: 'rgba(255,255,255,0.75)',
+        marginTop: 2,
+    },
+    scroll: {
+        flex: 1,
+    },
+    scrollContent: {
+        padding: 16,
+        paddingBottom: 40,
+        gap: 14,
+    },
+    section: {
+        borderRadius: 12,
+        padding: 16,
+        borderLeftWidth: 4,
+        backgroundColor: '#fff',
+    },
+    sectionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 10,
+    },
+    sectionTitle: {
+        fontSize: 15,
+        fontWeight: '700',
+    },
+    sectionBody: {
+        fontSize: 14,
+        lineHeight: 22,
+        color: '#334155',
+    },
+    listItem: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 8,
+        alignItems: 'flex-start',
+    },
+    bullet: {
+        width: 6,
+        height: 6,
+        borderRadius: 3,
+        backgroundColor: '#22c55e',
+        marginTop: 7,
+    },
+    listText: {
+        flex: 1,
+        fontSize: 14,
+        lineHeight: 21,
+        color: '#334155',
+    },
+});
+
+// ============ SUPPORT MATERIAL VIEWER STYLES ============
+const supportViewerStyles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: '#f8fafc',
+    },
+    header: {
+        paddingTop: 50,
+        paddingBottom: 20,
+        paddingHorizontal: 20,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 14,
+    },
+    closeBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: 'rgba(255,255,255,0.25)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    headerTitle: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#fff',
+        lineHeight: 24,
+    },
+    headerSub: {
+        fontSize: 12,
+        color: 'rgba(255,255,255,0.75)',
+        marginTop: 2,
+    },
+    scroll: {
+        flex: 1,
+    },
+    scrollContent: {
+        padding: 16,
+        paddingBottom: 40,
+    },
+    contentCard: {
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        padding: 20,
+        borderWidth: 1,
+        borderColor: '#e2e8f0',
+        shadowColor: '#64748b',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 6,
+        elevation: 2,
+    },
+    contentText: {
+        fontSize: 15,
+        lineHeight: 24,
+        color: '#334155',
+    },
+    loadingOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.3)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    loadingCard: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        paddingVertical: 28,
+        paddingHorizontal: 36,
+        alignItems: 'center',
+        gap: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+        elevation: 5,
+    },
+    loadingText: {
+        fontSize: 14,
+        color: '#64748b',
+        fontWeight: '500',
+    },
+});
+
+const quizCardStyles = StyleSheet.create({
+    card: {
+        backgroundColor: colors.white,
+        borderRadius: 14,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: '#c7d2fe',
+        shadowColor: '#4f46e5',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 2,
+    },
+    accentBar: {
+        height: 4,
+        backgroundColor: '#4f46e5',
+    },
+    cardBody: {
+        padding: 14,
+    },
+    headerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    iconWrap: {
+        width: 38,
+        height: 38,
+        borderRadius: 10,
+        backgroundColor: '#e0e7ff',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    title: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#1e293b',
+        lineHeight: 20,
+    },
+    date: {
+        fontSize: 11,
+        color: '#94a3b8',
+        marginTop: 2,
+    },
+    actions: {
+        flexDirection: 'row',
+        gap: 6,
+        alignItems: 'center',
+    },
+    actionBtn: {
+        width: 30,
+        height: 30,
+        borderRadius: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    pdfBtn: {
+        backgroundColor: '#ef4444',
+    },
+    practiceBtn: {
+        backgroundColor: colors.white,
+        borderWidth: 1,
+        borderColor: '#4f46e5',
+    },
+    scoreBadge: {
+        height: 30,
+        paddingHorizontal: 10,
+        borderRadius: 15,
+        borderWidth: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginLeft: 4,
+    },
+    scoreText: {
+        fontWeight: '700',
+        fontSize: 12,
+    },
+    preview: {
+        fontSize: 13,
+        color: '#64748b',
+        lineHeight: 19,
+        marginTop: 10,
+    },
+    tapHint: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: 4,
+        marginTop: 10,
+    },
+    tapHintText: {
+        fontSize: 11,
+        color: '#94a3b8',
+    },
+});
+
+const quizDetailStyles = StyleSheet.create({
+    actionsHeader: {
+        flexDirection: 'row',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        gap: 10,
+        backgroundColor: '#f8fafc',
+        borderBottomWidth: 1,
+        borderBottomColor: '#e2e8f0',
+        zIndex: 10,
+    },
+    retakeButton: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        backgroundColor: '#4f46e5',
+        paddingVertical: 10,
+        borderRadius: 8,
+    },
+    retakeButtonText: {
+        color: '#fff',
+        fontWeight: '600',
+        fontSize: 14,
+    },
+    toggleAnswersBtn: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        backgroundColor: '#fff',
+        borderWidth: 1,
+        borderColor: '#cbd5e1',
+        paddingVertical: 10,
+        borderRadius: 8,
+    },
+    toggleAnswersBtnActive: {
+        borderColor: '#4f46e5',
+        backgroundColor: '#e0e7ff',
+    },
+    toggleAnswersText: {
+        color: '#64748b',
+        fontWeight: '600',
+        fontSize: 14,
+    },
+    toggleAnswersTextActive: {
+        color: '#4f46e5',
+    },
+    questionCard: {
+        borderLeftColor: '#c7d2fe',
+        borderLeftWidth: 4,
+        marginBottom: 8,
+        shadowColor: '#64748b',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+        elevation: 1,
+    },
+    questionHeader: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 12,
+        marginBottom: 16,
+    },
+    questionNumberBadge: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: '#4f46e5',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 2,
+    },
+    questionNumberText: {
+        color: '#fff',
+        fontWeight: 'bold',
+        fontSize: 14,
+    },
+    questionText: {
+        flex: 1,
+        fontSize: 16,
+        color: '#1e293b',
+        fontWeight: '600',
+        lineHeight: 24,
+    },
+    optionsList: {
+        gap: 8,
+        paddingLeft: 40,
+    },
+    optionItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#f1f5f9',
+        backgroundColor: '#f8fafc',
+    },
+    optionItemCorrect: {
+        borderColor: '#bbf7d0',
+        backgroundColor: '#f0fdf4',
+    },
+    optionLetterBadge: {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        backgroundColor: '#e2e8f0',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    optionLetterBadgeCorrect: {
+        backgroundColor: '#22c55e',
+    },
+    optionLetterText: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        color: '#64748b',
+    },
+    optionLetterTextCorrect: {
+        color: '#fff',
+    },
+    optionText: {
+        flex: 1,
+        fontSize: 14,
+        color: '#475569',
+        lineHeight: 20,
+    },
+    optionTextCorrect: {
+        color: '#166534',
+        fontWeight: '500',
+    },
+});
+
+const materialCardStyles = StyleSheet.create({
+    card: {
+        backgroundColor: colors.white,
+        borderRadius: 14,
+        overflow: 'hidden',
+        borderWidth: 1,
+    },
+    accentBar: {
+        height: 4,
+    },
+    cardBody: {
+        padding: 14,
+    },
+    headerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+    },
+    iconWrap: {
+        width: 38,
+        height: 38,
+        borderRadius: 10,
+        backgroundColor: '#d1fae5',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    title: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#1e293b',
+        lineHeight: 20,
+    },
+    date: {
+        fontSize: 11,
+        color: '#94a3b8',
+        marginTop: 2,
+    },
+    actions: {
+        flexDirection: 'row',
+        gap: 6,
+    },
+    actionBtn: {
+        width: 30,
+        height: 30,
+        borderRadius: 8,
+        backgroundColor: '#10b981',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    preview: {
+        fontSize: 13,
+        color: '#64748b',
+        lineHeight: 19,
+        marginTop: 10,
+    },
+    tapHint: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: 4,
+        marginTop: 10,
+    },
+    tapHintText: {
+        fontSize: 11,
+        color: '#94a3b8',
     },
 });

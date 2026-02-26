@@ -142,6 +142,7 @@ export default function TranscriptionScreen() {
     const [transcribedText, setTranscribedText] = useState('');
     const [isRecording, setIsRecording] = useState(false);
     const [interimText, setInterimText] = useState('');
+    const [isTranscriptionCollapsed, setIsTranscriptionCollapsed] = useState(false);
 
     // Estado do modal de atividades
     const [showActivityModal, setShowActivityModal] = useState(false);
@@ -224,6 +225,19 @@ export default function TranscriptionScreen() {
     const [presentationActive, setPresentationActive] = useState(false);
     const [showMediaControls, setShowMediaControls] = useState(false);
     const [presentationContentType, setPresentationContentType] = useState<'video' | 'document' | null>(null);
+
+    const mobileRightPanelStyle = isMobile
+        ? { width: '100%' as const, flex: isTranscriptionCollapsed ? 0 : 1, minHeight: isTranscriptionCollapsed ? 92 : 250 }
+        : null;
+    const rightPanelResponsiveStyle = [
+        styles.rightPanel,
+        mobileRightPanelStyle,
+        !isMobile && isTranscriptionCollapsed ? styles.rightPanelCollapsedDesktop : null,
+    ];
+    const transcriptionPreviewText = (transcribedText + (interimText ? ` ${interimText}` : '')).trim();
+    const collapsedPreview = transcriptionPreviewText.length > 180
+        ? `${transcriptionPreviewText.slice(0, 180)}...`
+        : transcriptionPreviewText;
 
     // Loading State with Title
     const [loadingTitle, setLoadingTitle] = useState('Gerando com IA...');
@@ -712,13 +726,13 @@ export default function TranscriptionScreen() {
                         toValue: 1.2,
                         duration: 500,
                         easing: Easing.ease,
-                        useNativeDriver: true,
+                        useNativeDriver: false,
                     }),
                     Animated.timing(pulseAnim, {
                         toValue: 1,
                         duration: 500,
                         easing: Easing.ease,
-                        useNativeDriver: true,
+                        useNativeDriver: false,
                     }),
                 ])
             );
@@ -3458,7 +3472,7 @@ export default function TranscriptionScreen() {
                                 color={displayMode === 'quiz' ? colors.primary : colors.secondary}
                             />
                             <Text style={styles.panelTitle}>
-                                {displayMode === 'quiz' ? 'Quiz Gerado' : displayMode === 'summary' ? 'Resumo Gerado' : 'Aguardando...'}
+                                {displayMode === 'quiz' ? 'Quiz Gerado' : displayMode === 'summary' ? 'Conteúdo Gerado' : 'Aguardando...'}
                             </Text>
                         </View>
 
@@ -3738,7 +3752,7 @@ export default function TranscriptionScreen() {
                 )}
 
                 {/* Painel Direito - Transcrição */}
-                <View style={[styles.rightPanel, isMobile && { width: '100%', flex: 1, minHeight: 250 }]}>
+                <View style={rightPanelResponsiveStyle}>
                     <View style={styles.panelHeader}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                             <MaterialIcons name="mic" size={20} color={colors.primary} />
@@ -3746,6 +3760,21 @@ export default function TranscriptionScreen() {
                         </View>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
                             <Text style={styles.wordCount}>{wordCount} palavras</Text>
+                            <TouchableOpacity
+                                style={styles.compactButton}
+                                onPress={() => setIsTranscriptionCollapsed(prev => !prev)}
+                            >
+                                <MaterialIcons
+                                    name={isTranscriptionCollapsed ? 'expand-more' : 'expand-less'}
+                                    size={20}
+                                    color={isTranscriptionCollapsed ? colors.primary : colors.slate500}
+                                />
+                                {!isMobile && (
+                                    <Text style={[styles.compactButtonText, isTranscriptionCollapsed && styles.compactButtonTextActive]}>
+                                        {isTranscriptionCollapsed ? 'Expandir' : 'Compactar'}
+                                    </Text>
+                                )}
+                            </TouchableOpacity>
                             {transcribedText.length > 0 && (
                                 <TouchableOpacity onPress={handleClearTranscription}>
                                     <MaterialIcons name="delete-outline" size={20} color={colors.slate400} />
@@ -3754,29 +3783,54 @@ export default function TranscriptionScreen() {
                         </View>
                     </View>
 
-                    <ScrollView
-                        style={styles.panelScroll}
-                        contentContainerStyle={styles.panelScrollContent}
-                        keyboardShouldPersistTaps="handled"
-                    >
-                        <TextInput
-                            style={styles.textInput}
-                            multiline
-                            value={transcribedText + (interimText ? ' ' + interimText : '')}
-                            onChangeText={handleTextChange}
-                            placeholder="O texto transcrito aparecerá aqui...
+                    {isTranscriptionCollapsed ? (
+                        <TouchableOpacity
+                            style={styles.transcriptionCollapsedInfo}
+                            activeOpacity={0.8}
+                            onPress={() => setIsTranscriptionCollapsed(false)}
+                        >
+                            <View style={styles.collapsedHeaderRow}>
+                                <View style={styles.collapsedBadge}>
+                                    <MaterialIcons name={isRecording ? 'fiber-manual-record' : 'article'} size={14} color={isRecording ? '#ef4444' : colors.primary} />
+                                    <Text style={styles.collapsedBadgeText}>{isRecording ? 'Gravando' : 'Transcrição'}</Text>
+                                </View>
+                            </View>
+
+                            <Text style={styles.collapsedPreviewText}>
+                                {collapsedPreview || 'Nenhum conteúdo transcrito ainda.'}
+                            </Text>
+
+                            <Text style={styles.collapsedMetaText}>
+                                {wordCount} palavras • {isRecording ? '🎤 Ditando em tempo real' : '📝 Pronto para edição'}
+                            </Text>
+                        </TouchableOpacity>
+                    ) : (
+                        <>
+                            <ScrollView
+                                style={styles.panelScroll}
+                                contentContainerStyle={styles.panelScrollContent}
+                                keyboardShouldPersistTaps="handled"
+                            >
+                                <TextInput
+                                    style={styles.textInput}
+                                    multiline
+                                    value={transcribedText + (interimText ? ' ' + interimText : '')}
+                                    onChangeText={handleTextChange}
+                                    placeholder="O texto transcrito aparecerá aqui...
 
 Pressione o botão do microfone para começar a falar."
-                            placeholderTextColor={colors.slate400}
-                            editable={!isRecording}
-                        />
-                    </ScrollView>
+                                    placeholderTextColor={colors.slate400}
+                                    editable={!isRecording}
+                                />
+                            </ScrollView>
 
-                    <View style={styles.transcriptionInfo}>
-                        <Text style={styles.infoText}>
-                            {isRecording ? '🎤 Ditando...' : '📝 Pronto para editar'}
-                        </Text>
-                    </View>
+                            <View style={styles.transcriptionInfo}>
+                                <Text style={styles.infoText}>
+                                    {isRecording ? '🎤 Ditando...' : '📝 Pronto para editar'}
+                                </Text>
+                            </View>
+                        </>
+                    )}
                 </View>
             </MainContentWrapper>
 
@@ -4324,6 +4378,11 @@ const styles = StyleSheet.create({
         shadowRadius: 12,
         elevation: 4,
     },
+    rightPanelCollapsedDesktop: {
+        flex: 0.42,
+        minWidth: 320,
+        maxWidth: 460,
+    },
     panelHeader: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -4346,11 +4405,63 @@ const styles = StyleSheet.create({
         padding: spacing.lg,
         flexGrow: 1,
     },
+    compactButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        backgroundColor: colors.primaryOpacity20,
+        borderRadius: borderRadius.default,
+        paddingHorizontal: spacing.xs,
+        paddingVertical: 4,
+        borderWidth: 1,
+        borderColor: colors.primaryOpacity30,
+    },
+    compactButtonText: {
+        fontSize: typography.fontSize.sm,
+        color: colors.primary,
+        fontWeight: typography.fontWeight.medium,
+    },
+    compactButtonTextActive: {
+        color: colors.primary,
+    },
     transcriptionInfo: {
         padding: spacing.md,
         borderTopWidth: 1,
         borderTopColor: colors.slate100,
         alignItems: 'center',
+    },
+    transcriptionCollapsedInfo: {
+        paddingVertical: spacing.sm,
+        paddingHorizontal: spacing.base,
+        gap: spacing.sm,
+    },
+    collapsedHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    collapsedBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        backgroundColor: colors.slate100,
+        borderRadius: borderRadius.default,
+        paddingHorizontal: spacing.xs,
+        paddingVertical: 4,
+    },
+    collapsedBadgeText: {
+        fontSize: typography.fontSize.xs,
+        color: colors.textSecondary,
+        fontWeight: typography.fontWeight.semibold,
+    },
+    collapsedPreviewText: {
+        fontSize: typography.fontSize.sm,
+        color: colors.textPrimary,
+        lineHeight: 20,
+    },
+    collapsedMetaText: {
+        fontSize: typography.fontSize.xs,
+        color: colors.textSecondary,
     },
     // Generated content styles
     emptyState: {

@@ -109,7 +109,7 @@ export default function AdminDashboard() {
             const eventsRes = await getCalendarEvents();
             if (eventsRes.success) setCalendarEvents(eventsRes.events || []);
 
-            if (storedRole === 'super_admin') {
+            if (storedRole === 'super_admin' || storedRole === 'admin') {
                 const settingsRes = await getAllSettings();
                 if (settingsRes.success) setSettingsList(settingsRes.settings);
             }
@@ -367,6 +367,137 @@ export default function AdminDashboard() {
                 </View>
             )}
 
+            {/* Auto-Enrollment Controls — visível para admin e super_admin */}
+            {(userRole === 'super_admin' || userRole === 'admin') && (
+                <View style={{ marginTop: spacing.lg }}>
+                    <View style={styles.sectionHeader}>
+                        <MaterialIcons name="school" size={20} color="#6366f1" />
+                        <Text style={styles.sectionTitle}>Auto-Matrícula</Text>
+                    </View>
+                    <View style={styles.card}>
+                        <Text style={{ fontSize: 12, color: colors.zinc400, marginBottom: spacing.sm }}>
+                            Configura a matrícula automática de novos alunos
+                        </Text>
+
+                        {/* Toggle Enable/Disable */}
+                        <View style={styles.roleRow}>
+                            {[
+                                { key: 'true', label: 'Ativada', icon: 'check-circle' as const },
+                                { key: 'false', label: 'Desativada', icon: 'cancel' as const },
+                            ].map(opt => {
+                                const currentVal = settingsList.find(s => s.key === 'ENABLE_AUTO_ENROLLMENT')?.value || 'true';
+                                const isActive = currentVal === opt.key;
+                                return (
+                                    <TouchableOpacity
+                                        key={opt.key}
+                                        style={[styles.roleChip, isActive && styles.roleChipActive, { flexDirection: 'row', gap: 4, flex: 1, justifyContent: 'center' }]}
+                                        onPress={() => handleAction('settings', {
+                                            key: 'ENABLE_AUTO_ENROLLMENT',
+                                            value: opt.key,
+                                            description: 'Ativar/Desativar auto-matrícula de novos alunos',
+                                            is_public: false
+                                        })}
+                                    >
+                                        <MaterialIcons name={opt.icon} size={16} color={isActive ? colors.white : colors.zinc400} />
+                                        <Text style={[styles.roleChipText, isActive && styles.roleChipTextActive]}>{opt.label}</Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+
+                        {/* Subject Selection */}
+                        {(settingsList.find(s => s.key === 'ENABLE_AUTO_ENROLLMENT')?.value || 'true') === 'true' && (
+                            <View style={{ marginTop: spacing.md }}>
+                                <Text style={{ fontSize: 13, fontWeight: '600', color: colors.zinc300, marginBottom: spacing.xs }}>
+                                    Disciplinas incluídas:
+                                </Text>
+                                {(() => {
+                                    const raw = settingsList.find(s => s.key === 'AUTO_ENROLLMENT_SUBJECTS')?.value || 'all';
+                                    let selectedIds: number[] = [];
+                                    let isAll = raw === 'all';
+                                    if (!isAll) {
+                                        try { selectedIds = JSON.parse(raw); } catch { isAll = true; }
+                                    }
+
+                                    const toggleSubject = (subjectId: number) => {
+                                        let newIds: number[];
+                                        if (isAll) {
+                                            newIds = [subjectId];
+                                        } else if (selectedIds.includes(subjectId)) {
+                                            newIds = selectedIds.filter(id => id !== subjectId);
+                                            if (newIds.length === 0) {
+                                                handleAction('settings', {
+                                                    key: 'AUTO_ENROLLMENT_SUBJECTS',
+                                                    value: 'all',
+                                                    description: 'Disciplinas para auto-matrícula: all ou JSON array de IDs',
+                                                    is_public: false
+                                                });
+                                                return;
+                                            }
+                                        } else {
+                                            newIds = [...selectedIds, subjectId];
+                                        }
+                                        if (newIds.length === subjects.length) {
+                                            handleAction('settings', {
+                                                key: 'AUTO_ENROLLMENT_SUBJECTS',
+                                                value: 'all',
+                                                description: 'Disciplinas para auto-matrícula: all ou JSON array de IDs',
+                                                is_public: false
+                                            });
+                                        } else {
+                                            handleAction('settings', {
+                                                key: 'AUTO_ENROLLMENT_SUBJECTS',
+                                                value: JSON.stringify(newIds),
+                                                description: 'Disciplinas para auto-matrícula: all ou JSON array de IDs',
+                                                is_public: false
+                                            });
+                                        }
+                                    };
+
+                                    return (
+                                        <View>
+                                            <TouchableOpacity
+                                                style={[styles.roleChip, isAll && styles.roleChipActive, { flexDirection: 'row', gap: 4, marginBottom: spacing.xs, alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 6 }]}
+                                                onPress={() => handleAction('settings', {
+                                                    key: 'AUTO_ENROLLMENT_SUBJECTS',
+                                                    value: 'all',
+                                                    description: 'Disciplinas para auto-matrícula: all ou JSON array de IDs',
+                                                    is_public: false
+                                                })}
+                                            >
+                                                <MaterialIcons name="select-all" size={14} color={isAll ? colors.white : colors.zinc400} />
+                                                <Text style={[styles.roleChipText, isAll && styles.roleChipTextActive, { fontSize: 12 }]}>Todas as disciplinas</Text>
+                                            </TouchableOpacity>
+
+                                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                                                {subjects.map((subj: any) => {
+                                                    const isSelected = isAll || selectedIds.includes(subj.id);
+                                                    return (
+                                                        <TouchableOpacity
+                                                            key={subj.id}
+                                                            style={[
+                                                                styles.roleChip,
+                                                                isSelected && styles.roleChipActive,
+                                                                { paddingHorizontal: 10, paddingVertical: 5 }
+                                                            ]}
+                                                            onPress={() => toggleSubject(subj.id)}
+                                                        >
+                                                            <Text style={[styles.roleChipText, isSelected && styles.roleChipTextActive, { fontSize: 11 }]}>
+                                                                {subj.name}
+                                                            </Text>
+                                                        </TouchableOpacity>
+                                                    );
+                                                })}
+                                            </View>
+                                        </View>
+                                    );
+                                })()}
+                            </View>
+                        )}
+                    </View>
+                </View>
+            )}
+
             {/* Super Admin Section */}
             {userRole === 'super_admin' && (
                 <View style={{ marginTop: spacing.lg }}>
@@ -376,6 +507,38 @@ export default function AdminDashboard() {
                     </View>
                     <SystemHealth />
                     <AIConfiguration />
+
+                    {/* Login Mode Toggle */}
+                    <View style={styles.card}>
+                        <Text style={styles.cardTitle}>Sistema de Login</Text>
+                        <Text style={{ fontSize: 12, color: colors.zinc400, marginBottom: spacing.sm }}>
+                            Define como os usuários acessam o sistema
+                        </Text>
+                        <View style={styles.roleRow}>
+                            {[
+                                { key: 'quick_access', label: 'Acesso Rápido', icon: 'flash-on' as const },
+                                { key: 'traditional', label: 'Login Tradicional', icon: 'lock' as const },
+                            ].map(mode => {
+                                const currentMode = settingsList.find(s => s.key === 'DEFAULT_LOGIN_MODE')?.value || 'quick_access';
+                                const isActive = currentMode === mode.key;
+                                return (
+                                    <TouchableOpacity
+                                        key={mode.key}
+                                        style={[styles.roleChip, isActive && styles.roleChipActive, { flexDirection: 'row', gap: 4, flex: 1, justifyContent: 'center' }]}
+                                        onPress={() => handleAction('settings', {
+                                            key: 'DEFAULT_LOGIN_MODE',
+                                            value: mode.key,
+                                            description: 'Modo de login padrão: quick_access ou traditional',
+                                            is_public: true
+                                        })}
+                                    >
+                                        <MaterialIcons name={mode.icon} size={16} color={isActive ? colors.white : colors.zinc400} />
+                                        <Text style={[styles.roleChipText, isActive && styles.roleChipTextActive]}>{mode.label}</Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+                    </View>
 
                     <View style={styles.card}>
                         <Text style={styles.cardTitle}>Palavra de Ativação</Text>

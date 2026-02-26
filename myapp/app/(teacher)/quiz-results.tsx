@@ -143,6 +143,11 @@ export default function QuizResultsScreen() {
                         console.log('[INITIAL] Transformed ranking:', transformedRanking);
                         setRanking(transformedRanking);
                     }
+
+                    // Se o quiz já foi encerrado, mostrar pódio e analytics automaticamente
+                    if (result.report.quiz?.status !== 'active') {
+                        setShowPodium(true);
+                    }
                 }
             } catch (error) {
                 console.log('Erro ao buscar relatório inicial:', error);

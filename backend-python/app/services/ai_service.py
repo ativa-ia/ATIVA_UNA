@@ -68,7 +68,9 @@ def generate_content_with_prompt(system_instruction: str, prompt: str, json_mode
 
 def generate_summary(text: str, subject_name: str = "Aula") -> str:
     """
-    Gera um resumo do texto transcrito usando OpenAI
+    Gera material de reforço estruturado (JSON) a partir do texto transcrito usando OpenAI.
+    Retorna uma string JSON com campos: topic, essential_concept, key_points,
+    practical_example, common_mistakes, reflection.
     """
     api_key, model_name = get_ai_config()
     client = get_client()
@@ -77,48 +79,35 @@ def generate_summary(text: str, subject_name: str = "Aula") -> str:
         return "Erro: OPENAI_API_KEY não configurada."
     
     try:
-        # Lógica Adaptativa baseada no tamanho do texto
-        word_count = len(text.split())
-        is_long_text = word_count > 300
-        
-        system_instruction = """Você é um assistente educacional especializado em criar resumos.
-Sua tarefa é criar um resumo claro, objetivo e bem estruturado do conteúdo fornecido.
-O resumo deve:
-- Destacar os pontos principais
-- Ser organizado em tópicos usando apenas texto simples
-- Usar linguagem clara e didática
-- Ter entre 200-400 palavras
-- NÃO usar markdown, asteriscos, hashtags ou qualquer formatação especial
-- Usar apenas texto puro com quebras de linha para separar parágrafos
-Responda sempre em português brasileiro."""
+        system_instruction = """Você é um assistente educacional especializado em criar material de reforço pedagógico rico e engajador.
+Sua tarefa é analisar a transcrição de uma aula e produzir um material de estudo estruturado e detalhado.
 
-        if is_long_text:
-            prompt_instruction = f"""O texto fornecido é uma transcrição longa de uma aula de {subject_name}.
-Sua tarefa é criar um RESUMO DETALHADO EM TÓPICOS.
-Como a aula foi longa, você deve:
-1. Identificar os tópicos mais interessantes e relevantes discutidos.
-2. Para cada tópico, escreva um parágrafo detalhado explicando o conceito.
-3. Use marcadores (•) para separar os tópicos.
-4. Mantenha um tom educativo e engajador.
-5. Capture a essência e os detalhes importantes da fala do professor.
-Formato esperado:
-• Tópico 1: Explicação detalhada...
-• Tópico 2: Explicação detalhada..."""
-        else:
-            prompt_instruction = f"""O texto fornecido é uma transcrição curta de uma aula de {subject_name}.
-Sua tarefa é criar um RESUMO OBJETIVO e DIRETO.
-Como o texto é curto, você deve:
-1. Sintetizar a ideia central em poucos parágrafos.
-2. Ser conciso e ir direto ao ponto.
-3. Não use tópicos, prefira texto corrido (parágrafos).
-4. Resuma o que foi dito de forma clara."""
+Você DEVE retornar APENAS um JSON válido (sem markdown, sem blocos de código) com a seguinte estrutura:
+{
+    "topic": "Título claro e descritivo do assunto principal da aula",
+    "essential_concept": "Uma explicação clara, detalhada e didática do conceito central (2-4 parágrafos). Use linguagem acessível e exemplos quando possível.",
+    "key_points": ["Ponto-chave 1 com explicação breve", "Ponto-chave 2 com explicação breve", "Ponto-chave 3..."],
+    "practical_example": "Um exemplo concreto do mundo real que ilustra o conceito. Seja criativo e relevante para a realidade do aluno.",
+    "common_mistakes": ["Erro comum 1 que alunos cometem sobre esse tema", "Erro comum 2..."],
+    "reflection": "Uma pergunta instigante e aberta que faça o aluno refletir sobre o conteúdo e conectar com o que já sabe."
+}
 
-        prompt = f"""{prompt_instruction}
+REGRAS:
+- key_points deve ter entre 3 e 6 itens.
+- common_mistakes deve ter entre 2 e 4 itens.
+- Todos os textos devem ser em português brasileiro.
+- NÃO use markdown dentro dos valores (sem **, ##, etc).
+- O essential_concept deve ser RICO e DETALHADO, não um resumo superficial.
+- O practical_example deve ser concreto e fácil de visualizar.
+- A reflection deve ser uma pergunta que estimule o pensamento crítico.
+- Retorne SOMENTE o JSON, sem texto antes ou depois."""
 
-Texto da Transcrição:
+        prompt = f"""Analise a transcrição da aula de "{subject_name}" abaixo e gere o material de reforço estruturado conforme as instruções.
+
+TRANSCRIÇÃO DA AULA:
 {text}
 
-Resumo:"""
+JSON:"""
         
         response = client.chat.completions.create(
             model=model_name,
@@ -126,6 +115,7 @@ Resumo:"""
                 {"role": "system", "content": system_instruction},
                 {"role": "user", "content": prompt}
             ],
+            response_format={ "type": "json_object" },
             temperature=0.7
         )
         

@@ -10,15 +10,19 @@ class RegisterSchema(Schema):
         error_messages={'required': 'Senha é obrigatória'}
     )
     role = fields.Str(
-        required=True,
-        validate=validate.OneOf(['student', 'teacher'], error='Role deve ser student ou teacher'),
-        error_messages={'required': 'Role é obrigatório'}
+        load_default='student',
+        validate=validate.OneOf(['student', 'teacher'], error='Role deve ser student ou teacher')
     )
     name = fields.Str(
         required=True,
         validate=validate.Length(min=1, error='Nome não pode estar vazio'),
         error_messages={'required': 'Nome é obrigatório'}
     )
+    registration_number = fields.Str(
+        load_default=None,
+        validate=validate.Length(min=1, error='Matrícula não pode estar vazia')
+    )
+    course_id = fields.Int(load_default=None)
 
 
 class LoginSchema(Schema):

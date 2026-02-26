@@ -62,6 +62,7 @@ def create_app(config_name=None):
         from app.routes.document_routes import document_bp
         from app.routes.socratic_routes import socratic_bp
         from app.routes.calendar_event_routes import calendar_event_bp
+        from app.routes.course_routes import course_bp
         
         app.register_blueprint(auth_bp, url_prefix='/api/auth')
         app.register_blueprint(subject_bp, url_prefix='/api/subjects')
@@ -76,6 +77,7 @@ def create_app(config_name=None):
         app.register_blueprint(document_bp, url_prefix='/api/documents')
         app.register_blueprint(socratic_bp, url_prefix='/api/socratic')
         app.register_blueprint(calendar_event_bp, url_prefix='/api/calendar-events')
+        app.register_blueprint(course_bp, url_prefix='/api/courses')
         logger.info("Blueprints registrados com sucesso.")
     except Exception as e:
         logger.error(f"Erro ao registrar blueprints: {e}")

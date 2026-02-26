@@ -45,7 +45,7 @@ export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({
             Animated.timing(fadeAnim, {
                 toValue: 1,
                 duration: 300,
-                useNativeDriver: true,
+                useNativeDriver: false,
             }).start();
         } else {
             setTargetLayout(null);
@@ -89,7 +89,7 @@ export const TutorialOverlay: React.FC<TutorialOverlayProps> = ({
         Animated.timing(fadeAnim, {
             toValue: 0,
             duration: 300,
-            useNativeDriver: true,
+            useNativeDriver: false,
         }).start(() => {
             onFinish();
         });

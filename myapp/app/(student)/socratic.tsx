@@ -54,6 +54,12 @@ interface ChatMessage {
 }
 
 export default function SocraticScreen() {
+    const blurActiveElement = () => {
+        if (Platform.OS === 'web' && typeof document !== 'undefined') {
+            (document.activeElement as HTMLElement)?.blur?.();
+        }
+    };
+
     // State
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [inputText, setInputText] = useState('');
@@ -124,8 +130,8 @@ export default function SocraticScreen() {
         if (isRecording) {
             Animated.loop(
                 Animated.sequence([
-                    Animated.timing(pulseAnim, { toValue: 1.2, duration: 800, useNativeDriver: true }),
-                    Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+                    Animated.timing(pulseAnim, { toValue: 1.2, duration: 800, useNativeDriver: false }),
+                    Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: false }),
                 ])
             ).start();
         } else {
@@ -138,14 +144,14 @@ export default function SocraticScreen() {
         if (isLoading || isRefining || isSpeaking) {
             Animated.loop(
                 Animated.sequence([
-                    Animated.timing(avatarScale, { toValue: 1.05, duration: 1000, useNativeDriver: true }),
-                    Animated.timing(avatarScale, { toValue: 1, duration: 1000, useNativeDriver: true }),
+                    Animated.timing(avatarScale, { toValue: 1.05, duration: 1000, useNativeDriver: false }),
+                    Animated.timing(avatarScale, { toValue: 1, duration: 1000, useNativeDriver: false }),
                 ])
             ).start();
             Animated.loop(
                 Animated.sequence([
-                    Animated.timing(avatarGlow, { toValue: 1, duration: 1500, useNativeDriver: true }),
-                    Animated.timing(avatarGlow, { toValue: 0.3, duration: 1500, useNativeDriver: true }),
+                    Animated.timing(avatarGlow, { toValue: 1, duration: 1500, useNativeDriver: false }),
+                    Animated.timing(avatarGlow, { toValue: 0.3, duration: 1500, useNativeDriver: false }),
                 ])
             ).start();
         } else {
@@ -158,8 +164,8 @@ export default function SocraticScreen() {
     useEffect(() => {
         const breathe = Animated.loop(
             Animated.sequence([
-                Animated.timing(breatheAnim, { toValue: 1.02, duration: 2500, useNativeDriver: true }),
-                Animated.timing(breatheAnim, { toValue: 1, duration: 2500, useNativeDriver: true }),
+                Animated.timing(breatheAnim, { toValue: 1.02, duration: 2500, useNativeDriver: false }),
+                Animated.timing(breatheAnim, { toValue: 1, duration: 2500, useNativeDriver: false }),
             ])
         );
         breathe.start();
@@ -282,7 +288,13 @@ export default function SocraticScreen() {
             const response = await fetch(TTS_API_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text }),
+                body: JSON.stringify({
+                    text,
+                    voice: 'pt_BR-jeff-medium',
+                    mode: 'summary',
+                    bg_id: null,
+                    bg_volume: 0,
+                }),
             });
             if (!response.ok) {
                 console.error('TTS API error:', response.status);
@@ -543,6 +555,7 @@ export default function SocraticScreen() {
                                         selectedSubject?.id === item.id && styles.subjectItemActive,
                                     ]}
                                     onPress={() => {
+                                        blurActiveElement();
                                         setSelectedSubject(item);
                                         setShowSubjectPicker(false);
                                         setMessages([]);
@@ -582,7 +595,7 @@ export default function SocraticScreen() {
         >
             <View style={styles.chatModalContainer}>
                 <View style={styles.chatModalHeader}>
-                    <TouchableOpacity onPress={() => setShowCurrentChat(false)} style={styles.chatModalClose}>
+                    <TouchableOpacity onPress={() => { blurActiveElement(); setShowCurrentChat(false); }} style={styles.chatModalClose}>
                         <MaterialIcons name="arrow-back" size={24} color={colors.slate800} />
                     </TouchableOpacity>
                     <View style={{ flex: 1, alignItems: 'center' }}>
@@ -622,7 +635,7 @@ export default function SocraticScreen() {
             <View style={styles.historyContainer}>
                 <View style={styles.historyHeader}>
                     <Text style={styles.historyTitle}>Conversas Anteriores</Text>
-                    <TouchableOpacity onPress={() => setShowPastSessions(false)} style={styles.closeHistoryButton}>
+                    <TouchableOpacity onPress={() => { blurActiveElement(); setShowPastSessions(false); }} style={styles.closeHistoryButton}>
                         <MaterialIcons name="close" size={24} color={colors.slate600} />
                     </TouchableOpacity>
                 </View>
@@ -631,6 +644,7 @@ export default function SocraticScreen() {
                     <TouchableOpacity
                         style={styles.newSessionButton}
                         onPress={() => {
+                            blurActiveElement();
                             startNewSession();
                             setShowPastSessions(false);
                         }}
@@ -658,7 +672,10 @@ export default function SocraticScreen() {
                                     styles.sessionItem,
                                     item.id === currentSessionId && styles.sessionItemActive,
                                 ]}
-                                onPress={() => loadSession(item.id)}
+                                onPress={() => {
+                                    blurActiveElement();
+                                    loadSession(item.id);
+                                }}
                             >
                                 <View style={styles.sessionItemIcon}>
                                     <MaterialIcons name="chat" size={20} color={colors.primary} />
@@ -704,7 +721,10 @@ export default function SocraticScreen() {
 
                     <TouchableOpacity
                         style={styles.subjectPill}
-                        onPress={() => setShowSubjectPicker(true)}
+                        onPress={() => {
+                            blurActiveElement();
+                            setShowSubjectPicker(true);
+                        }}
                     >
                         <MaterialIcons name="school" size={16} color="white" />
                         <Text style={styles.subjectPillText}>
@@ -717,6 +737,7 @@ export default function SocraticScreen() {
                     <TouchableOpacity
                         style={styles.iconButton}
                         onPress={() => {
+                            blurActiveElement();
                             loadPastSessions();
                             setShowPastSessions(true);
                         }}
