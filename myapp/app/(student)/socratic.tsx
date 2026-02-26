@@ -96,7 +96,6 @@ export default function SocraticScreen() {
 
     // Avatar animations
     const avatarScale = useRef(new Animated.Value(1)).current;
-    const avatarGlow = useRef(new Animated.Value(0)).current;
     const breatheAnim = useRef(new Animated.Value(1)).current;
 
     // Transcript accordion animation
@@ -148,15 +147,8 @@ export default function SocraticScreen() {
                     Animated.timing(avatarScale, { toValue: 1, duration: 1000, useNativeDriver: false }),
                 ])
             ).start();
-            Animated.loop(
-                Animated.sequence([
-                    Animated.timing(avatarGlow, { toValue: 1, duration: 1500, useNativeDriver: false }),
-                    Animated.timing(avatarGlow, { toValue: 0.3, duration: 1500, useNativeDriver: false }),
-                ])
-            ).start();
         } else {
             avatarScale.setValue(1);
-            avatarGlow.setValue(0);
         }
     }, [isLoading, isRefining, isSpeaking]);
 
@@ -746,11 +738,7 @@ export default function SocraticScreen() {
                         styles.avatarWrapper,
                         { transform: [{ scale: Animated.multiply(avatarScale, breatheAnim) }] }
                     ]}>
-                        <Animated.View style={[
-                            styles.avatarGlow,
-                            { opacity: avatarGlow, transform: [{ scale: Animated.add(1, avatarGlow) }] }
-                        ]} />
-                        <Image source={currentAvatar} style={styles.mainAvatar} resizeMode="cover" />
+                        <Image source={currentAvatar} style={styles.mainAvatar} resizeMode="contain" />
                     </Animated.View>
 
                     <View style={styles.statusContainer}>
@@ -956,36 +944,17 @@ const styles = StyleSheet.create({
         paddingHorizontal: spacing.lg,
     },
     avatarWrapper: {
-        width: 220,
-        height: 220,
+        width: 300,
+        height: 350,
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: spacing.lg,
         position: 'relative',
     },
-    avatarGlow: {
-        position: 'absolute',
-        width: 280,
-        height: 280,
-        borderRadius: 140,
-        backgroundColor: 'rgba(255,255,255,0.15)',
-        shadowColor: '#a78bfa',
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.6,
-        shadowRadius: 30,
-        elevation: 15,
-    },
     mainAvatar: {
-        width: 220,
-        height: 220,
-        borderRadius: 110,
-        borderWidth: 4,
-        borderColor: 'rgba(255,255,255,0.85)',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.3,
-        shadowRadius: 12,
-        elevation: 10,
+        width: 300,
+        height: 350,
+        transform: [{ translateX: -15 }],
     },
     statusContainer: {
         alignItems: 'center',
