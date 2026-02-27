@@ -1371,6 +1371,130 @@ export default function TranscriptionScreen() {
 
     // Enviar para IA (Genérico)
     const handleSendToAI = async (command?: string) => {
+        const extractContentFromN8n = (raw: any): any => {
+            const deepPick = (value: any): any => {
+                if (value === null || value === undefined) return null;
+                if (typeof value === 'string') return value;
+
+                if (Array.isArray(value)) {
+                    for (const item of value) {
+                        const extracted = deepPick(item);
+                        if (extracted !== null && extracted !== undefined) return extracted;
+                    }
+                    return null;
+                }
+
+                if (typeof value === 'object') {
+                    const priorityKeys = ['output', 'text', 'response', 'result', 'message', 'data'];
+                    for (const key of priorityKeys) {
+                        if (Object.prototype.hasOwnProperty.call(value, key)) {
+                            const extracted = deepPick(value[key]);
+                            if (extracted !== null && extracted !== undefined) return extracted;
+                        }
+                    }
+
+                    for (const key of Object.keys(value)) {
+                        const extracted = deepPick(value[key]);
+                        if (extracted !== null && extracted !== undefined) return extracted;
+                    }
+                }
+
+                return null;
+            };
+
+            const extracted = deepPick(raw);
+            return extracted !== null && extracted !== undefined ? extracted : raw;
+        };
+
+        const normalizeN8nText = (value: string) => {
+            if (typeof value !== 'string') return value;
+
+            let normalized = value.trim();
+
+            // Handle logs like: [Object: {"output": "..."}]
+            const objectWrapperMatch = normalized.match(/^\[Object:\s*([\s\S]+)\]$/i);
+            if (objectWrapperMatch?.[1]) {
+                try {
+                    const parsed = JSON.parse(objectWrapperMatch[1]);
+                    if (parsed?.output && typeof parsed.output === 'string') {
+                        normalized = parsed.output;
+                    }
+                } catch { }
+            }
+
+            // Handle stringified payloads recursively
+            for (let i = 0; i < 3; i++) {
+                const candidate = normalized.trim();
+                const looksLikeJson =
+                    (candidate.startsWith('{') && candidate.endsWith('}')) ||
+                    (candidate.startsWith('[') && candidate.endsWith(']'));
+
+                if (!looksLikeJson) break;
+
+                try {
+                    const parsed = JSON.parse(candidate);
+                    const extracted = extractContentFromN8n(parsed);
+
+                    if (typeof extracted === 'string') {
+                        normalized = extracted;
+                        continue;
+                    }
+
+                    if (extracted && typeof extracted === 'object') {
+                        normalized = JSON.stringify(extracted);
+                        continue;
+                    }
+
+                    break;
+                } catch {
+                    break;
+                }
+            }
+
+            return normalized.trim();
+        };
+
+        const parseQuizFromLooseJson = (raw: string) => {
+            if (typeof raw !== 'string') return null;
+
+            const text = raw.replace(/\[TYPE:QUIZ\]/i, '').trim();
+            const questionRegex = /"question"\s*:\s*"([\s\S]*?)"\s*,\s*"options"\s*:\s*\[([\s\S]*?)\]\s*,\s*"correct"\s*:\s*([0-4])/g;
+            const recoveredQuestions: any[] = [];
+
+            let match: RegExpExecArray | null;
+            while ((match = questionRegex.exec(text)) !== null) {
+                const questionText = (match[1] || '')
+                    .replace(/\\"/g, '"')
+                    .replace(/\\n/g, ' ')
+                    .trim();
+
+                let optionsRaw = (match[2] || '').trim();
+                if (optionsRaw.startsWith('"')) optionsRaw = optionsRaw.slice(1);
+                if (optionsRaw.endsWith('"')) optionsRaw = optionsRaw.slice(0, -1);
+
+                const options = optionsRaw
+                    .split(/"\s*,\s*"/)
+                    .map((option) => option.replace(/\\"/g, '"').replace(/\\n/g, ' ').trim())
+                    .filter(Boolean);
+
+                const correct = Number(match[3]);
+
+                if (questionText && options.length >= 2 && Number.isInteger(correct)) {
+                    recoveredQuestions.push({
+                        question: questionText,
+                        options,
+                        correct,
+                    });
+                }
+            }
+
+            if (recoveredQuestions.length > 0) {
+                return { questions: recoveredQuestions };
+            }
+
+            return null;
+        };
+
         // Helper function to try extracting JSON (Robust enough for AI output)
         const tryParseJSON = (str: string) => {
             if (typeof str !== 'string') return null;
@@ -2187,13 +2311,9 @@ export default function TranscriptionScreen() {
             console.log('[AI] Resposta do N8N:', JSON.stringify(n8nResponse, null, 2));
 
             // Extrair conteúdo
-            let content = n8nResponse.output || n8nResponse.text || n8nResponse;
-            if (Array.isArray(n8nResponse) && n8nResponse[0]?.output) {
-                content = n8nResponse[0].output;
-            }
-            // Suporte para n8n retornando { data: { output: "..." } }
-            if (n8nResponse.data?.output) {
-                content = n8nResponse.data.output;
+            let content = extractContentFromN8n(n8nResponse);
+            if (typeof content === 'string') {
+                content = normalizeN8nText(content);
             }
 
             // DETECÇÃO EXPLÍCITA DE TIPO (Solicitado pelo usuário)
@@ -2226,9 +2346,9 @@ export default function TranscriptionScreen() {
                     return videos;
                 };
 
-                const cmdMatch = content.match(/^\[TYPE:CMD\]/i);
+                const cmdMatch = content.match(/\[TYPE:CMD\]/i);
                 // Detectar [TYPE:DOCUMENT]
-                const documentMatch = content.match(/^\[TYPE:DOCUMENT\]/i);
+                const documentMatch = content.match(/\[TYPE:DOCUMENT\]/i);
                 if (documentMatch) {
                     console.log('[AI] Documento detectado! Processando...');
                     console.log('[AI] Conteúdo completo:', content);
@@ -2278,7 +2398,7 @@ export default function TranscriptionScreen() {
                     return; // Não processar mais nada
                 }
 
-                const typeMatch = content.match(/^\[TYPE:(QUIZ|SUMMARY)\]/i);
+                const typeMatch = content.match(/\[TYPE:(QUIZ|SUMMARY)\]/i);
 
                 if (!cmdMatch) {
                     const videos = extractVideoList(content);
@@ -2376,7 +2496,7 @@ export default function TranscriptionScreen() {
                 } else if (typeMatch) {
                     explicitType = typeMatch[1].toUpperCase() === 'QUIZ' ? 'quiz' : 'summary';
                     // Remove a tag para não atrapalhar o parse
-                    content = content.replace(/^\[TYPE:(QUIZ|SUMMARY)\]/i, '').trim();
+                    content = content.replace(/^[\s\S]*?\[TYPE:(QUIZ|SUMMARY)\]/i, '').trim();
                     console.log(`[AI] Tipo explícito detectado: ${explicitType}`);
                 }
 
@@ -2394,6 +2514,34 @@ export default function TranscriptionScreen() {
                         // Se falhar tudo, assume que é texto livre (Resumo/Resposta simples)
                         parsedContent = { text: content };
                     }
+                }
+            }
+
+            // Fallback para payloads de quiz parcialmente inválidos (ex: aspas internas não escapadas)
+            if (explicitType === 'quiz') {
+                const hasValidQuestions =
+                    parsedContent &&
+                    typeof parsedContent === 'object' &&
+                    Array.isArray(parsedContent.questions) &&
+                    parsedContent.questions.length > 0;
+
+                if (!hasValidQuestions && typeof content === 'string') {
+                    const recoveredQuiz = parseQuizFromLooseJson(content);
+                    if (recoveredQuiz) {
+                        console.log('[AI] Quiz recuperado via parser tolerante');
+                        parsedContent = recoveredQuiz;
+                    }
+                }
+
+                const stillInvalidQuiz = !(
+                    parsedContent &&
+                    typeof parsedContent === 'object' &&
+                    Array.isArray(parsedContent.questions) &&
+                    parsedContent.questions.length > 0
+                );
+
+                if (stillInvalidQuiz) {
+                    throw new Error('Quiz inválido retornado pela IA. Tente gerar novamente.');
                 }
             }
 
@@ -3248,6 +3396,9 @@ export default function TranscriptionScreen() {
     // Tutorial removido - checkTutorialStatus functions and useEffect
 
     const wordCount = transcribedText.split(/\s+/).filter(w => w).length;
+    const collapsedPreviewLines = isMobile
+        ? 3
+        : Math.min(10, Math.max(4, Math.ceil((collapsedPreview || '').length / 56)));
 
     if (isLoading) {
         return (
@@ -3846,9 +3997,17 @@ export default function TranscriptionScreen() {
                                 </View>
                             </View>
 
-                            <Text style={styles.collapsedPreviewText} numberOfLines={isMobile ? 3 : 8}>
-                                {collapsedPreview || 'Nenhum conteúdo transcrito ainda.'}
-                            </Text>
+                            <View style={styles.collapsedPreviewContainer}>
+                                <Text
+                                    style={[
+                                        styles.collapsedPreviewText,
+                                        !isMobile ? styles.collapsedPreviewTextDesktop : null,
+                                    ]}
+                                    numberOfLines={collapsedPreviewLines}
+                                >
+                                    {collapsedPreview || 'Nenhum conteúdo transcrito ainda.'}
+                                </Text>
+                            </View>
 
                             <Text style={styles.collapsedMetaText}>
                                 {wordCount} palavras • {isRecording ? '🎤 Ditando em tempo real' : '📝 Pronto para edição'}
@@ -4506,14 +4665,14 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     transcriptionCollapsedInfo: {
+        flex: 1,
         paddingVertical: spacing.sm,
         paddingHorizontal: spacing.base,
         gap: spacing.sm,
     },
     transcriptionCollapsedInfoDesktop: {
         paddingVertical: spacing.md,
-        minHeight: 220,
-        justifyContent: 'space-between',
+        minHeight: 0,
     },
     collapsedHeaderRow: {
         flexDirection: 'row',
@@ -4539,9 +4698,18 @@ const styles = StyleSheet.create({
         color: colors.textPrimary,
         lineHeight: 20,
     },
+    collapsedPreviewContainer: {
+        flex: 1,
+        justifyContent: 'center',
+    },
+    collapsedPreviewTextDesktop: {
+        fontSize: typography.fontSize.base,
+        lineHeight: 22,
+    },
     collapsedMetaText: {
         fontSize: typography.fontSize.xs,
         color: colors.textSecondary,
+        marginTop: spacing.xs,
     },
     // Generated content styles
     emptyState: {
