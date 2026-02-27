@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from app import db
 from app.models.system_setting import SystemSetting
-from app.middleware.admin_middleware import super_admin_required
+from app.middleware.super_admin_middleware import super_admin_jwt_required
 
 settings_bp = Blueprint('settings', __name__)
 
@@ -17,7 +17,7 @@ def get_public_settings():
     }), 200
 
 @settings_bp.route('/', methods=['GET'])
-@super_admin_required
+@super_admin_jwt_required
 def get_all_settings(current_user):
     """Retorna todas as configurações (Super Admin)"""
     settings = SystemSetting.query.all()
@@ -27,7 +27,7 @@ def get_all_settings(current_user):
     }), 200
 
 @settings_bp.route('/', methods=['POST'])
-@super_admin_required
+@super_admin_jwt_required
 def update_setting(current_user):
     """Cria ou atualiza uma configuração (Super Admin)"""
     data = request.get_json()

@@ -29,6 +29,11 @@ export interface AuthResponse {
     token?: string;
 }
 
+export interface SupportMessageResponse {
+    success: boolean;
+    message: string;
+}
+
 // Login
 export const login = async (data: LoginData): Promise<AuthResponse> => {
     const response = await fetch(`${API_URL}/auth/login`, {
@@ -83,6 +88,24 @@ export const getMe = async (): Promise<AuthResponse> => {
             'Authorization': `Bearer ${token}`,
         },
     });
+    return response.json();
+};
+
+export const sendSupportMessage = async (payload: {
+    subject: string;
+    message: string;
+}): Promise<SupportMessageResponse> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/auth/support`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+    });
+
     return response.json();
 };
 

@@ -13,6 +13,8 @@ import {
     Modal,
     ActivityIndicator,
     useWindowDimensions,
+    LayoutAnimation,
+    UIManager,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -74,7 +76,7 @@ export default function TranscriptionScreen() {
     const router = useRouter();
     // ... rest of component
     // const { user } = useAuth(); // Se precisar do user
-    const { width } = useWindowDimensions();
+    const { width, height } = useWindowDimensions();
     const isMobile = width < 768; // Breakpoint para mobile/tablet
     const insets = useSafeAreaInsets();
     const params = useLocalSearchParams();
@@ -124,7 +126,7 @@ export default function TranscriptionScreen() {
     const mainContentWrapperProps = isMobile
         ? {
             style: { flex: 1 },
-            contentContainerStyle: { padding: 16, paddingBottom: 100, gap: 16 },
+            contentContainerStyle: { padding: 16, paddingBottom: 12, gap: 16, flexGrow: 1 },
             keyboardShouldPersistTaps: 'handled' as 'handled'
         }
         : {
@@ -226,6 +228,19 @@ export default function TranscriptionScreen() {
     const [showMediaControls, setShowMediaControls] = useState(false);
     const [presentationContentType, setPresentationContentType] = useState<'video' | 'document' | null>(null);
 
+    const mobileLeftPanelStyle = isMobile
+        ? {
+            width: '100%' as const,
+            flex: isTranscriptionCollapsed ? 1 : 0,
+            minHeight: isTranscriptionCollapsed ? Math.max(260, Math.floor(height * 0.45)) : 200,
+        }
+        : null;
+
+    const leftPanelResponsiveStyle = [
+        styles.leftPanel,
+        mobileLeftPanelStyle,
+    ];
+
     const mobileRightPanelStyle = isMobile
         ? { width: '100%' as const, flex: isTranscriptionCollapsed ? 0 : 1, minHeight: isTranscriptionCollapsed ? 92 : 250 }
         : null;
@@ -251,6 +266,27 @@ export default function TranscriptionScreen() {
 
     const [triggerWord, setTriggerWord] = useState('Fred'); // Default
     const [fredCommand, setFredCommand] = useState<string | null>(null); // State for Fred Popup
+
+    useEffect(() => {
+        if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+            UIManager.setLayoutAnimationEnabledExperimental(true);
+        }
+    }, []);
+
+    const animatePanels = useCallback(() => {
+        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    }, []);
+
+    const toggleTranscriptionCollapse = useCallback(() => {
+        animatePanels();
+        setIsTranscriptionCollapsed((prev) => !prev);
+    }, [animatePanels]);
+
+    const expandTranscription = useCallback(() => {
+        if (!isTranscriptionCollapsed) return;
+        animatePanels();
+        setIsTranscriptionCollapsed(false);
+    }, [animatePanels, isTranscriptionCollapsed]);
 
     // Tutorial removido - tutorialSteps
 
@@ -1335,6 +1371,130 @@ export default function TranscriptionScreen() {
 
     // Enviar para IA (Genérico)
     const handleSendToAI = async (command?: string) => {
+        const extractContentFromN8n = (raw: any): any => {
+            const deepPick = (value: any): any => {
+                if (value === null || value === undefined) return null;
+                if (typeof value === 'string') return value;
+
+                if (Array.isArray(value)) {
+                    for (const item of value) {
+                        const extracted = deepPick(item);
+                        if (extracted !== null && extracted !== undefined) return extracted;
+                    }
+                    return null;
+                }
+
+                if (typeof value === 'object') {
+                    const priorityKeys = ['output', 'text', 'response', 'result', 'message', 'data'];
+                    for (const key of priorityKeys) {
+                        if (Object.prototype.hasOwnProperty.call(value, key)) {
+                            const extracted = deepPick(value[key]);
+                            if (extracted !== null && extracted !== undefined) return extracted;
+                        }
+                    }
+
+                    for (const key of Object.keys(value)) {
+                        const extracted = deepPick(value[key]);
+                        if (extracted !== null && extracted !== undefined) return extracted;
+                    }
+                }
+
+                return null;
+            };
+
+            const extracted = deepPick(raw);
+            return extracted !== null && extracted !== undefined ? extracted : raw;
+        };
+
+        const normalizeN8nText = (value: string) => {
+            if (typeof value !== 'string') return value;
+
+            let normalized = value.trim();
+
+            // Handle logs like: [Object: {"output": "..."}]
+            const objectWrapperMatch = normalized.match(/^\[Object:\s*([\s\S]+)\]$/i);
+            if (objectWrapperMatch?.[1]) {
+                try {
+                    const parsed = JSON.parse(objectWrapperMatch[1]);
+                    if (parsed?.output && typeof parsed.output === 'string') {
+                        normalized = parsed.output;
+                    }
+                } catch { }
+            }
+
+            // Handle stringified payloads recursively
+            for (let i = 0; i < 3; i++) {
+                const candidate = normalized.trim();
+                const looksLikeJson =
+                    (candidate.startsWith('{') && candidate.endsWith('}')) ||
+                    (candidate.startsWith('[') && candidate.endsWith(']'));
+
+                if (!looksLikeJson) break;
+
+                try {
+                    const parsed = JSON.parse(candidate);
+                    const extracted = extractContentFromN8n(parsed);
+
+                    if (typeof extracted === 'string') {
+                        normalized = extracted;
+                        continue;
+                    }
+
+                    if (extracted && typeof extracted === 'object') {
+                        normalized = JSON.stringify(extracted);
+                        continue;
+                    }
+
+                    break;
+                } catch {
+                    break;
+                }
+            }
+
+            return normalized.trim();
+        };
+
+        const parseQuizFromLooseJson = (raw: string) => {
+            if (typeof raw !== 'string') return null;
+
+            const text = raw.replace(/\[TYPE:QUIZ\]/i, '').trim();
+            const questionRegex = /"question"\s*:\s*"([\s\S]*?)"\s*,\s*"options"\s*:\s*\[([\s\S]*?)\]\s*,\s*"correct"\s*:\s*([0-4])/g;
+            const recoveredQuestions: any[] = [];
+
+            let match: RegExpExecArray | null;
+            while ((match = questionRegex.exec(text)) !== null) {
+                const questionText = (match[1] || '')
+                    .replace(/\\"/g, '"')
+                    .replace(/\\n/g, ' ')
+                    .trim();
+
+                let optionsRaw = (match[2] || '').trim();
+                if (optionsRaw.startsWith('"')) optionsRaw = optionsRaw.slice(1);
+                if (optionsRaw.endsWith('"')) optionsRaw = optionsRaw.slice(0, -1);
+
+                const options = optionsRaw
+                    .split(/"\s*,\s*"/)
+                    .map((option) => option.replace(/\\"/g, '"').replace(/\\n/g, ' ').trim())
+                    .filter(Boolean);
+
+                const correct = Number(match[3]);
+
+                if (questionText && options.length >= 2 && Number.isInteger(correct)) {
+                    recoveredQuestions.push({
+                        question: questionText,
+                        options,
+                        correct,
+                    });
+                }
+            }
+
+            if (recoveredQuestions.length > 0) {
+                return { questions: recoveredQuestions };
+            }
+
+            return null;
+        };
+
         // Helper function to try extracting JSON (Robust enough for AI output)
         const tryParseJSON = (str: string) => {
             if (typeof str !== 'string') return null;
@@ -2151,13 +2311,9 @@ export default function TranscriptionScreen() {
             console.log('[AI] Resposta do N8N:', JSON.stringify(n8nResponse, null, 2));
 
             // Extrair conteúdo
-            let content = n8nResponse.output || n8nResponse.text || n8nResponse;
-            if (Array.isArray(n8nResponse) && n8nResponse[0]?.output) {
-                content = n8nResponse[0].output;
-            }
-            // Suporte para n8n retornando { data: { output: "..." } }
-            if (n8nResponse.data?.output) {
-                content = n8nResponse.data.output;
+            let content = extractContentFromN8n(n8nResponse);
+            if (typeof content === 'string') {
+                content = normalizeN8nText(content);
             }
 
             // DETECÇÃO EXPLÍCITA DE TIPO (Solicitado pelo usuário)
@@ -2190,9 +2346,9 @@ export default function TranscriptionScreen() {
                     return videos;
                 };
 
-                const cmdMatch = content.match(/^\[TYPE:CMD\]/i);
+                const cmdMatch = content.match(/\[TYPE:CMD\]/i);
                 // Detectar [TYPE:DOCUMENT]
-                const documentMatch = content.match(/^\[TYPE:DOCUMENT\]/i);
+                const documentMatch = content.match(/\[TYPE:DOCUMENT\]/i);
                 if (documentMatch) {
                     console.log('[AI] Documento detectado! Processando...');
                     console.log('[AI] Conteúdo completo:', content);
@@ -2242,7 +2398,7 @@ export default function TranscriptionScreen() {
                     return; // Não processar mais nada
                 }
 
-                const typeMatch = content.match(/^\[TYPE:(QUIZ|SUMMARY)\]/i);
+                const typeMatch = content.match(/\[TYPE:(QUIZ|SUMMARY)\]/i);
 
                 if (!cmdMatch) {
                     const videos = extractVideoList(content);
@@ -2340,7 +2496,7 @@ export default function TranscriptionScreen() {
                 } else if (typeMatch) {
                     explicitType = typeMatch[1].toUpperCase() === 'QUIZ' ? 'quiz' : 'summary';
                     // Remove a tag para não atrapalhar o parse
-                    content = content.replace(/^\[TYPE:(QUIZ|SUMMARY)\]/i, '').trim();
+                    content = content.replace(/^[\s\S]*?\[TYPE:(QUIZ|SUMMARY)\]/i, '').trim();
                     console.log(`[AI] Tipo explícito detectado: ${explicitType}`);
                 }
 
@@ -2358,6 +2514,34 @@ export default function TranscriptionScreen() {
                         // Se falhar tudo, assume que é texto livre (Resumo/Resposta simples)
                         parsedContent = { text: content };
                     }
+                }
+            }
+
+            // Fallback para payloads de quiz parcialmente inválidos (ex: aspas internas não escapadas)
+            if (explicitType === 'quiz') {
+                const hasValidQuestions =
+                    parsedContent &&
+                    typeof parsedContent === 'object' &&
+                    Array.isArray(parsedContent.questions) &&
+                    parsedContent.questions.length > 0;
+
+                if (!hasValidQuestions && typeof content === 'string') {
+                    const recoveredQuiz = parseQuizFromLooseJson(content);
+                    if (recoveredQuiz) {
+                        console.log('[AI] Quiz recuperado via parser tolerante');
+                        parsedContent = recoveredQuiz;
+                    }
+                }
+
+                const stillInvalidQuiz = !(
+                    parsedContent &&
+                    typeof parsedContent === 'object' &&
+                    Array.isArray(parsedContent.questions) &&
+                    parsedContent.questions.length > 0
+                );
+
+                if (stillInvalidQuiz) {
+                    throw new Error('Quiz inválido retornado pela IA. Tente gerar novamente.');
                 }
             }
 
@@ -3212,6 +3396,9 @@ export default function TranscriptionScreen() {
     // Tutorial removido - checkTutorialStatus functions and useEffect
 
     const wordCount = transcribedText.split(/\s+/).filter(w => w).length;
+    const collapsedPreviewLines = isMobile
+        ? 3
+        : Math.min(10, Math.max(4, Math.ceil((collapsedPreview || '').length / 56)));
 
     if (isLoading) {
         return (
@@ -3463,8 +3650,8 @@ export default function TranscriptionScreen() {
             <MainContentWrapper {...mainContentWrapperProps}>
                 {/* Painel Esquerdo - Conteúdo Gerado */}
                 {/* No mobile, se não tiver conteúdo gerado (modo 'none'), pode esconder esse painel ou deixá-lo menor */}
-                {(displayMode !== 'none' || !isMobile) && (
-                    <View style={[styles.leftPanel, isMobile && { width: '100%', flex: 0, minHeight: 200 }]}>
+                {(displayMode !== 'none' || !isMobile || isTranscriptionCollapsed) && (
+                    <View style={leftPanelResponsiveStyle}>
                         <View style={styles.panelHeader}>
                             <MaterialIcons
                                 name={displayMode === 'quiz' ? 'quiz' : 'summarize'}
@@ -3754,22 +3941,33 @@ export default function TranscriptionScreen() {
                 {/* Painel Direito - Transcrição */}
                 <View style={rightPanelResponsiveStyle}>
                     <View style={styles.panelHeader}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <View style={styles.transcriptionHeaderLeft}>
                             <MaterialIcons name="mic" size={20} color={colors.primary} />
                             <Text style={styles.panelTitle}>Transcrição</Text>
                         </View>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                            <Text style={styles.wordCount}>{wordCount} palavras</Text>
+                        <View style={styles.transcriptionHeaderRight}>
+                            <Text
+                                style={[
+                                    styles.wordCount,
+                                    isTranscriptionCollapsed && !isMobile ? styles.wordCountCompactDesktop : null,
+                                ]}
+                                numberOfLines={1}
+                            >
+                                {isTranscriptionCollapsed && !isMobile ? `${wordCount}p` : `${wordCount} palavras`}
+                            </Text>
                             <TouchableOpacity
-                                style={styles.compactButton}
-                                onPress={() => setIsTranscriptionCollapsed(prev => !prev)}
+                                style={[
+                                    styles.compactButton,
+                                    isTranscriptionCollapsed && !isMobile ? styles.compactButtonCollapsedDesktop : null,
+                                ]}
+                                onPress={toggleTranscriptionCollapse}
                             >
                                 <MaterialIcons
                                     name={isTranscriptionCollapsed ? 'expand-more' : 'expand-less'}
                                     size={20}
                                     color={isTranscriptionCollapsed ? colors.primary : colors.slate500}
                                 />
-                                {!isMobile && (
+                                {!isMobile && !isTranscriptionCollapsed && (
                                     <Text style={[styles.compactButtonText, isTranscriptionCollapsed && styles.compactButtonTextActive]}>
                                         {isTranscriptionCollapsed ? 'Expandir' : 'Compactar'}
                                     </Text>
@@ -3785,9 +3983,12 @@ export default function TranscriptionScreen() {
 
                     {isTranscriptionCollapsed ? (
                         <TouchableOpacity
-                            style={styles.transcriptionCollapsedInfo}
+                            style={[
+                                styles.transcriptionCollapsedInfo,
+                                !isMobile ? styles.transcriptionCollapsedInfoDesktop : null,
+                            ]}
                             activeOpacity={0.8}
-                            onPress={() => setIsTranscriptionCollapsed(false)}
+                            onPress={expandTranscription}
                         >
                             <View style={styles.collapsedHeaderRow}>
                                 <View style={styles.collapsedBadge}>
@@ -3796,9 +3997,17 @@ export default function TranscriptionScreen() {
                                 </View>
                             </View>
 
-                            <Text style={styles.collapsedPreviewText}>
-                                {collapsedPreview || 'Nenhum conteúdo transcrito ainda.'}
-                            </Text>
+                            <View style={styles.collapsedPreviewContainer}>
+                                <Text
+                                    style={[
+                                        styles.collapsedPreviewText,
+                                        !isMobile ? styles.collapsedPreviewTextDesktop : null,
+                                    ]}
+                                    numberOfLines={collapsedPreviewLines}
+                                >
+                                    {collapsedPreview || 'Nenhum conteúdo transcrito ainda.'}
+                                </Text>
+                            </View>
 
                             <Text style={styles.collapsedMetaText}>
                                 {wordCount} palavras • {isRecording ? '🎤 Ditando em tempo real' : '📝 Pronto para edição'}
@@ -4340,6 +4549,12 @@ const styles = StyleSheet.create({
     wordCount: {
         fontSize: typography.fontSize.sm,
         color: colors.textSecondary,
+        flexShrink: 1,
+    },
+    wordCountCompactDesktop: {
+        minWidth: 34,
+        textAlign: 'right',
+        fontSize: typography.fontSize.xs,
     },
     infoText: {
         fontSize: typography.fontSize.sm,
@@ -4379,9 +4594,10 @@ const styles = StyleSheet.create({
         elevation: 4,
     },
     rightPanelCollapsedDesktop: {
-        flex: 0.42,
-        minWidth: 320,
-        maxWidth: 460,
+        flex: 0,
+        width: 290,
+        minWidth: 260,
+        maxWidth: 320,
     },
     panelHeader: {
         flexDirection: 'row',
@@ -4398,6 +4614,19 @@ const styles = StyleSheet.create({
         fontWeight: typography.fontWeight.semibold,
         color: colors.textPrimary,
     },
+    transcriptionHeaderLeft: {
+        flex: 1,
+        minWidth: 0,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    transcriptionHeaderRight: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        flexShrink: 0,
+    },
     panelScroll: {
         flex: 1,
     },
@@ -4408,6 +4637,7 @@ const styles = StyleSheet.create({
     compactButton: {
         flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
         gap: 4,
         backgroundColor: colors.primaryOpacity20,
         borderRadius: borderRadius.default,
@@ -4415,6 +4645,10 @@ const styles = StyleSheet.create({
         paddingVertical: 4,
         borderWidth: 1,
         borderColor: colors.primaryOpacity30,
+        minWidth: 38,
+    },
+    compactButtonCollapsedDesktop: {
+        paddingHorizontal: 6,
     },
     compactButtonText: {
         fontSize: typography.fontSize.sm,
@@ -4431,9 +4665,14 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     transcriptionCollapsedInfo: {
+        flex: 1,
         paddingVertical: spacing.sm,
         paddingHorizontal: spacing.base,
         gap: spacing.sm,
+    },
+    transcriptionCollapsedInfoDesktop: {
+        paddingVertical: spacing.md,
+        minHeight: 0,
     },
     collapsedHeaderRow: {
         flexDirection: 'row',
@@ -4459,9 +4698,18 @@ const styles = StyleSheet.create({
         color: colors.textPrimary,
         lineHeight: 20,
     },
+    collapsedPreviewContainer: {
+        flex: 1,
+        justifyContent: 'center',
+    },
+    collapsedPreviewTextDesktop: {
+        fontSize: typography.fontSize.base,
+        lineHeight: 22,
+    },
     collapsedMetaText: {
         fontSize: typography.fontSize.xs,
         color: colors.textSecondary,
+        marginTop: spacing.xs,
     },
     // Generated content styles
     emptyState: {
