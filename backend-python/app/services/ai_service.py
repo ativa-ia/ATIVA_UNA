@@ -21,6 +21,9 @@ def get_ai_config():
     """Retorna a configuração atual de IA (Banco de Dados ou Env)"""
     # Tentar buscar do banco
     try:
+        # Forçar SQLAlchemy a recarregar as configs em vez de usar cache de sessão antigo
+        db.session.expire_all()
+        
         api_key_setting = SystemSetting.query.get('openai_api_key')
         model_setting = SystemSetting.query.get('ai_model')
         

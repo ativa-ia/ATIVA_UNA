@@ -85,6 +85,14 @@ def create_app(config_name=None):
         logger.info("Blueprints registrados com sucesso.")
     except Exception as e:
         logger.error(f"Erro ao registrar blueprints: {e}")
+
+    # Registrar middleware de manutenção
+    try:
+        from app.middleware.maintenance_middleware import register_maintenance_middleware
+        register_maintenance_middleware(app)
+        logger.info("Middleware de manutenção registrado.")
+    except Exception as e:
+        logger.error(f"Erro ao registrar middleware de manutenção: {e}")
     
     # Rota raiz
     @app.route('/')
