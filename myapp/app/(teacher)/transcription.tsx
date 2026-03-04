@@ -563,10 +563,11 @@ export default function TranscriptionScreen() {
 
         let text = String(rawText);
 
-        // 1. Remover tags [TYPE:SUMMARY], [TYPE:SUMARY], [TYPE:SUMARRY], etc.
+        // 1. Remover tags [TYPE:...] em qualquer posição (ex: [TYPE:SUMMARY], [TYPE:CMD], etc.)
         text = text
-            .replace(/^\s*\[\s*TYPE\s*:\s*SUM\w*\s*\]\s*/i, '')
-            .replace(/^\s*\[\s*TYPE\s*:\s*\w+\s*\]\s*/i, '');
+            .replace(/\[\s*TYPE\s*:\s*[A-Z_]+\s*\]/gi, ' ')
+            .replace(/\s{2,}/g, ' ')
+            .replace(/[ \t]*\n[ \t]*/g, '\n');
 
         // 2. Tentar parsear se for JSON com campo "text"
         if (text.trim().startsWith('{')) {
@@ -1258,11 +1259,18 @@ export default function TranscriptionScreen() {
     const handleSendSummaryToPresentation = async () => {
         if (!presentationCode || !generatedSummary) return;
 
+        const cleanedSummary = cleanSummaryText(generatedSummary);
+        if (!cleanedSummary) {
+            setFredCommand('Resumo vazio para envio');
+            setTimeout(() => setFredCommand(null), 3000);
+            return;
+        }
+
         setFredCommand('Enviando resumo para a tela...');
 
         try {
             await sendToPresentation(presentationCode, 'summary', {
-                text: generatedSummary,
+                text: cleanedSummary,
                 title: 'Resumo da Aula'
             });
             setFredCommand('✅ Resumo enviado para apresentação!');
@@ -1453,6 +1461,19 @@ export default function TranscriptionScreen() {
                 } catch {
                     break;
                 }
+            }
+
+            normalized = normalized
+                .replace(/\r\n/g, '\n')
+                .replace(/\r/g, '\n')
+                .replace(/\\n/g, '\n')
+                .replace(/\\t/g, '\t')
+                .replace(/\s*\|\|\|\s*/g, '\n');
+
+            if (/(youtube\.com\/watch\?v=|youtu\.be\/)/i.test(normalized)) {
+                normalized = normalized
+                    .replace(/((?:https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)[^\s]+))(?=[A-Za-zÀ-ÿ0-9])/g, '$1\n')
+                    .replace(/[ \t]*\n[ \t]*/g, '\n');
             }
 
             return normalized.trim();
@@ -2364,30 +2385,98 @@ export default function TranscriptionScreen() {
             if (typeof content === 'string') {
                 const extractVideoList = (text: string): VideoItem[] => {
                     const urlRegex = /(https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)[\w-]+)/gi;
-                    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+                    const normalizedText = String(text || '')
+                        .replace(/\r\n/g, '\n')
+                        .replace(/\r/g, '\n')
+                        .replace(/\\n/g, '\n')
+                        .replace(/\s*\|\|\|\s*/g, '\n')
+                        .replace(/((?:https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)[^\s]+))(?=[A-Za-zÀ-ÿ0-9])/g, '$1\n');
+
+                    const lines = normalizedText.split('\n').map(l => l.trim()).filter(Boolean);
                     const videos: VideoItem[] = [];
+                    const seen = new Set<string>();
 
                     for (let i = 0; i < lines.length; i++) {
                         const line = lines[i];
-                        const match = line.match(urlRegex);
-                        if (!match) continue;
+                        const matches = Array.from(line.matchAll(urlRegex));
+                        if (!matches.length) continue;
 
-                        const url = match[0];
-                        let caption = line.replace(urlRegex, '').trim();
-                        if (!caption && lines[i + 1] && !urlRegex.test(lines[i + 1])) {
-                            caption = lines[i + 1];
+                        for (const match of matches) {
+                            const url = String(match[0] || '').trim();
+                            if (!url || seen.has(url)) continue;
+
+                            let caption = line.replace(urlRegex, '').trim();
+                            if (!caption && lines[i - 1] && !urlRegex.test(lines[i - 1])) {
+                                caption = lines[i - 1].trim();
+                            }
+                            if (!caption && lines[i + 1] && !urlRegex.test(lines[i + 1])) {
+                                caption = lines[i + 1].trim();
+                            }
+
+                            seen.add(url);
+                            videos.push({
+                                url,
+                                caption: caption || 'Video'
+                            });
                         }
-
-                        videos.push({
-                            url,
-                            caption: caption || 'Video'
-                        });
                     }
 
                     return videos;
                 };
 
                 const cmdMatch = content.match(/\[TYPE:CMD\]/i);
+                const sanitizeCommand = (cmd: any) => {
+                    if (!cmd || typeof cmd !== 'object') return cmd;
+
+                    if (cmd.action === 'send_content' && cmd.payload?.type === 'video' && typeof cmd.payload?.url === 'string') {
+                        return {
+                            ...cmd,
+                            payload: {
+                                ...cmd.payload,
+                                url: cmd.payload.url.replace(/\s+/g, '').trim(),
+                            },
+                        };
+                    }
+
+                    return cmd;
+                };
+
+                const tryParseCommandJson = (raw: string) => {
+                    if (!raw || typeof raw !== 'string') return null;
+
+                    const base = raw.replace(/^\s*\[TYPE:CMD\]\s*/i, '').trim();
+                    const candidates: string[] = [base];
+
+                    const firstBrace = base.indexOf('{');
+                    const lastBrace = base.lastIndexOf('}');
+                    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+                        candidates.push(base.slice(firstBrace, lastBrace + 1));
+                    }
+
+                    const repairJson = (value: string) =>
+                        value
+                            .replace(/[“”]/g, '"')
+                            .replace(/[‘’]/g, "'")
+                            .replace(/,\s*([}\]])/g, '$1')
+                            .replace(/("url"\s*:\s*")([\s\S]*?)(")/gi, (_m, p1, p2, p3) => {
+                                const cleanedUrl = String(p2 || '').replace(/\s+/g, '');
+                                return `${p1}${cleanedUrl}${p3}`;
+                            });
+
+                    for (const candidate of candidates) {
+                        try {
+                            const parsed = JSON.parse(candidate);
+                            if (parsed && parsed.action) return sanitizeCommand(parsed);
+                        } catch { }
+
+                        try {
+                            const parsed = JSON.parse(repairJson(candidate));
+                            if (parsed && parsed.action) return sanitizeCommand(parsed);
+                        } catch { }
+                    }
+
+                    return null;
+                };
                 // Detectar [TYPE:DOCUMENT]
                 const documentMatch = content.match(/\[TYPE:DOCUMENT\]/i);
                 if (documentMatch) {
@@ -2449,6 +2538,17 @@ export default function TranscriptionScreen() {
                         setIsGenerating(false);
                         return;
                     }
+
+                    const directCommandJson = tryParseCommandJson(content) || tryParseJSON(content);
+                    if (directCommandJson && directCommandJson.action) {
+                        explicitType = 'command';
+                        console.log('[AI] Tipo explícito detectado: COMMAND (json direto)');
+
+                        setVideoListModal({ visible: false, videos: [] });
+                        processAICommand(sanitizeCommand(directCommandJson));
+                        setIsGenerating(false);
+                        return;
+                    }
                 }
 
                 if (cmdMatch) {
@@ -2478,9 +2578,9 @@ export default function TranscriptionScreen() {
 
                             if (jsonEnd > jsonStart) {
                                 const jsonStr = trimmedBlock.substring(jsonStart, jsonEnd);
-                                const parsed = JSON.parse(jsonStr);
+                                const parsed = tryParseCommandJson(jsonStr);
                                 if (parsed && parsed.action) {
-                                    commands.push(parsed);
+                                    commands.push(sanitizeCommand(parsed));
                                 }
                             }
                         } catch (e) {
@@ -2518,7 +2618,7 @@ export default function TranscriptionScreen() {
                         // Close video list modal if open (voice command while viewing list)
                         setVideoListModal({ visible: false, videos: [] });
 
-                        processAICommand(commands[0]);
+                        processAICommand(sanitizeCommand(commands[0]));
                         setIsGenerating(false);
                         return; // Interrompe o fluxo (não salva como atividade normal)
                     }
@@ -2528,9 +2628,9 @@ export default function TranscriptionScreen() {
                     content = content.replace(/^\[TYPE:CMD\]/i, '').trim();
                     console.log(`[AI] Tipo explícito detectado: COMMAND (fallback)`);
 
-                    const commandJson = tryParseJSON(content);
+                    const commandJson = tryParseCommandJson(content) || tryParseJSON(content);
                     if (commandJson && commandJson.action) {
-                        processAICommand(commandJson);
+                        processAICommand(sanitizeCommand(commandJson));
                         setIsGenerating(false);
                         return;
                     }
