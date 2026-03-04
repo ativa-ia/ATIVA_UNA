@@ -156,6 +156,34 @@ def send_content(current_user, code):
         'timestamp': datetime.utcnow().isoformat()
     }
     db.session.commit()
+
+    # Registrar evento para o recap da aula
+    try:
+        from app.routes.lesson_recap_routes import log_lesson_event, find_active_transcription_session
+        ts = find_active_transcription_session(current_user.id)
+        if ts:
+            event_data = {
+                'content_type': content_type,
+                'title': content_data.get('title') or content_data.get('filename') or content_type,
+            }
+            # Preservar URL para conteúdos acessíveis
+            if content_data.get('url'):
+                event_data['url'] = content_data['url']
+            if content_data.get('file_url'):
+                event_data['url'] = content_data['file_url']
+            if content_data.get('supabase_url'):
+                event_data['url'] = content_data['supabase_url']
+            if content_data.get('metadata'):
+                event_data['metadata'] = content_data['metadata']
+            log_lesson_event(
+                session_id=ts.id,
+                event_type='content_displayed',
+                event_data=event_data,
+                presentation_id=session.id,
+                triggered_by=current_user.id
+            )
+    except Exception as e:
+        logger.error(f'[RECAP] Erro ao registrar content_displayed: {e}')
     
     return jsonify({
         'success': True,
@@ -262,6 +290,25 @@ def share_document_to_students(current_user, code):
 
     db.session.commit()
 
+    # Registrar evento de compartilhamento
+    try:
+        from app.routes.lesson_recap_routes import log_lesson_event, find_active_transcription_session
+        ts = find_active_transcription_session(current_user.id)
+        if ts:
+            log_lesson_event(
+                session_id=ts.id,
+                event_type='document_shared',
+                event_data={
+                    'filename': title,
+                    'url': file_url,
+                    'student_count': count
+                },
+                presentation_id=session.id,
+                triggered_by=current_user.id
+            )
+    except Exception as e:
+        logger.error(f'[RECAP] Erro ao registrar document_shared: {e}')
+
     return jsonify({
         'success': True,
         'message': f'Documento enviado para {count} aluno(s)',
@@ -290,6 +337,20 @@ def clear_presentation(current_user, code):
         'timestamp': datetime.utcnow().isoformat()
     }
     db.session.commit()
+
+    # Registrar evento
+    try:
+        from app.routes.lesson_recap_routes import log_lesson_event, find_active_transcription_session
+        ts = find_active_transcription_session(current_user.id)
+        if ts:
+            log_lesson_event(
+                session_id=ts.id,
+                event_type='content_cleared',
+                presentation_id=session.id,
+                triggered_by=current_user.id
+            )
+    except Exception as e:
+        logger.error(f'[RECAP] Erro ao registrar content_cleared: {e}')
     
     return jsonify({
         'success': True,
@@ -312,6 +373,21 @@ def end_presentation(current_user, code):
         return jsonify({'success': False, 'error': 'Não autorizado'}), 403
     
     session.end_session()
+
+    # Registrar evento
+    try:
+        from app.routes.lesson_recap_routes import log_lesson_event, find_active_transcription_session
+        ts = find_active_transcription_session(current_user.id)
+        if ts:
+            log_lesson_event(
+                session_id=ts.id,
+                event_type='presentation_ended',
+                event_data={'presentation_code': code},
+                presentation_id=session.id,
+                triggered_by=current_user.id
+            )
+    except Exception as e:
+        logger.error(f'[RECAP] Erro ao registrar presentation_ended: {e}')
     
     logger.info(f"Apresentação encerrada: {code}")
     
