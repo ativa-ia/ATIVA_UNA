@@ -82,6 +82,7 @@ export default function TeacherCalendarScreen() {
     const navItems: NavItem[] = [
         { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
         { id: 'calendar', label: 'Calendário', iconName: 'calendar-today' },
+        { id: 'recaps', label: 'Recapitulando', iconName: 'history-edu' },
     ];
 
     const handleNavPress = (id: string) => {
@@ -92,6 +93,9 @@ export default function TeacherCalendarScreen() {
                 router.push('./dashboard');
                 break;
             case 'calendar':
+                break;
+            case 'recaps':
+                router.push('/(teacher)/recaps');
                 break;
         }
     };

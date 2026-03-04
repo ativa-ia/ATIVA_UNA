@@ -128,6 +128,65 @@ JSON:"""
         return f"Erro ao gerar resumo: {str(e)}"
 
 
+def generate_interactive_audio_script(summary_text: str, subject_name: str = "Aula") -> str:
+    """
+    Transforma um resumo de aula em um roteiro conversacional otimizado para TTS.
+    O texto gerado soa como um host de podcast ou professor particular,
+    tornando o áudio mais envolvente e natural.
+    """
+    api_key, model_name = get_ai_config()
+    client = get_client()
+
+    if not client:
+        return summary_text  # Fallback: retorna o texto original
+
+    try:
+        system_instruction = """Você é um roteirista de podcasts educacionais especializado em transformar textos acadêmicos em áudio envolvente.
+
+Sua tarefa é reescrever o resumo de aula fornecido em um ROTEIRO DE ÁUDIO conversacional e didático.
+
+REGRAS OBRIGATÓRIAS:
+1. Escreva como se estivesse FALANDO diretamente com o aluno (use "você", "vamos", "olha só").
+2. Comece com uma saudação breve e acolhedora, mencionando a disciplina. Exemplo: "E aí, tudo bem? Vamos revisar o conteúdo de hoje sobre..."
+3. Use transições naturais entre os tópicos ("Agora, um ponto muito importante...", "E aqui vai uma dica...", "Presta atenção nessa parte...").
+4. Inclua pausas naturais usando reticências (...) para dar ritmo.
+5. Adicione ênfases e entusiasmo em pontos-chave ("Isso aqui é fundamental!", "Essa parte cai muito em prova!").
+6. Quando houver exemplos, apresente-os de forma narrativa ("Imagina o seguinte cenário...").
+7. Finalize com um encerramento motivacional breve ("Bons estudos!", "Até a próxima aula!" ou similar).
+8. NÃO use formatação markdown (sem **, ##, -, bullets ou listas numeradas).
+9. NÃO use emojis.
+10. Escreva em texto CORRIDO, apenas com parágrafos separados por quebras de linha.
+11. Mantenha TODA a informação do resumo original, não omita conteúdo.
+12. O texto final deve ser em português brasileiro, com linguagem acessível e fluida.
+13. O comprimento do roteiro deve ser similar ao do resumo original (não encurte significativamente).
+14. EVITE repetições e frases genéricas como "vamos lá" mais de uma vez."""
+
+        prompt = f"""Transforme o resumo abaixo da disciplina "{subject_name}" em um roteiro de áudio conversacional seguindo as instruções.
+
+RESUMO ORIGINAL:
+{summary_text}
+
+ROTEIRO DE ÁUDIO:"""
+
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.75
+        )
+
+        result = response.choices[0].message.content
+        if result and len(result.strip()) > 50:
+            return result.strip()
+        return summary_text  # Fallback se a resposta for muito curta
+
+    except Exception as e:
+        print(f"[AI] Erro ao gerar roteiro de áudio: {e}")
+        return summary_text  # Fallback: retorna o texto original
+
+
 def generate_quiz(text: str, subject_name: str = "Aula", num_questions: int = 20) -> str:
     """
     Gera um quiz baseado no texto transcrito usando OpenAI

@@ -26,7 +26,7 @@ import { Audio, AVPlaybackStatus } from 'expo-av';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
-import { getStudentHistory, getSubjectMaterials, getStudentMaterials, getAudioMaterialSignedUrl } from '@/services/api';
+import { getStudentHistory, getSubjectMaterials, getStudentMaterials, getAudioMaterialSignedUrl, getSubjectRecaps, LessonRecap } from '@/services/api';
 import { FolderCard } from '@/components/cards/FolderCard';
 import { Material } from '@/types';
 
@@ -61,7 +61,7 @@ interface StructuredSummary {
     reflection: string;
 }
 
-type FolderType = 'quizzes' | 'resumos' | 'suporte' | 'audio' | null;
+type FolderType = 'quizzes' | 'resumos' | 'suporte' | 'audio' | 'recaps' | null;
 type SearchableFolder = Exclude<FolderType, null>;
 
 // ============ FOLDER CONFIG ============
@@ -87,6 +87,11 @@ const FOLDER_CONFIG = {
         icon: 'headphones' as keyof typeof MaterialIcons.glyphMap,
         color: '#8b5cf6',
     },
+    recaps: {
+        title: 'Recaps da Aula',
+        icon: 'history-edu' as keyof typeof MaterialIcons.glyphMap,
+        color: '#ec4899', // Pink
+    },
 };
 
 // ============ MAIN COMPONENT ============
@@ -103,6 +108,7 @@ export default function ContentHubScreen() {
     const [summaries, setSummaries] = useState<ActivityHistoryItem[]>([]);
     const [materials, setMaterials] = useState<Material[]>([]);
     const [audioMaterials, setAudioMaterials] = useState<Material[]>([]);
+    const [recaps, setRecaps] = useState<LessonRecap[]>([]);
 
     // UI state
     const [openFolder, setOpenFolder] = useState<FolderType>(null);
@@ -111,6 +117,7 @@ export default function ContentHubScreen() {
         resumos: '',
         suporte: '',
         audio: '',
+        recaps: '',
     });
     const [exportingId, setExportingId] = useState<number | null>(null);
     const [exportingMaterialId, setExportingMaterialId] = useState<number | string | null>(null);
@@ -137,16 +144,21 @@ export default function ContentHubScreen() {
         setLoading(true);
         try {
             // Load history (quizzes + summaries) and materials in parallel
-            const [historyRes, materialsRes, studentMaterialsRes] = await Promise.all([
+            const [historyRes, materialsRes, studentMaterialsRes, recapsRes] = await Promise.all([
                 getStudentHistory(subjectId, 1, 50).catch(() => ({ success: false, history: [] })),
                 getSubjectMaterials(subjectId).catch(() => []),
                 getStudentMaterials().catch(() => []),
+                getSubjectRecaps(subjectId).catch(() => ({ success: false, recaps: [] })),
             ]);
 
             if (historyRes.success && historyRes.history) {
                 const items: ActivityHistoryItem[] = historyRes.history;
                 setQuizzes(items.filter(i => i.activity.activity_type === 'quiz'));
                 setSummaries(items.filter(i => i.activity.activity_type === 'summary'));
+            }
+
+            if (recapsRes && recapsRes.success && recapsRes.recaps) {
+                setRecaps(recapsRes.recaps);
             }
 
             const studentMaterials = Array.isArray(studentMaterialsRes) ? studentMaterialsRes : [];
@@ -1162,6 +1174,59 @@ export default function ContentHubScreen() {
         );
     };
 
+    const renderRecapItem = (item: LessonRecap) => {
+        return (
+            <TouchableOpacity
+                key={item.id}
+                style={summaryCardStyles.card}
+                onPress={() => router.push(`/(student)/lesson-recap?id=${item.id}`)}
+                activeOpacity={0.7}
+            >
+                <View style={[summaryCardStyles.accentBar, { backgroundColor: '#ec4899' }]} />
+                <View style={summaryCardStyles.cardBody}>
+                    <View style={summaryCardStyles.headerRow}>
+                        <View style={[summaryCardStyles.iconWrap, { backgroundColor: '#fce7f3' }]}>
+                            <MaterialIcons name="history-edu" size={20} color="#ec4899" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <Text style={summaryCardStyles.title} numberOfLines={2}>
+                                {item.title}
+                            </Text>
+                            <Text style={summaryCardStyles.date}>{formatDate(item.created_at)}</Text>
+                        </View>
+                        {item.recap_data?.duration_minutes && (
+                            <View style={[quizCardStyles.scoreBadge, { backgroundColor: '#f1f5f9', borderColor: '#e2e8f0' }]}>
+                                <Text style={[quizCardStyles.scoreText, { color: '#64748b' }]}>
+                                    {item.recap_data.duration_minutes} min
+                                </Text>
+                            </View>
+                        )}
+                    </View>
+
+                    <Text style={summaryCardStyles.preview} numberOfLines={2}>
+                        {item.ai_summary ? item.ai_summary.substring(0, 120) + '...' : 'Sem resumo gerado.'}
+                    </Text>
+
+                    <View style={summaryCardStyles.chips}>
+                        <View style={[summaryCardStyles.chip, { backgroundColor: '#fef2f2' }]}>
+                            <MaterialIcons name="screen-share" size={12} color="#ef4444" />
+                            <Text style={[summaryCardStyles.chipText, { color: '#991b1b' }]}>{item.recap_data?.contents_shown?.length || 0} conteúdos</Text>
+                        </View>
+                        <View style={[summaryCardStyles.chip, { backgroundColor: '#fffbeb' }]}>
+                            <MaterialIcons name="task-alt" size={12} color="#f59e0b" />
+                            <Text style={[summaryCardStyles.chipText, { color: '#92400e' }]}>{item.recap_data?.activities_performed?.length || 0} atividades</Text>
+                        </View>
+                    </View>
+
+                    <View style={summaryCardStyles.tapHint}>
+                        <Text style={summaryCardStyles.tapHintText}>Toque para ver detalhes da aula</Text>
+                        <MaterialIcons name="arrow-forward-ios" size={10} color="#94a3b8" />
+                    </View>
+                </View>
+            </TouchableOpacity>
+        );
+    };
+
     const renderFolderContent = () => {
         if (!openFolder) return null;
 
@@ -1220,6 +1285,19 @@ export default function ContentHubScreen() {
                 );
                 isEmpty = filteredAudio.length === 0;
                 content = filteredAudio.map(m => renderMaterialItem(m, 'audio'));
+                break;
+            case 'recaps':
+                const filteredRecaps = recaps.filter((item) =>
+                    matchesSearch(searchValue, [
+                        item.title,
+                        item.ai_summary,
+                        item.created_at,
+                        formatDate(item.created_at),
+                        item.teacher_name,
+                    ])
+                );
+                isEmpty = filteredRecaps.length === 0;
+                content = filteredRecaps.map(renderRecapItem);
                 break;
         }
 
@@ -1325,6 +1403,14 @@ export default function ContentHubScreen() {
                             itemCount={quizzes.length}
                             isOpen={openFolder === 'quizzes'}
                             onPress={() => toggleFolder('quizzes')}
+                        />
+                        <FolderCard
+                            title={FOLDER_CONFIG.recaps.title}
+                            iconName={FOLDER_CONFIG.recaps.icon}
+                            accentColor={FOLDER_CONFIG.recaps.color}
+                            itemCount={recaps.length}
+                            isOpen={openFolder === 'recaps'}
+                            onPress={() => toggleFolder('recaps')}
                         />
                         <FolderCard
                             title={FOLDER_CONFIG.resumos.title}

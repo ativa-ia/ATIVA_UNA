@@ -390,6 +390,18 @@ def create_session(current_user):
     )
     db.session.add(session)
     db.session.commit()
+
+    # Registrar evento de início da transcrição
+    try:
+        from app.routes.lesson_recap_routes import log_lesson_event
+        log_lesson_event(
+            session_id=session.id,
+            event_type='transcription_start',
+            event_data={'title': title, 'subject_id': subject_id},
+            triggered_by=current_user.id
+        )
+    except Exception as e:
+        print(f'[RECAP] Erro ao registrar evento transcription_start: {e}')
     
     return jsonify({
         'success': True,
@@ -488,6 +500,18 @@ def create_checkpoint(current_user, session_id):
     # Pausar a sessão
     session.status = 'paused'
     db.session.commit()
+
+    # Registrar evento de checkpoint
+    try:
+        from app.routes.lesson_recap_routes import log_lesson_event
+        log_lesson_event(
+            session_id=session_id,
+            event_type='checkpoint',
+            event_data={'reason': reason, 'word_count': checkpoint.word_count},
+            triggered_by=current_user.id
+        )
+    except Exception as e:
+        print(f'[RECAP] Erro ao registrar evento checkpoint: {e}')
     
     return jsonify({
         'success': True,
@@ -531,6 +555,20 @@ def end_session(current_user, session_id):
         return jsonify({'success': False, 'error': 'Não autorizado'}), 403
     
     session.end()
+
+    # Registrar evento de fim e gerar recap automaticamente
+    try:
+        from app.routes.lesson_recap_routes import log_lesson_event, generate_recap_for_session
+        log_lesson_event(
+            session_id=session.id,
+            event_type='transcription_end',
+            event_data={'word_count': session.word_count},
+            triggered_by=current_user.id
+        )
+        # Gerar recap automaticamente ao encerrar a sessão
+        generate_recap_for_session(session.id)
+    except Exception as e:
+        print(f'[RECAP] Erro ao gerar recap automático: {e}')
     
     return jsonify({
         'success': True,
@@ -967,6 +1005,23 @@ def broadcast_activity(current_user, activity_id):
     #     print(f"[AUTO-SYNC] Falha ao sincronizar com apresentação: {e}")
     # -------------------------------------------------------------
     
+    # Registrar evento de broadcast
+    try:
+        from app.routes.lesson_recap_routes import log_lesson_event
+        log_lesson_event(
+            session_id=activity.session_id,
+            event_type=f'{activity.activity_type}_broadcast',
+            event_data={
+                'activity_type': activity.activity_type,
+                'title': activity.title,
+                'enrolled_count': enrolled_count
+            },
+            activity_id=activity.id,
+            triggered_by=current_user.id
+        )
+    except Exception as e:
+        print(f'[RECAP] Erro ao registrar evento broadcast: {e}')
+
     return jsonify({
         'success': True,
         'message': f'Atividade iniciada para {enrolled_count} alunos',
@@ -978,7 +1033,7 @@ def broadcast_activity(current_user, activity_id):
 @transcription_bp.route('/activities/<int:activity_id>/share', methods=['PUT'])
 @token_required
 def share_summary(current_user, activity_id):
-    """Compartilha resumo com os alunos"""
+    """Compartilha resumo (somente texto) com os alunos"""
     activity = LiveActivity.query.get(activity_id)
     
     if not activity:
@@ -996,13 +1051,8 @@ def share_summary(current_user, activity_id):
     data = request.get_json() or {}
     requested_title = (data.get('title') or '').strip()
 
-    if _should_autogenerate_summary_title(requested_title, subject_name):
-        activity.title = _build_next_summary_audio_title(subject_name, activity.session.subject_id)
-    else:
+    if requested_title and not _should_autogenerate_summary_title(requested_title, subject_name):
         activity.title = requested_title
-
-    audio_config = data.get('audio') or {}
-    should_generate_audio = bool(audio_config.get('enabled'))
     
     activity.shared_with_students = True
     
@@ -1011,76 +1061,6 @@ def share_summary(current_user, activity_id):
     activity.starts_at = datetime.utcnow()
     
     db.session.commit()
-
-    distributed_audio_count = 0
-    audio_error = None
-
-    if should_generate_audio:
-        summary_text = (activity.content or {}).get('summary_text') or activity.ai_generated_content
-        if not summary_text:
-            return jsonify({'success': False, 'error': 'Resumo sem conteúdo para gerar áudio'}), 400
-
-        try:
-            audio_bytes = _generate_summary_audio(summary_text, {
-                'voice': audio_config.get('voice') or 'pt_BR-jeff-medium',
-                'mode': audio_config.get('mode'),
-                'bg_id': audio_config.get('bg_id'),
-                'bg_volume': audio_config.get('bg_volume', 0.10)
-            })
-            file_key, audio_url = _upload_audio_to_b2(audio_bytes, activity.session.subject_id, activity.id)
-
-            # Persistir metadata no content JSON da activity
-            if not activity.content:
-                activity.content = {}
-
-            activity.content['summary_audio'] = {
-                'status': 'ready',
-                'voice': audio_config.get('voice') or 'pt_BR-jeff-medium',
-                'mode': audio_config.get('mode') or 'summary',
-                'bg_id': audio_config.get('bg_id'),
-                'bg_volume': audio_config.get('bg_volume', 0.10),
-                'file_key': file_key,
-                'url': audio_url,
-                'mime_type': 'audio/mpeg',
-                'created_at': datetime.utcnow().isoformat()
-            }
-            flag_modified(activity, 'content')
-
-            # Distribuir na pasta "Áudio & Podcasts" dos alunos
-            enrollments = Enrollment.query.filter_by(subject_id=activity.session.subject_id).all()
-            for enrollment in enrollments:
-                material = StudyMaterial(
-                    student_id=enrollment.student_id,
-                    subject_id=activity.session.subject_id,
-                    activity_id=activity.id,
-                    title=activity.title,
-                    type='audio',
-                    content_url=f'b2://{file_key}',
-                    file_size=None
-                )
-                db.session.add(material)
-                distributed_audio_count += 1
-
-            db.session.commit()
-        except Exception as audio_exception:
-            audio_error = str(audio_exception)
-
-            try:
-                if not activity.content:
-                    activity.content = {}
-                activity.content['summary_audio'] = {
-                    'status': 'failed',
-                    'voice': audio_config.get('voice') or 'pt_BR-jeff-medium',
-                    'mode': audio_config.get('mode') or 'summary',
-                    'bg_id': audio_config.get('bg_id'),
-                    'bg_volume': audio_config.get('bg_volume', 0.10),
-                    'error': audio_error,
-                    'updated_at': datetime.utcnow().isoformat()
-                }
-                flag_modified(activity, 'content')
-                db.session.commit()
-            except Exception:
-                pass
 
     # Auto-criar notificação para os alunos
     try:
@@ -1106,36 +1086,224 @@ def share_summary(current_user, activity_id):
         ).first()
 
         if presentation_session:
-            # Atualizar presentation state
             presentation_session.current_content = {
                 'type': 'summary',
-                'data': activity.content, # Esperado {summary_text: ...}
+                'data': activity.content,
                 'timestamp': datetime.utcnow().isoformat(),
                 'activity_id': activity.id
             }
             db.session.commit()
-
-            # Polling: Polling detectará a mudança via timestamp
-            # try:
-            #     from app.services.websocket_service import emit_presentation_content
-            #     emit_presentation_content(presentation_session.code, presentation_session.current_content)
-            # except Exception as e:
-            #     pass
                 
     except Exception as e:
         print(f"[AUTO-SYNC] Falha ao sincronizar resumo: {e}")
     # -------------------------------------------------------------
     
+    # Registrar evento de compartilhamento de resumo
+    try:
+        from app.routes.lesson_recap_routes import log_lesson_event
+        log_lesson_event(
+            session_id=activity.session_id,
+            event_type='summary_shared',
+            event_data={
+                'title': activity.title,
+                'activity_type': 'summary'
+            },
+            activity_id=activity.id,
+            triggered_by=current_user.id
+        )
+    except Exception as e:
+        print(f'[RECAP] Erro ao registrar evento summary_shared: {e}')
+
     return jsonify({
         'success': True,
         'message': 'Resumo compartilhado com os alunos',
-        'activity': activity.to_dict(),
-        'audio': {
-            'enabled': should_generate_audio,
-            'distributed_count': distributed_audio_count,
-            'error': audio_error
-        }
+        'activity': activity.to_dict()
     })
+
+
+@transcription_bp.route('/activities/<int:activity_id>/generate-audio', methods=['POST'])
+@token_required
+def generate_activity_audio(current_user, activity_id):
+    """
+    Gera áudio interativo a partir do resumo de uma atividade.
+    Processa o texto com IA para criar um roteiro conversacional e depois gera TTS.
+
+    Body:
+    {
+        "title": str (optional),
+        "audio": {
+            "voice": str,
+            "mode": str,
+            "bg_id": str | null,
+            "bg_volume": float
+        }
+    }
+    """
+    from app.services.ai_service import generate_interactive_audio_script
+
+    activity = LiveActivity.query.get(activity_id)
+
+    if not activity:
+        return jsonify({'success': False, 'error': 'Atividade não encontrada'}), 404
+
+    if activity.session.teacher_id != current_user.id:
+        return jsonify({'success': False, 'error': 'Não autorizado'}), 403
+
+    if activity.activity_type != 'summary':
+        return jsonify({'success': False, 'error': 'Geração de áudio é apenas para resumos'}), 400
+
+    subject_name = activity.session.subject.name if activity.session.subject else 'Disciplina'
+
+    data = request.get_json() or {}
+    audio_config = data.get('audio') or {}
+    requested_title = (data.get('title') or '').strip()
+
+    # Determinar título do áudio
+    if _should_autogenerate_summary_title(requested_title, subject_name):
+        audio_title = _build_next_summary_audio_title(subject_name, activity.session.subject_id)
+    else:
+        audio_title = requested_title
+
+    # Extrair texto do resumo
+    summary_text = None
+    if isinstance(activity.content, dict):
+        summary_text = activity.content.get('summary_text')
+        # Se o conteúdo for estruturado (novo formato), montar texto a partir dos campos
+        if not summary_text and activity.content.get('_format') == 'structured':
+            parts = []
+            if activity.content.get('topic'):
+                parts.append(activity.content['topic'])
+            if activity.content.get('essential_concept'):
+                parts.append(activity.content['essential_concept'])
+            if activity.content.get('key_points'):
+                parts.append('. '.join(activity.content['key_points']))
+            if activity.content.get('practical_example'):
+                parts.append(activity.content['practical_example'])
+            if activity.content.get('common_mistakes'):
+                parts.append('. '.join(activity.content['common_mistakes']))
+            if activity.content.get('reflection'):
+                parts.append(activity.content['reflection'])
+            summary_text = '\n\n'.join(parts)
+
+    if not summary_text:
+        summary_text = activity.ai_generated_content
+
+    if not summary_text:
+        return jsonify({'success': False, 'error': 'Resumo sem conteúdo para gerar áudio'}), 400
+
+    summary_text = _sanitize_summary_text(summary_text)
+
+    try:
+        # ETAPA 1: Gerar roteiro conversacional via IA
+        print(f'[AUDIO] Gerando roteiro interativo para atividade {activity_id}...')
+        audio_script = generate_interactive_audio_script(summary_text, subject_name)
+        print(f'[AUDIO] Roteiro gerado ({len(audio_script)} chars)')
+
+        # ETAPA 2: Gerar áudio TTS com o roteiro
+        print(f'[AUDIO] Enviando para TTS...')
+        audio_bytes = _generate_summary_audio(audio_script, {
+            'voice': audio_config.get('voice') or 'pt_BR-jeff-medium',
+            'mode': audio_config.get('mode'),
+            'bg_id': audio_config.get('bg_id'),
+            'bg_volume': audio_config.get('bg_volume', 0.10)
+        })
+        print(f'[AUDIO] TTS concluído ({len(audio_bytes)} bytes)')
+
+        # ETAPA 3: Upload para B2
+        file_key, audio_url = _upload_audio_to_b2(audio_bytes, activity.session.subject_id, activity.id)
+        print(f'[AUDIO] Upload B2 concluído: {file_key}')
+
+        # Persistir metadata no content JSON da activity
+        if not activity.content:
+            activity.content = {}
+
+        activity.content['summary_audio'] = {
+            'status': 'ready',
+            'voice': audio_config.get('voice') or 'pt_BR-jeff-medium',
+            'mode': audio_config.get('mode') or 'summary',
+            'bg_id': audio_config.get('bg_id'),
+            'bg_volume': audio_config.get('bg_volume', 0.10),
+            'file_key': file_key,
+            'url': audio_url,
+            'audio_script': audio_script[:500],  # Primeiros 500 chars do roteiro para referência
+            'mime_type': 'audio/mpeg',
+            'created_at': datetime.utcnow().isoformat()
+        }
+        flag_modified(activity, 'content')
+
+        # Distribuir na pasta "Áudio & Podcasts" dos alunos
+        distributed_audio_count = 0
+        enrollments = Enrollment.query.filter_by(subject_id=activity.session.subject_id).all()
+        for enrollment in enrollments:
+            material = StudyMaterial(
+                student_id=enrollment.student_id,
+                subject_id=activity.session.subject_id,
+                activity_id=activity.id,
+                title=audio_title,
+                type='audio',
+                content_url=f'b2://{file_key}',
+                file_size=None
+            )
+            db.session.add(material)
+            distributed_audio_count += 1
+
+        # Também marcar como compartilhado se ainda não foi
+        if not activity.shared_with_students:
+            activity.shared_with_students = True
+            activity.status = 'active'
+            activity.starts_at = datetime.utcnow()
+
+        db.session.commit()
+
+        # Notificação de áudio para alunos
+        try:
+            _fanout_user_notifications(
+                subject_id=activity.session.subject_id,
+                title=f'🎧 Novo Áudio: {audio_title}',
+                message=f'O professor disponibilizou um áudio interativo em {subject_name}.',
+                notif_type='audio',
+                source_type='transcription_audio',
+                source_id=activity.id,
+            )
+            db.session.commit()
+        except Exception as notif_err:
+            print(f'[NOTIF] Erro ao criar notificação de áudio: {notif_err}')
+
+        return jsonify({
+            'success': True,
+            'message': 'Áudio interativo gerado e distribuído',
+            'activity': activity.to_dict(),
+            'audio': {
+                'distributed_count': distributed_audio_count,
+                'url': audio_url,
+                'title': audio_title
+            }
+        })
+
+    except Exception as e:
+        # Registrar falha no content da activity
+        try:
+            if not activity.content:
+                activity.content = {}
+            activity.content['summary_audio'] = {
+                'status': 'failed',
+                'voice': audio_config.get('voice') or 'pt_BR-jeff-medium',
+                'mode': audio_config.get('mode') or 'summary',
+                'bg_id': audio_config.get('bg_id'),
+                'bg_volume': audio_config.get('bg_volume', 0.10),
+                'error': str(e),
+                'updated_at': datetime.utcnow().isoformat()
+            }
+            flag_modified(activity, 'content')
+            db.session.commit()
+        except Exception:
+            pass
+
+        print(f'[AUDIO] Erro na geração de áudio: {e}')
+        return jsonify({
+            'success': False,
+            'error': f'Erro ao gerar áudio: {str(e)}'
+        }), 500
 
 
 @transcription_bp.route('/materials/<int:material_id>/audio-url', methods=['GET'])

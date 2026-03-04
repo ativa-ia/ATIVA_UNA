@@ -871,7 +871,7 @@ export const broadcastActivity = async (activityId: number, title?: string): Pro
     return response.json();
 };
 
-// Compartilhar resumo com alunos
+// Compartilhar resumo com alunos (somente texto)
 export interface ShareSummaryAudioOptions {
     enabled?: boolean;
     voice?: string;
@@ -883,8 +883,7 @@ export interface ShareSummaryAudioOptions {
 export const shareSummary = async (
     activityId: number,
     title?: string,
-    audio?: ShareSummaryAudioOptions
-): Promise<{ success: boolean; activity: LiveActivity; audio?: { enabled?: boolean; distributed_count?: number; error?: string | null } }> => {
+): Promise<{ success: boolean; activity: LiveActivity }> => {
     const token = await AsyncStorage.getItem('authToken');
 
     const response = await fetch(`${API_URL}/transcription/activities/${activityId}/share`, {
@@ -893,7 +892,35 @@ export const shareSummary = async (
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ title, audio })
+        body: JSON.stringify({ title })
+    });
+
+    return response.json();
+};
+
+// Gerar áudio interativo a partir do resumo (endpoint separado)
+export const generateActivityAudio = async (
+    activityId: number,
+    title?: string,
+    audioConfig?: ShareSummaryAudioOptions
+): Promise<{ success: boolean; activity?: LiveActivity; audio?: { distributed_count?: number; url?: string; title?: string }; error?: string }> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/transcription/activities/${activityId}/generate-audio`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+            title,
+            audio: {
+                voice: audioConfig?.voice,
+                mode: audioConfig?.mode,
+                bg_id: audioConfig?.bg_id,
+                bg_volume: audioConfig?.bg_volume,
+            }
+        })
     });
 
     return response.json();
@@ -1650,3 +1677,104 @@ export const deleteCalendarEvent = async (eventId: number): Promise<{ success: b
         return { success: false, message: 'Erro ao remover evento/aviso' };
     }
 };
+
+// ========== LESSON RECAP API ==========
+
+export interface LessonEvent {
+    id: number;
+    session_id: number;
+    event_type: string;
+    event_data: any;
+    occurred_at: string;
+}
+
+export interface LessonRecap {
+    id: number;
+    session_id: number;
+    subject_id: number;
+    teacher_id: number;
+    teacher_name?: string;
+    subject_name?: string;
+    title: string;
+    ai_summary: string;
+    recap_data: {
+        duration_minutes?: number;
+        timeline: Array<{
+            time: string;
+            type: string;
+            description: string;
+            data: any;
+        }>;
+        contents_shown: Array<{
+            type: string;
+            title: string;
+            shown_at: string;
+            url?: string;
+        }>;
+        activities_performed: Array<{
+            type: string;
+            title: string;
+            participation_rate?: number;
+            average_score?: number;
+        }>;
+        key_statistics: any;
+    };
+    status: 'generating' | 'ready' | 'error';
+    shared_with_students: boolean;
+    created_at: string;
+}
+
+export const getSubjectRecaps = async (subjectId: number): Promise<{ success: boolean; recaps?: LessonRecap[]; error?: string }> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/recaps/subject/${subjectId}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Erro ao buscar recaps:', error);
+        return { success: false, error: 'Erro de conexão' };
+    }
+};
+
+export const getRecapById = async (recapId: number): Promise<{ success: boolean; recap?: LessonRecap; error?: string }> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/recaps/${recapId}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Erro ao buscar recap:', error);
+        return { success: false, error: 'Erro de conexão' };
+    }
+};
+
+export const generateRecap = async (sessionId: number): Promise<{ success: boolean; recap?: LessonRecap; error?: string }> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/recaps/generate/${sessionId}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Erro ao gerar recap:', error);
+        return { success: false, error: 'Erro de conexão' };
+    }
+};
+
+export const shareRecap = async (recapId: number): Promise<{ success: boolean; recap?: LessonRecap; error?: string }> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/recaps/${recapId}/share`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Erro ao compartilhar recap:', error);
+        return { success: false, error: 'Erro de conexão' };
+    }
+};
+
