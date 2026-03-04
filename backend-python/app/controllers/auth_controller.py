@@ -81,6 +81,9 @@ def _perform_auto_enrollment(user):
     antes de matricular o aluno.
     Retorna a quantidade de matrículas criadas (não faz commit).
     """
+    # Forçar o SQLAlchemy a descartar o cache de sessão e buscar a config atualizada
+    db.session.expire_all()
+
     # Verificar se auto-matrícula está habilitada
     enable_setting = SystemSetting.query.get('ENABLE_AUTO_ENROLLMENT')
     if enable_setting and enable_setting.value.lower() == 'false':
@@ -92,12 +95,15 @@ def _perform_auto_enrollment(user):
     
     if subjects_setting and subjects_setting.value and subjects_setting.value != 'all':
         try:
-            subject_ids = json.loads(subjects_setting.value)
-            if isinstance(subject_ids, list) and len(subject_ids) > 0:
+            # Frontend salva como lista separada por vírgula (ex: "1,2,3")
+            subject_ids_str = subjects_setting.value.split(',')
+            subject_ids = [int(s.strip()) for s in subject_ids_str if s.strip().isdigit()]
+            
+            if len(subject_ids) > 0:
                 subjects = Subject.query.filter(Subject.id.in_(subject_ids)).all()
             else:
                 subjects = Subject.query.all()
-        except (json.JSONDecodeError, TypeError):
+        except Exception:
             subjects = Subject.query.all()
     else:
         subjects = Subject.query.all()

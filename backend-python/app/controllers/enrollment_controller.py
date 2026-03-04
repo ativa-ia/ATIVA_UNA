@@ -30,13 +30,35 @@ def auto_enroll_student(current_user):
                 'total_enrollments': len(existing_enrollments)
             }), 200
         
-        # Buscar todas as disciplinas disponíveis
-        all_subjects = Subject.query.all()
+        # Forçar o SQLAlchemy a descartar o cache de sessão para garantir leitura fresca
+        db.session.expire_all()
+        
+        from app.models.system_setting import SystemSetting
+        import json
+        
+        # Verificar se auto-matrícula está habilitada (opcional, já que a rota foi chamada diretamente, mas bom checar as configurações de disciplinas)
+        subjects_setting = SystemSetting.query.get('AUTO_ENROLLMENT_SUBJECTS')
+        
+        # Buscar as disciplinas disponíveis para matrícula com base na configuração
+        if subjects_setting and subjects_setting.value and subjects_setting.value != 'all':
+            try:
+                # Frontend salva como lista separada por vírgula (ex: "1,2,3")
+                subject_ids_str = subjects_setting.value.split(',')
+                subject_ids = [int(s.strip()) for s in subject_ids_str if s.strip().isdigit()]
+                
+                if len(subject_ids) > 0:
+                    all_subjects = Subject.query.filter(Subject.id.in_(subject_ids)).all()
+                else:
+                    all_subjects = Subject.query.all()
+            except Exception:
+                all_subjects = Subject.query.all()
+        else:
+            all_subjects = Subject.query.all()
         
         if not all_subjects:
             return jsonify({
                 'success': False,
-                'message': 'Nenhuma disciplina disponível para matrícula'
+                'message': 'Nenhuma disciplina configurada para matrícula'
             }), 404
         
         # Buscar primeira turma disponível
