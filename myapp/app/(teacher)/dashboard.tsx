@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
     View,
     Text,
+    Modal,
     StyleSheet,
     ScrollView,
     SafeAreaView,
@@ -49,6 +51,13 @@ export default function TeacherDashboardScreen() {
         loadData();
     }, []);
 
+    useFocusEffect(
+        React.useCallback(() => {
+            setActiveNavId('dashboard');
+            setShowSubjectModal(false);
+        }, [])
+    );
+
     const loadData = async () => {
         try {
             setLoading(true);
@@ -82,7 +91,29 @@ export default function TeacherDashboardScreen() {
     const navItems: NavItem[] = [
         { id: 'dashboard', label: 'Dashboard', iconName: 'dashboard' },
         { id: 'calendar', label: 'Calendário', iconName: 'calendar-today' },
+        { id: 'recaps', label: 'Recapitulando', iconName: 'history-edu' },
     ];
+    const [showSubjectModal, setShowSubjectModal] = useState(false);
+
+    const handleRecapShortcut = () => {
+        if (!subjects || subjects.length === 0) {
+            // No subjects: redirect to subjects screen (or open selection page)
+            router.push('./subjects');
+            return;
+        }
+
+        if (subjects.length === 1) {
+            const subject = subjects[0];
+            router.push({
+                pathname: '/(teacher)/recaps',
+                params: { subjectId: subject.id.toString(), subjectName: subject.name }
+            });
+            return;
+        }
+
+        // Multiple subjects: show modal to pick one
+        setShowSubjectModal(true);
+    };
 
     const handleNavPress = (id: string) => {
         setActiveNavId(id);
@@ -93,6 +124,9 @@ export default function TeacherDashboardScreen() {
                 break;
             case 'calendar':
                 router.push('./calendar');
+                break;
+            case 'recaps':
+                handleRecapShortcut();
                 break;
         }
     };
@@ -183,6 +217,41 @@ export default function TeacherDashboardScreen() {
                     activeId={activeNavId}
                     onItemPress={handleNavPress}
                 />
+                {/* Subject selection modal for Recapitulando shortcut */}
+                <Modal
+                    visible={showSubjectModal}
+                    transparent={true}
+                    animationType="slide"
+                    onRequestClose={() => setShowSubjectModal(false)}
+                >
+                    <View style={styles.modalOverlay}>
+                        <View style={styles.modalContainer}>
+                            <Text style={styles.modalTitle}>Selecione a disciplina</Text>
+                            <ScrollView style={{ maxHeight: 300 }}>
+                                {subjects.map((subject) => (
+                                    <TouchableOpacity
+                                        key={subject.id}
+                                        style={styles.modalItem}
+                                        onPress={() => {
+                                            setShowSubjectModal(false);
+                                            router.push({
+                                                pathname: '/(teacher)/recaps',
+                                                params: { subjectId: subject.id.toString(), subjectName: subject.name }
+                                            });
+                                        }}
+                                    >
+                                        <Text style={styles.modalItemText}>{subject.name}</Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </ScrollView>
+                            <View style={styles.modalFooter}>
+                                <TouchableOpacity style={styles.modalCancel} onPress={() => setShowSubjectModal(false)}>
+                                    <Text style={styles.modalCancelText}>Cancelar</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </View>
+                    </View>
+                </Modal>
             </View>
         </SafeAreaView>
     );
@@ -307,5 +376,51 @@ const styles = StyleSheet.create({
         fontFamily: typography.fontFamily.body,
         color: colors.textSecondary,
         textAlign: 'center',
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    modalContainer: {
+        backgroundColor: colors.white,
+        borderTopLeftRadius: 16,
+        borderTopRightRadius: 16,
+        paddingHorizontal: spacing.base,
+        paddingTop: spacing.lg,
+        paddingBottom: spacing.base,
+    },
+    modalTitle: {
+        fontSize: typography.fontSize.lg,
+        fontWeight: typography.fontWeight.bold,
+        fontFamily: typography.fontFamily.display,
+        color: colors.textPrimary,
+        marginBottom: spacing.md,
+    },
+    modalItem: {
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.base,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.backgroundLight,
+    },
+    modalItemText: {
+        fontSize: typography.fontSize.base,
+        fontFamily: typography.fontFamily.body,
+        color: colors.textPrimary,
+    },
+    modalFooter: {
+        marginTop: spacing.md,
+    },
+    modalCancel: {
+        paddingVertical: spacing.md,
+        alignItems: 'center',
+        backgroundColor: colors.backgroundLight,
+        borderRadius: 8,
+    },
+    modalCancelText: {
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.semibold,
+        fontFamily: typography.fontFamily.display,
+        color: colors.textSecondary,
     },
 });

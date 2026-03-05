@@ -9,8 +9,6 @@ import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
 import { API_URL, getAllSettings, updateSetting, getCalendarEvents, createCalendarEvent, deleteCalendarEvent, updateCalendarEvent } from '@/services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SystemHealth } from '@/components/admin/SystemHealth';
-import { AIConfiguration } from '@/components/admin/AIConfiguration';
 
 type Tab = 'overview' | 'users' | 'subjects' | 'enroll' | 'teach' | 'events';
 type RoleFilter = 'all' | 'student' | 'teacher' | 'admin';
@@ -85,11 +83,10 @@ export default function AdminDashboard() {
         if (name) setUserName(name);
     };
 
-    // Helper: filter out super_admin for non-super_admin users
+    // All users are visible to the admin (no super_admin filtering needed)
     const visibleUsers = useMemo(() => {
-        if (userRole === 'super_admin') return users;
         return users.filter(u => u.role !== 'super_admin');
-    }, [users, userRole]);
+    }, [users]);
 
     const fetchData = async () => {
         try {
@@ -109,7 +106,7 @@ export default function AdminDashboard() {
             const eventsRes = await getCalendarEvents();
             if (eventsRes.success) setCalendarEvents(eventsRes.events || []);
 
-            if (storedRole === 'super_admin' || storedRole === 'admin') {
+            if (storedRole === 'admin') {
                 const settingsRes = await getAllSettings();
                 if (settingsRes.success) setSettingsList(settingsRes.settings);
             }
@@ -354,21 +351,19 @@ export default function AdminDashboard() {
                 </View>
             </View>
 
-            {/* Welcome Card for regular admins */}
-            {userRole !== 'super_admin' && (
-                <View style={[styles.card, { marginTop: spacing.md, backgroundColor: '#f0f9ff', borderWidth: 1, borderColor: '#bae6fd' }]}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        <MaterialIcons name="tips-and-updates" size={20} color="#0284c7" />
-                        <Text style={{ fontSize: 14, fontWeight: '700', color: '#0284c7' }}>Dica do Sistema</Text>
-                    </View>
-                    <Text style={{ fontSize: 13, color: '#0369a1', lineHeight: 20 }}>
-                        Use as abas acima para gerenciar usuários, disciplinas e matrículas. Você pode tocar em uma disciplina para ver seus alunos e professores vinculados.
-                    </Text>
+            {/* Welcome Card for admins */}
+            <View style={[styles.card, { marginTop: spacing.md, backgroundColor: '#f0f9ff', borderWidth: 1, borderColor: '#bae6fd' }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <MaterialIcons name="tips-and-updates" size={20} color="#0284c7" />
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: '#0284c7' }}>Dica do Sistema</Text>
                 </View>
-            )}
+                <Text style={{ fontSize: 13, color: '#0369a1', lineHeight: 20 }}>
+                    Use as abas acima para gerenciar usuários, disciplinas e matrículas. Você pode tocar em uma disciplina para ver seus alunos e professores vinculados.
+                </Text>
+            </View>
 
-            {/* Auto-Enrollment Controls — visível para admin e super_admin */}
-            {(userRole === 'super_admin' || userRole === 'admin') && (
+            {/* Auto-Enrollment Controls — visível para admin */}
+            {userRole === 'admin' && (
                 <View style={{ marginTop: spacing.lg }}>
                     <View style={styles.sectionHeader}>
                         <MaterialIcons name="school" size={20} color="#6366f1" />
@@ -498,81 +493,6 @@ export default function AdminDashboard() {
                 </View>
             )}
 
-            {/* Super Admin Section */}
-            {userRole === 'super_admin' && (
-                <View style={{ marginTop: spacing.lg }}>
-                    <View style={styles.sectionHeader}>
-                        <MaterialIcons name="admin-panel-settings" size={20} color="#ef4444" />
-                        <Text style={styles.sectionTitle}>Super Admin</Text>
-                    </View>
-                    <SystemHealth />
-                    <AIConfiguration />
-
-                    {/* Login Mode Toggle */}
-                    <View style={styles.card}>
-                        <Text style={styles.cardTitle}>Sistema de Login</Text>
-                        <Text style={{ fontSize: 12, color: colors.zinc400, marginBottom: spacing.sm }}>
-                            Define como os usuários acessam o sistema
-                        </Text>
-                        <View style={styles.roleRow}>
-                            {[
-                                { key: 'quick_access', label: 'Acesso Rápido', icon: 'flash-on' as const },
-                                { key: 'traditional', label: 'Login Tradicional', icon: 'lock' as const },
-                            ].map(mode => {
-                                const currentMode = settingsList.find(s => s.key === 'DEFAULT_LOGIN_MODE')?.value || 'quick_access';
-                                const isActive = currentMode === mode.key;
-                                return (
-                                    <TouchableOpacity
-                                        key={mode.key}
-                                        style={[styles.roleChip, isActive && styles.roleChipActive, { flexDirection: 'row', gap: 4, flex: 1, justifyContent: 'center' }]}
-                                        onPress={() => handleAction('settings', {
-                                            key: 'DEFAULT_LOGIN_MODE',
-                                            value: mode.key,
-                                            description: 'Modo de login padrão: quick_access ou traditional',
-                                            is_public: true
-                                        })}
-                                    >
-                                        <MaterialIcons name={mode.icon} size={16} color={isActive ? colors.white : colors.zinc400} />
-                                        <Text style={[styles.roleChipText, isActive && styles.roleChipTextActive]}>{mode.label}</Text>
-                                    </TouchableOpacity>
-                                );
-                            })}
-                        </View>
-                    </View>
-
-                    <View style={styles.card}>
-                        <Text style={styles.cardTitle}>Palavra de Ativação</Text>
-                        <View style={styles.inlineForm}>
-                            <TextInput
-                                style={[styles.input, { flex: 1 }]}
-                                placeholder="Nova Palavra de Ativação"
-                                placeholderTextColor={colors.zinc400}
-                                value={formData.settingValue}
-                                onChangeText={t => setFormData({ ...formData, settingValue: t })}
-                            />
-                            <TouchableOpacity style={styles.inlineButton}
-                                onPress={() => handleAction('settings', {
-                                    key: 'trigger_word', value: formData.settingValue,
-                                    description: 'Palavra de ativação para comandos de voz', is_public: true
-                                })}>
-                                <MaterialIcons name="save" size={18} color={colors.white} />
-                            </TouchableOpacity>
-                        </View>
-                    </View>
-
-                    {settingsList.length > 0 && (
-                        <View style={[styles.card, { marginTop: spacing.sm }]}>
-                            <Text style={styles.cardTitle}>Variáveis Ativas</Text>
-                            {settingsList.map(s => (
-                                <View key={s.key} style={styles.settingItem}>
-                                    <Text style={styles.settingKey}>{s.key}</Text>
-                                    <Text style={styles.settingValueText} numberOfLines={1}>{s.value}</Text>
-                                </View>
-                            ))}
-                        </View>
-                    )}
-                </View>
-            )}
         </View>
     );
 

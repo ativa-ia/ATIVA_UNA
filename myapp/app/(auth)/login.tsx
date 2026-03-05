@@ -67,7 +67,7 @@ export default function LoginScreen() {
         if (userName) {
             await AsyncStorage.setItem('userName', userName);
         }
-        if (role === 'admin' || role === 'super_admin') {
+        if (role === 'admin') {
             router.replace('/(admin)/dashboard');
         } else if (role === 'student') {
             router.replace('/(student)/dashboard');
