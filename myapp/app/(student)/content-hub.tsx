@@ -94,6 +94,23 @@ const FOLDER_CONFIG = {
     },
 };
 
+const normalizeUrlPath = (url?: string) => {
+    if (!url) return '';
+    const lower = url.toLowerCase();
+    const noQuery = lower.split('?')[0];
+    return noQuery.split('#')[0];
+};
+
+const isTextMaterial = (material: Material & { source?: string }, resolvedUrl?: string) => {
+    const path = normalizeUrlPath(resolvedUrl || material.url);
+    const titleLower = String(material.title || '').toLowerCase();
+    const isPdfByUrl = path.endsWith('.pdf');
+    const isPdfByTitle = titleLower.endsWith('.pdf');
+    const isPdf = isPdfByUrl || isPdfByTitle;
+    const isTextByUrl = path.endsWith('.md') || path.endsWith('.txt');
+    return material.type === 'document' ? !isPdf : isTextByUrl;
+};
+
 // ============ MAIN COMPONENT ============
 
 export default function ContentHubScreen() {
@@ -555,7 +572,7 @@ export default function ContentHubScreen() {
             }
 
             // Para documentos de texto (.md, .txt), buscar e mostrar in-app
-            const isTextDoc = material.type === 'document' || fullUrl.endsWith('.md') || fullUrl.endsWith('.txt');
+            const isTextDoc = isTextMaterial(material as Material & { source?: string }, fullUrl);
             if (isTextDoc) {
                 setSupportViewerLoading(true);
                 try {
@@ -1089,7 +1106,7 @@ export default function ContentHubScreen() {
 
         const uniqueKey = material.source ? `${material.source}-${material.id}` : `material-${material.id}`;
 
-        const isTextDoc = material.type === 'document' || (material.url && (material.url.endsWith('.md') || material.url.endsWith('.txt')));
+        const isTextDoc = isTextMaterial(material);
 
         const isAudio = folderType === 'audio';
         const cardColors = isAudio ? {

@@ -1379,6 +1379,33 @@ export const sharePresentationDocumentToStudents = async (presentationCode: stri
     }
 };
 
+// Compartilhar video atual da apresentacao com os alunos
+export const sharePresentationVideoToStudents = async (
+    presentationCode: string,
+    payload?: { subject_id?: number; classroom_id?: string; title?: string }
+): Promise<{
+    success: boolean;
+    message?: string;
+    count?: number;
+    error?: string;
+}> => {
+    try {
+        const token = await AsyncStorage.getItem('authToken');
+        const response = await fetch(`${API_URL}/presentation/${presentationCode}/share-video`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify(payload || {}),
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Erro ao compartilhar vídeo da apresentacao:', error);
+        return { success: false, error: 'Erro ao compartilhar vídeo' };
+    }
+};
+
 
 // ========== SOCRATIC ASSISTANT API ==========
 
