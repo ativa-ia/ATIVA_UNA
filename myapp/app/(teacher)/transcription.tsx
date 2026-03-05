@@ -28,6 +28,7 @@ import {
     createTranscriptionSession,
     updateTranscription,
     shareSummary,
+    generateActivityAudio,
     getTranscriptionSession,
     TranscriptionSession,
     LiveActivity,
@@ -303,6 +304,9 @@ export default function TranscriptionScreen() {
         isDestructive: false
     });
 
+    // Exit Modal State (Custom for Web Compatibility)
+    const [showExitModal, setShowExitModal] = useState(false);
+
     const closeConfirmModal = () => setConfirmModal(prev => ({ ...prev, visible: false }));
 
     // Input Modal State
@@ -494,7 +498,7 @@ export default function TranscriptionScreen() {
         const title = voiceSummaryConfirmModal.title?.trim();
         const options = voiceSummaryConfirmModal.options || undefined;
         closeVoiceSummaryConfirmModal();
-        await performShareSummary(title || undefined, options);
+        await performGenerateAudio(title || undefined, options);
     };
 
     const getVoiceLabel = (voiceId?: string) => {
@@ -559,10 +563,11 @@ export default function TranscriptionScreen() {
 
         let text = String(rawText);
 
-        // 1. Remover tags [TYPE:SUMMARY], [TYPE:SUMARY], [TYPE:SUMARRY], etc.
+        // 1. Remover tags [TYPE:...] em qualquer posição (ex: [TYPE:SUMMARY], [TYPE:CMD], etc.)
         text = text
-            .replace(/^\s*\[\s*TYPE\s*:\s*SUM\w*\s*\]\s*/i, '')
-            .replace(/^\s*\[\s*TYPE\s*:\s*\w+\s*\]\s*/i, '');
+            .replace(/\[\s*TYPE\s*:\s*[A-Z_]+\s*\]/gi, ' ')
+            .replace(/\s{2,}/g, ' ')
+            .replace(/[ \t]*\n[ \t]*/g, '\n');
 
         // 2. Tentar parsear se for JSON com campo "text"
         if (text.trim().startsWith('{')) {
@@ -1254,11 +1259,18 @@ export default function TranscriptionScreen() {
     const handleSendSummaryToPresentation = async () => {
         if (!presentationCode || !generatedSummary) return;
 
+        const cleanedSummary = cleanSummaryText(generatedSummary);
+        if (!cleanedSummary) {
+            setFredCommand('Resumo vazio para envio');
+            setTimeout(() => setFredCommand(null), 3000);
+            return;
+        }
+
         setFredCommand('Enviando resumo para a tela...');
 
         try {
             await sendToPresentation(presentationCode, 'summary', {
-                text: generatedSummary,
+                text: cleanedSummary,
                 title: 'Resumo da Aula'
             });
             setFredCommand('✅ Resumo enviado para apresentação!');
@@ -1451,6 +1463,19 @@ export default function TranscriptionScreen() {
                 }
             }
 
+            normalized = normalized
+                .replace(/\r\n/g, '\n')
+                .replace(/\r/g, '\n')
+                .replace(/\\n/g, '\n')
+                .replace(/\\t/g, '\t')
+                .replace(/\s*\|\|\|\s*/g, '\n');
+
+            if (/(youtube\.com\/watch\?v=|youtu\.be\/)/i.test(normalized)) {
+                normalized = normalized
+                    .replace(/((?:https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)[^\s]+))(?=[A-Za-zÀ-ÿ0-9])/g, '$1\n')
+                    .replace(/[ \t]*\n[ \t]*/g, '\n');
+            }
+
             return normalized.trim();
         };
 
@@ -1609,6 +1634,91 @@ export default function TranscriptionScreen() {
             const isSendIntent = /(envi|emvi|mand|manda|aplic|lanc|disponibiliz|liber|solt)/i.test(normalizedCmd)
                 || fuzzyHasKeyword(normalizedCmd, ['enviar', 'manda', 'mandar', 'liberar', 'disponibilizar']);
             const isGenerateIntent = /(ger|cri|faz|mont)/i.test(lowerCmd);
+            const hasShareVerb = /(envi|emvi|mand|compartilh|disponibiliz|liber|solt)/i.test(normalizedCmd)
+                || fuzzyHasKeyword(normalizedCmd, ['compartilhar', 'enviar', 'mandar', 'disponibilizar', 'liberar', 'soltar']);
+            const isGenericShareOnly = hasShareVerb &&
+                !/\b(v[íi]deo|youtube|link|documento|arquivo|material|pdf|apostila|slide|alunos?|estudantes?|turma|classe|todos)\b/i.test(lowerCmd);
+
+            if (isGenericShareOnly) {
+                console.log('[AI INTERCEPTOR] Comando genérico: Compartilhar (auto-detect da tela)');
+
+                if (!presentationCodeRef.current) {
+                    setFredCommand('Inicie uma apresentação primeiro!');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                }
+
+                let currentScreenType: 'video' | 'document' | null = presentationContentType;
+
+                if (!currentScreenType) {
+                    try {
+                        const { getPresentation } = require('@/services/presentation');
+                        const pres = await getPresentation(presentationCodeRef.current);
+                        if (pres?.success) {
+                            const detectedType = pres.current_content?.type;
+                            if (detectedType === 'video' || detectedType === 'document') {
+                                currentScreenType = detectedType;
+                                setPresentationContentType(detectedType);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('[AI] Erro ao detectar conteúdo atual da tela:', error);
+                    }
+                }
+
+                if (currentScreenType === 'video') {
+                    setFredCommand('Enviando vídeo para alunos...');
+                    try {
+                        const { sharePresentationVideoToStudents } = require('@/services/api');
+                        const result = await sharePresentationVideoToStudents(presentationCodeRef.current, {
+                            subject_id: subjectId,
+                            classroom_id: subjectName
+                        });
+
+                        if (result.success) {
+                            const countText = typeof result.count === 'number' ? ` (${result.count})` : '';
+                            setFredCommand(`Vídeo enviado para alunos${countText}`);
+                        } else {
+                            setFredCommand(result.error || 'Erro ao compartilhar vídeo');
+                        }
+                    } catch (error) {
+                        console.error('[AI] Erro ao compartilhar video:', error);
+                        setFredCommand('Erro ao compartilhar vídeo');
+                    }
+
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                }
+
+                if (currentScreenType === 'document') {
+                    setFredCommand('Enviando documento para alunos...');
+                    try {
+                        const { sharePresentationDocumentToStudents } = require('@/services/api');
+                        const result = await sharePresentationDocumentToStudents(presentationCodeRef.current);
+
+                        if (result.success) {
+                            const countText = typeof result.count === 'number' ? ` (${result.count})` : '';
+                            setFredCommand(`Documento enviado para alunos${countText}`);
+                        } else {
+                            setFredCommand(result.error || 'Erro ao compartilhar documento');
+                        }
+                    } catch (error) {
+                        console.error('[AI] Erro ao compartilhar documento:', error);
+                        setFredCommand('Erro ao compartilhar documento');
+                    }
+
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                }
+
+                setFredCommand('Nenhum vídeo ou documento na tela para compartilhar');
+                setTimeout(() => setFredCommand(null), 3000);
+                setIsGenerating(false);
+                return;
+            }
 
             if (voiceSummaryConfirmModal.visible) {
                 const isConfirmVoiceCmd = /(confirm|confirmar|confirma|pode enviar|enviar agora|confirmo|ok|okay|pode ir)/i.test(normalizedCmd)
@@ -1753,10 +1863,75 @@ export default function TranscriptionScreen() {
             }
 
 
-            // 0.3 Compartilhar documento da tela com os alunos
+            // 0.3 Compartilhar video da tela com os alunos
+            const isShareVideoCmd =
+                hasShareVerb &&
+                (
+                    /\b(v[íi]deo|youtube|link)\b/i.test(lowerCmd) ||
+                    (/\b(alunos?|estudantes?|turma|classe|todos)\b/i.test(lowerCmd) && presentationContentType === 'video')
+                );
+
+            if (isShareVideoCmd) {
+                console.log('[AI INTERCEPTOR] Comando: Compartilhar video com alunos');
+
+                if (!presentationCodeRef.current) {
+                    setFredCommand('Inicie uma apresentação primeiro!');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                }
+
+                let hasVideoOnScreen = presentationContentType === 'video';
+
+                if (!hasVideoOnScreen) {
+                    try {
+                        const { getPresentation } = require('@/services/presentation');
+                        const pres = await getPresentation(presentationCodeRef.current);
+                        if (pres?.success && pres.current_content?.type === 'video') {
+                            hasVideoOnScreen = true;
+                            setPresentationContentType('video');
+                        }
+                    } catch (error) {
+                        console.error('[AI] Erro ao validar video na tela:', error);
+                    }
+                }
+
+                if (!hasVideoOnScreen) {
+                    setFredCommand('Nenhum vídeo na tela');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                }
+
+                setFredCommand('Enviando vídeo para alunos...');
+
+                try {
+                    const { sharePresentationVideoToStudents } = require('@/services/api');
+                    const result = await sharePresentationVideoToStudents(presentationCodeRef.current, {
+                        subject_id: subjectId,
+                        classroom_id: subjectName
+                    });
+
+                    if (result.success) {
+                        const countText = typeof result.count === 'number' ? ` (${result.count})` : '';
+                        setFredCommand(`Vídeo enviado para alunos${countText}`);
+                    } else {
+                        setFredCommand(result.error || 'Erro ao compartilhar vídeo');
+                    }
+                } catch (error) {
+                    console.error('[AI] Erro ao compartilhar video:', error);
+                    setFredCommand('Erro ao compartilhar vídeo');
+                }
+
+                setTimeout(() => setFredCommand(null), 3000);
+                setIsGenerating(false);
+                return;
+            }
+
+            // 0.4 Compartilhar documento da tela com os alunos
             // Exemplos: "enviar documento para alunos", "mandar arquivo para turma", "compartilhar documento"
             const isShareDocCmd =
-                /\b(envi(ar|e)|mand(ar|e)|compartilh(ar|e)|disponibiliz(ar|e)|liber(ar|e)|solt(ar|e))\b.{0,20}\b(documento|arquivo|material|pdf|apostila|slide)\b(?:.{0,20}\b(alunos?|estudantes?|turma|classe)\b)?/i.test(lowerCmd) ||
+                (hasShareVerb && /\b(documento|arquivo|material|pdf|apostila|slide)\b/i.test(lowerCmd)) ||
                 /\b(alunos?|estudantes?|turma|classe)\b.{0,20}\b(envi(ar|e)|mand(ar|e)|compartilh(ar|e)|disponibiliz(ar|e)|liber(ar|e)|solt(ar|e))\b.{0,20}\b(documento|arquivo|material|pdf|apostila|slide)\b/i.test(lowerCmd);
 
             if (isShareDocCmd) {
@@ -2232,37 +2407,74 @@ export default function TranscriptionScreen() {
 
             // 2. Enviar Atividade Atual (Quiz ou Resumo)
 
-
             // Se quer enviar, MAS NÃO quer gerar, E temos atividade salva
-            // 2. Enviar Atividade Atual (Quiz ou Resumo) (IMPLEMENTAÇÃO ATUALIZADA)
+            // 2. Enviar Atividade Atual (Quiz ou Resumo) (IMPLEMENTAÇÃO ATUALIZADA - SEM ÁUDIO)
             if (isSendIntent && !isGenerateIntent && currentActivity && currentActivity.status !== 'ended') {
                 console.log('[AI INTERCEPTOR] Comando de envio direto detectado:', command);
                 console.log('[AI INTERCEPTOR] Atividade atual:', currentActivity.id, currentActivity.title, currentActivity.activity_type);
 
-                // Prevent duplicates: Ensure we don' trigger presentation logic
-                console.log('[AI INTERCEPTOR] Sending ONLY to students via performStartActivity');
-
                 const act = currentActivity;
-                // Feedback visual
                 setFredCommand(`Enviando ${act.activity_type === 'quiz' ? 'quiz' : 'resumo'}...`);
 
-                // Simula delay de "processamento"
                 setTimeout(() => {
                     if (act.activity_type === 'quiz') {
                         performStartActivity(act.id, act.title || 'Quiz');
                     } else if (act.activity_type === 'summary') {
-                        const voiceOptions = parseVoiceSummaryAudioOptions(lowerCmd);
-                        const voiceTitle = extractSummaryTitleFromVoiceCommand(command || '');
-                        const defaultVoiceTitle = `${subjectName || 'Disciplina'} - resumo em audio`;
-                        const finalVoiceTitle = voiceTitle || defaultVoiceTitle;
-                        setSummaryAudioOptions(voiceOptions);
-                        openVoiceSummaryConfirmModal(finalVoiceTitle, voiceOptions);
+                        // SEPARAÇÃO: Enviar SOMENTE texto, sem áudio
+                        performShareSummary();
                     }
                     setIsGenerating(false);
                     setFredCommand(null);
                 }, 1000);
 
-                return; // INTERROMPE O FLUXO (Não chama N8N)
+                return;
+            }
+
+            // 2b. Comando de voz para GERAR ÁUDIO INTERATIVO (separado do envio de resumo)
+            const matchesGenerateAudio = (normalizedCommand: string): boolean => {
+                if (!normalizedCommand) return false;
+
+                // tokens/targets (normalized: accents removed)
+                const target = '(?:audio|som|voz|narracao|narracao|tts|podcast)';
+                const verb = '(?:gerar|gera|criar|cria|fazer|faz|produzir|produz|gravar|grava|produzir|transformar|converter|quer|quero|gostaria|preciso)';
+
+                const patterns: RegExp[] = [
+                    // verb ... target (within ~40 chars)
+                    new RegExp('\\b' + verb + '\\b.{0,40}\\b' + target + '\\b'),
+                    // direct short command: "gerar audio" / "cria audio" etc
+                    new RegExp('\\b(?:gerar|gera|criar|cria|gravar|grava)\\b\\s+\\b' + target + '\\b'),
+                    // transform/convert resumo/texto into audio
+                    new RegExp('\\b(?:transformar|converter)\\b.{0,40}\\b(?:resumo|texto)\\b.{0,40}\\b' + target + '\\b'),
+                    // target near resumo/texto (e.g. "audio do resumo", "resumo em audio")
+                    new RegExp('\\b' + target + '\\b.{0,20}\\b(?:resumo|texto)\\b'),
+                    new RegExp('\\b(?:resumo|texto)\\b.{0,20}\\b' + target + '\\b'),
+                    // desire phrases: "quero um audio", "gostaria de um audio"
+                    new RegExp('\\b(?:quero|gostaria|preciso|quer|queria)\\b.{0,20}\\b' + target + '\\b'),
+                ];
+
+                for (const r of patterns) {
+                    if (r.test(normalizedCommand)) return true;
+                }
+
+                return false;
+            };
+
+            const isAudioGenerateIntent = matchesGenerateAudio(normalizedCmd);
+
+            if (isAudioGenerateIntent && currentActivity && currentActivity.activity_type === 'summary' && currentActivity.status !== 'ended') {
+                console.log('[AI INTERCEPTOR] Comando de geração de áudio detectado:', command);
+
+                const voiceOptions = parseVoiceSummaryAudioOptions(lowerCmd);
+                const voiceTitle = extractSummaryTitleFromVoiceCommand(command || '');
+                const defaultVoiceTitle = `${subjectName || 'Disciplina'} - resumo em audio`;
+                const finalVoiceTitle = voiceTitle || defaultVoiceTitle;
+
+                setFredCommand('Gerando áudio interativo...');
+                setIsGenerating(false);
+
+                // Chamar diretamente a geração de áudio (hands-free)
+                performGenerateAudio(finalVoiceTitle, voiceOptions);
+                return;
             }
 
 
@@ -2323,30 +2535,98 @@ export default function TranscriptionScreen() {
             if (typeof content === 'string') {
                 const extractVideoList = (text: string): VideoItem[] => {
                     const urlRegex = /(https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)[\w-]+)/gi;
-                    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+                    const normalizedText = String(text || '')
+                        .replace(/\r\n/g, '\n')
+                        .replace(/\r/g, '\n')
+                        .replace(/\\n/g, '\n')
+                        .replace(/\s*\|\|\|\s*/g, '\n')
+                        .replace(/((?:https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)[^\s]+))(?=[A-Za-zÀ-ÿ0-9])/g, '$1\n');
+
+                    const lines = normalizedText.split('\n').map(l => l.trim()).filter(Boolean);
                     const videos: VideoItem[] = [];
+                    const seen = new Set<string>();
 
                     for (let i = 0; i < lines.length; i++) {
                         const line = lines[i];
-                        const match = line.match(urlRegex);
-                        if (!match) continue;
+                        const matches = Array.from(line.matchAll(urlRegex));
+                        if (!matches.length) continue;
 
-                        const url = match[0];
-                        let caption = line.replace(urlRegex, '').trim();
-                        if (!caption && lines[i + 1] && !urlRegex.test(lines[i + 1])) {
-                            caption = lines[i + 1];
+                        for (const match of matches) {
+                            const url = String(match[0] || '').trim();
+                            if (!url || seen.has(url)) continue;
+
+                            let caption = line.replace(urlRegex, '').trim();
+                            if (!caption && lines[i - 1] && !urlRegex.test(lines[i - 1])) {
+                                caption = lines[i - 1].trim();
+                            }
+                            if (!caption && lines[i + 1] && !urlRegex.test(lines[i + 1])) {
+                                caption = lines[i + 1].trim();
+                            }
+
+                            seen.add(url);
+                            videos.push({
+                                url,
+                                caption: caption || 'Video'
+                            });
                         }
-
-                        videos.push({
-                            url,
-                            caption: caption || 'Video'
-                        });
                     }
 
                     return videos;
                 };
 
                 const cmdMatch = content.match(/\[TYPE:CMD\]/i);
+                const sanitizeCommand = (cmd: any) => {
+                    if (!cmd || typeof cmd !== 'object') return cmd;
+
+                    if (cmd.action === 'send_content' && cmd.payload?.type === 'video' && typeof cmd.payload?.url === 'string') {
+                        return {
+                            ...cmd,
+                            payload: {
+                                ...cmd.payload,
+                                url: cmd.payload.url.replace(/\s+/g, '').trim(),
+                            },
+                        };
+                    }
+
+                    return cmd;
+                };
+
+                const tryParseCommandJson = (raw: string) => {
+                    if (!raw || typeof raw !== 'string') return null;
+
+                    const base = raw.replace(/^\s*\[TYPE:CMD\]\s*/i, '').trim();
+                    const candidates: string[] = [base];
+
+                    const firstBrace = base.indexOf('{');
+                    const lastBrace = base.lastIndexOf('}');
+                    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+                        candidates.push(base.slice(firstBrace, lastBrace + 1));
+                    }
+
+                    const repairJson = (value: string) =>
+                        value
+                            .replace(/[“”]/g, '"')
+                            .replace(/[‘’]/g, "'")
+                            .replace(/,\s*([}\]])/g, '$1')
+                            .replace(/("url"\s*:\s*")([\s\S]*?)(")/gi, (_m, p1, p2, p3) => {
+                                const cleanedUrl = String(p2 || '').replace(/\s+/g, '');
+                                return `${p1}${cleanedUrl}${p3}`;
+                            });
+
+                    for (const candidate of candidates) {
+                        try {
+                            const parsed = JSON.parse(candidate);
+                            if (parsed && parsed.action) return sanitizeCommand(parsed);
+                        } catch { }
+
+                        try {
+                            const parsed = JSON.parse(repairJson(candidate));
+                            if (parsed && parsed.action) return sanitizeCommand(parsed);
+                        } catch { }
+                    }
+
+                    return null;
+                };
                 // Detectar [TYPE:DOCUMENT]
                 const documentMatch = content.match(/\[TYPE:DOCUMENT\]/i);
                 if (documentMatch) {
@@ -2408,6 +2688,17 @@ export default function TranscriptionScreen() {
                         setIsGenerating(false);
                         return;
                     }
+
+                    const directCommandJson = tryParseCommandJson(content) || tryParseJSON(content);
+                    if (directCommandJson && directCommandJson.action) {
+                        explicitType = 'command';
+                        console.log('[AI] Tipo explícito detectado: COMMAND (json direto)');
+
+                        setVideoListModal({ visible: false, videos: [] });
+                        processAICommand(sanitizeCommand(directCommandJson));
+                        setIsGenerating(false);
+                        return;
+                    }
                 }
 
                 if (cmdMatch) {
@@ -2437,9 +2728,9 @@ export default function TranscriptionScreen() {
 
                             if (jsonEnd > jsonStart) {
                                 const jsonStr = trimmedBlock.substring(jsonStart, jsonEnd);
-                                const parsed = JSON.parse(jsonStr);
+                                const parsed = tryParseCommandJson(jsonStr);
                                 if (parsed && parsed.action) {
-                                    commands.push(parsed);
+                                    commands.push(sanitizeCommand(parsed));
                                 }
                             }
                         } catch (e) {
@@ -2477,7 +2768,7 @@ export default function TranscriptionScreen() {
                         // Close video list modal if open (voice command while viewing list)
                         setVideoListModal({ visible: false, videos: [] });
 
-                        processAICommand(commands[0]);
+                        processAICommand(sanitizeCommand(commands[0]));
                         setIsGenerating(false);
                         return; // Interrompe o fluxo (não salva como atividade normal)
                     }
@@ -2487,9 +2778,9 @@ export default function TranscriptionScreen() {
                     content = content.replace(/^\[TYPE:CMD\]/i, '').trim();
                     console.log(`[AI] Tipo explícito detectado: COMMAND (fallback)`);
 
-                    const commandJson = tryParseJSON(content);
+                    const commandJson = tryParseCommandJson(content) || tryParseJSON(content);
                     if (commandJson && commandJson.action) {
-                        processAICommand(commandJson);
+                        processAICommand(sanitizeCommand(commandJson));
                         setIsGenerating(false);
                         return;
                     }
@@ -3208,33 +3499,24 @@ export default function TranscriptionScreen() {
         }
     };
 
-    // Compartilhar resumo
+    // Compartilhar resumo (somente texto, sem áudio)
     const handleShareSummary = async () => {
+        if (!currentActivity) return;
+        await performShareSummary();
+    };
+
+    // Abrir modal de opções de áudio
+    const handleGenerateAudio = async () => {
         if (!currentActivity) return;
         setSummaryAudioModalVisible(true);
     };
 
-    const performShareSummary = async (title?: string, audioOptions?: SummaryAudioOptions) => {
+    const performShareSummary = async (title?: string) => {
         setFredCommand('Enviando resumo aos alunos...');
 
         try {
-            const response = await shareSummary(currentActivity!.id, title, {
-                enabled: !!audioOptions,
-                voice: audioOptions?.voice,
-                mode: audioOptions?.mode,
-                bg_id: audioOptions?.bg_id,
-                bg_volume: audioOptions?.bg_volume,
-            });
-
-            if (response?.audio?.error) {
-                setFredCommand('⚠️ Resumo enviado, mas houve falha no áudio');
-                Alert.alert(
-                    'Áudio não gerado',
-                    `Resumo enviado, mas o áudio falhou: ${response.audio.error}`
-                );
-            } else {
-                setFredCommand('✅ Resumo enviado aos alunos!');
-            }
+            await shareSummary(currentActivity!.id, title);
+            setFredCommand('✅ Resumo enviado aos alunos!');
 
             setTimeout(() => setFredCommand(null), 3000);
             setShowSummaryModal(false);
@@ -3245,6 +3527,38 @@ export default function TranscriptionScreen() {
         } catch (error) {
             setFredCommand('❌ Erro ao enviar resumo');
             setTimeout(() => setFredCommand(null), 3000);
+        }
+    };
+
+    // Gerar áudio interativo (processamento IA + TTS)
+    const performGenerateAudio = async (title?: string, audioOptions?: SummaryAudioOptions) => {
+        setFredCommand('Gerando roteiro conversacional e áudio...');
+        setLoadingTitle('Gerando áudio interativo...');
+        setIsGenerating(true);
+
+        try {
+            const response = await generateActivityAudio(currentActivity!.id, title, {
+                voice: audioOptions?.voice,
+                mode: audioOptions?.mode,
+                bg_id: audioOptions?.bg_id,
+                bg_volume: audioOptions?.bg_volume,
+            });
+
+            if (response.success) {
+                setFredCommand('✅ Áudio interativo gerado e enviado!');
+            } else {
+                setFredCommand(`⚠️ Erro ao gerar áudio: ${response.error || 'Erro desconhecido'}`);
+                Alert.alert('Erro no Áudio', response.error || 'Não foi possível gerar o áudio.');
+            }
+
+            setTimeout(() => setFredCommand(null), 4000);
+            setSummaryAudioModalVisible(false);
+        } catch (error) {
+            setFredCommand('❌ Erro ao gerar áudio');
+            Alert.alert('Erro', 'Falha na comunicação com o servidor ao gerar áudio.');
+            setTimeout(() => setFredCommand(null), 3000);
+        } finally {
+            setIsGenerating(false);
         }
     };
 
@@ -3305,7 +3619,9 @@ export default function TranscriptionScreen() {
                 // Usando a mesma função de envio de conteúdo multimídia
                 const result = await sendToPresentation(targetCode, payload.type, {
                     url: payload.url,
-                    caption: payload.caption || 'Enviado por Fred'
+                    caption: payload.caption || 'Enviado por Fred',
+                    subject_id: subjectId,
+                    classroom_id: subjectName
                 });
 
                 if (result.success) {
@@ -3409,7 +3725,17 @@ export default function TranscriptionScreen() {
         );
     }
 
+    // Back Button Handler
+    const handleBackPress = () => {
+        if (!session || session.status === 'ended') {
+            // Se não tem sessão ativa, apenas volta
+            router.push('/(teacher)/dashboard');
+            return;
+        }
 
+        // Utiliza Modal customizado em vez de Alert.alert para melhor suporte Web
+        setShowExitModal(true);
+    };
 
     // Sidebar Navigation Handler
     const handleSidebarNavigation = (route: string) => {
@@ -3431,6 +3757,11 @@ export default function TranscriptionScreen() {
                 pathname: '/(teacher)/active-activities',
                 params: { subjectId: session?.subject_id?.toString() || params.subjectId, subjectName: subjectName }
             });
+        } else if (route === 'recaps') {
+            router.push({
+                pathname: '/(teacher)/recaps',
+                params: { subjectId: session?.subject_id?.toString() || params.subjectId, subjectName: subjectName }
+            });
         }
     };
 
@@ -3443,7 +3774,7 @@ export default function TranscriptionScreen() {
             >
                 <TouchableOpacity
                     style={styles.backButton}
-                    onPress={() => router.push('/(teacher)/dashboard')}
+                    onPress={handleBackPress}
                 >
                     <MaterialIcons name="arrow-back-ios" size={20} color={colors.white} />
                 </TouchableOpacity>
@@ -3524,6 +3855,16 @@ export default function TranscriptionScreen() {
                                     <MaterialIcons name="assignment" size={20} color="#9333ea" />
                                 </View>
                                 <Text style={styles.sidebarLabel}>Atividades e Quizzes</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.sidebarItem}
+                                onPress={() => handleSidebarNavigation('recaps')}
+                            >
+                                <View style={[styles.sidebarIcon, { backgroundColor: '#fce7f3' }]}>
+                                    <MaterialIcons name="history-edu" size={20} color="#ec4899" />
+                                </View>
+                                <Text style={styles.sidebarLabel}>Recapitulando da Aula</Text>
                             </TouchableOpacity>
 
 
@@ -3724,7 +4065,19 @@ export default function TranscriptionScreen() {
                                                         style={styles.sendSummaryButtonGradient}
                                                     >
                                                         <MaterialIcons name="send" size={20} color={colors.white} />
-                                                        <Text style={styles.sendSummaryButtonText}>Enviar para Alunos</Text>
+                                                        <Text style={styles.sendSummaryButtonText}>Enviar Resumo</Text>
+                                                    </LinearGradient>
+                                                </TouchableOpacity>
+
+                                                <TouchableOpacity
+                                                    style={[styles.sendSummaryButton, { width: 48, height: 48, marginTop: 0, paddingHorizontal: 0 }]}
+                                                    onPress={handleGenerateAudio}
+                                                >
+                                                    <LinearGradient
+                                                        colors={['#8b5cf6', '#6d28d9']}
+                                                        style={[styles.sendSummaryButtonGradient, { paddingHorizontal: 0, justifyContent: 'center' }]}
+                                                    >
+                                                        <MaterialIcons name="headphones" size={22} color={colors.white} />
                                                     </LinearGradient>
                                                 </TouchableOpacity>
 
@@ -4215,7 +4568,7 @@ Pressione o botão do microfone para começar a falar."
                 onConfirm={({ title, options }) => {
                     setSummaryAudioOptions(options);
                     setSummaryAudioModalVisible(false);
-                    performShareSummary(title || undefined, options);
+                    performGenerateAudio(title || undefined, options);
                 }}
             />
 
@@ -4261,6 +4614,78 @@ Pressione o botão do microfone para começar a falar."
                                 onPress={confirmVoiceSummaryShare}
                             >
                                 <Text style={styles.voiceConfirmButtonText}>Confirmar envio</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Custom Exit Modal */}
+            <Modal
+                visible={showExitModal}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setShowExitModal(false)}
+            >
+                <View style={styles.overlay}>
+                    <View style={styles.exitModalContainer}>
+                        <View style={styles.exitModalHeader}>
+                            <Text style={styles.exitModalTitle}>Sair da Aula</Text>
+                            <TouchableOpacity onPress={() => setShowExitModal(false)}>
+                                <MaterialIcons name="close" size={24} color={colors.textSecondary} />
+                            </TouchableOpacity>
+                        </View>
+
+                        <Text style={styles.exitModalMessage}>Como você deseja sair desta aula?</Text>
+
+                        <View style={styles.exitModalButtons}>
+                            <TouchableOpacity
+                                style={styles.exitModalButtonSecondary}
+                                onPress={() => {
+                                    setShowExitModal(false);
+                                    router.push('/(teacher)/dashboard');
+                                }}
+                            >
+                                <MaterialIcons name="logout" size={20} color={colors.textPrimary} />
+                                <Text style={styles.exitModalButtonSecondaryText}>Apenas Sair</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.exitModalButtonPrimary}
+                                onPress={async () => {
+                                    setShowExitModal(false);
+                                    try {
+                                        setFredCommand('Encerrando sessão e gerando Recapitulando...');
+                                        setIsGenerating(true);
+                                        const result = await endTranscriptionSession(session?.id || 0);
+                                        if (result.success) {
+                                            setFredCommand('Sessão encerrada com sucesso!');
+                                            setTimeout(() => {
+                                                setFredCommand(null);
+                                                setIsGenerating(false);
+
+                                                // Redireciona diretamente para a tela de Recaps daquela disciplina
+                                                router.replace({
+                                                    pathname: '/(teacher)/recaps',
+                                                    params: {
+                                                        subjectId: session?.subject_id?.toString() || params.subjectId,
+                                                        subjectName: subjectName
+                                                    }
+                                                });
+                                            }, 2000);
+                                        } else {
+                                            throw new Error('Falha');
+                                        }
+                                    } catch (error) {
+                                        setFredCommand(null);
+                                        setIsGenerating(false);
+                                        Alert.alert('Erro', 'Não foi possível encerrar a sessão neste momento.');
+                                        router.push('/(teacher)/dashboard');
+                                    }
+                                }}
+                            >
+                                <MaterialIcons name="check-circle" size={20} color={colors.white} />
+                                <Text style={styles.exitModalButtonPrimaryText}>Encerrar e Gerar síntese da aula</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -5957,5 +6382,90 @@ const styles = StyleSheet.create({
         height: 24,
         backgroundColor: 'rgba(255,255,255,0.2)',
         marginHorizontal: spacing.xs,
+    },
+
+    // Exit Modal Styles
+    overlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 9998,
+    },
+    exitModalContainer: {
+        backgroundColor: colors.white,
+        borderRadius: borderRadius.xl,
+        padding: spacing.lg,
+        width: '90%',
+        maxWidth: 400,
+        ...Platform.select({
+            ios: {
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 10 },
+                shadowOpacity: 0.1,
+                shadowRadius: 20,
+            },
+            android: {
+                elevation: 10,
+            },
+            web: {
+                boxShadow: '0px 10px 30px rgba(0,0,0,0.1)',
+            }
+        })
+    },
+    exitModalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: spacing.sm,
+    },
+    exitModalTitle: {
+        fontSize: typography.fontSize.lg,
+        fontWeight: typography.fontWeight.bold,
+        color: colors.textPrimary,
+        fontFamily: typography.fontFamily.display,
+    },
+    exitModalMessage: {
+        fontSize: typography.fontSize.base,
+        color: colors.textSecondary,
+        marginBottom: spacing.xl,
+        lineHeight: 22,
+    },
+    exitModalButtons: {
+        gap: spacing.md,
+    },
+    exitModalButtonPrimary: {
+        flexDirection: 'row',
+        backgroundColor: colors.primary,
+        padding: spacing.md,
+        borderRadius: borderRadius.lg,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: spacing.sm,
+    },
+    exitModalButtonPrimaryText: {
+        color: colors.white,
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.bold,
+    },
+    exitModalButtonSecondary: {
+        flexDirection: 'row',
+        backgroundColor: colors.slate50,
+        padding: spacing.md,
+        borderRadius: borderRadius.lg,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        gap: spacing.sm,
+    },
+    exitModalButtonSecondaryText: {
+        color: colors.textPrimary,
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.semibold,
     },
 });

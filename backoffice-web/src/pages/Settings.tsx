@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Settings2, Save, Loader2, AlertCircle, BookOpen, X, Search } from 'lucide-react';
+import { Settings2, Save, Loader2, AlertCircle, BookOpen, X, Search, Wrench } from 'lucide-react';
 import api from '../services/api';
 
 interface SystemSetting {
@@ -20,6 +20,9 @@ export default function Settings() {
     const [settings, setSettings] = useState<SystemSetting[]>([]);
     const [loading, setLoading] = useState(true);
     const [savingKey, setSavingKey] = useState<string | null>(null);
+
+    // Derivado: estado atual do modo manutenção
+    const maintenanceActive = settings.find(s => s.key === 'MAINTENANCE_MODE')?.value === 'true';
 
     // New setting form
     const [newKey, setNewKey] = useState('');
@@ -58,6 +61,16 @@ export default function Settings() {
         } finally {
             setSavingKey(null);
         }
+    };
+
+    const handleToggleMaintenance = async () => {
+        const newValue = maintenanceActive ? 'false' : 'true';
+        await handleUpdate(
+            'MAINTENANCE_MODE',
+            newValue,
+            'Ativa ou desativa o modo de manutenção para alunos e professores no app mobile.',
+            false
+        );
     };
 
     const handleCreateNew = async (e: React.FormEvent) => {
@@ -118,6 +131,50 @@ export default function Settings() {
                     <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Configurações Globais</h1>
                     <p className="text-slate-500 mt-1">Gerencie variáveis de ambiente, chaves de IA e configurações gerais.</p>
                 </div>
+            </div>
+
+            {/* ── Modo Manutenção ── */}
+            <div className={`mb-8 rounded-2xl border-2 p-5 flex items-center justify-between gap-4 transition-all ${maintenanceActive
+                    ? 'border-red-400 bg-red-50'
+                    : 'border-slate-200 bg-white'
+                }`}>
+                <div className="flex items-center gap-4">
+                    <div className={`p-3 rounded-xl ${maintenanceActive ? 'bg-red-100' : 'bg-slate-100'
+                        }`}>
+                        <Wrench className={`w-6 h-6 ${maintenanceActive ? 'text-red-600' : 'text-slate-500'
+                            }`} />
+                    </div>
+                    <div>
+                        <h3 className={`font-bold text-lg ${maintenanceActive ? 'text-red-700' : 'text-slate-800'
+                            }`}>
+                            Modo Manutenção
+                        </h3>
+                        <p className="text-sm text-slate-500 mt-0.5">
+                            {maintenanceActive
+                                ? '🔴 Ativo — alunos e professores veem a tela de manutenção.'
+                                : '🟢 Desativado — sistema operando normalmente.'}
+                        </p>
+                    </div>
+                </div>
+
+                {/* Toggle */}
+                <button
+                    onClick={handleToggleMaintenance}
+                    disabled={savingKey === 'MAINTENANCE_MODE' || loading}
+                    className={`relative inline-flex h-8 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 ${maintenanceActive
+                            ? 'bg-red-500 focus:ring-red-400'
+                            : 'bg-slate-300 focus:ring-primary-400'
+                        }`}
+                    role="switch"
+                    aria-checked={maintenanceActive}
+                >
+                    <span className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ${maintenanceActive ? 'translate-x-6' : 'translate-x-0'
+                        }`}>
+                        {savingKey === 'MAINTENANCE_MODE' && (
+                            <Loader2 className="w-4 h-4 m-1.5 animate-spin text-slate-400" />
+                        )}
+                    </span>
+                </button>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

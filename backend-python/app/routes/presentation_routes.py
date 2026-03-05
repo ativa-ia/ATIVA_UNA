@@ -7,6 +7,7 @@ from app.middleware.auth_middleware import token_required
 from app.models.presentation import PresentationSession
 from app import db
 from datetime import datetime
+from urllib.parse import urlparse
 import logging
 
 logger = logging.getLogger(__name__)
@@ -156,6 +157,34 @@ def send_content(current_user, code):
         'timestamp': datetime.utcnow().isoformat()
     }
     db.session.commit()
+
+    # Registrar evento para o recap da aula
+    try:
+        from app.routes.lesson_recap_routes import log_lesson_event, find_active_transcription_session
+        ts = find_active_transcription_session(current_user.id)
+        if ts:
+            event_data = {
+                'content_type': content_type,
+                'title': content_data.get('title') or content_data.get('filename') or content_type,
+            }
+            # Preservar URL para conteúdos acessíveis
+            if content_data.get('url'):
+                event_data['url'] = content_data['url']
+            if content_data.get('file_url'):
+                event_data['url'] = content_data['file_url']
+            if content_data.get('supabase_url'):
+                event_data['url'] = content_data['supabase_url']
+            if content_data.get('metadata'):
+                event_data['metadata'] = content_data['metadata']
+            log_lesson_event(
+                session_id=ts.id,
+                event_type='content_displayed',
+                event_data=event_data,
+                presentation_id=session.id,
+                triggered_by=current_user.id
+            )
+    except Exception as e:
+        logger.error(f'[RECAP] Erro ao registrar content_displayed: {e}')
     
     return jsonify({
         'success': True,
@@ -246,6 +275,23 @@ def share_document_to_students(current_user, code):
     if not enrollments:
         return jsonify({'success': True, 'message': 'Nenhum aluno matriculado', 'count': 0})
 
+    def _infer_material_type(filename: str, url: str, path: str) -> str:
+        filename = (filename or '').lower()
+        path = (path or '').lower()
+        url_path = ''
+        try:
+            url_path = (urlparse(url).path or '').lower() if url else ''
+        except Exception:
+            url_path = (url or '').lower()
+
+        if filename.endswith('.pdf') or path.endswith('.pdf') or url_path.endswith('.pdf'):
+            return 'pdf'
+        if filename.endswith('.md') or filename.endswith('.txt') or path.endswith('.md') or path.endswith('.txt') or url_path.endswith('.md') or url_path.endswith('.txt'):
+            return 'document'
+        return 'pdf'
+
+    material_type = _infer_material_type(title, file_url, file_path)
+
     count = 0
     for enrollment in enrollments:
         material = StudyMaterial(
@@ -253,7 +299,7 @@ def share_document_to_students(current_user, code):
             subject_id=subject_id,
             activity_id=None,
             title=title,
-            type='document',
+            type=material_type,
             content_url=file_url,
             file_size=None
         )
@@ -262,9 +308,149 @@ def share_document_to_students(current_user, code):
 
     db.session.commit()
 
+    # Registrar evento de compartilhamento
+    try:
+        from app.routes.lesson_recap_routes import log_lesson_event, find_active_transcription_session
+        ts = find_active_transcription_session(current_user.id)
+        if ts:
+            log_lesson_event(
+                session_id=ts.id,
+                event_type='document_shared',
+                event_data={
+                    'filename': title,
+                    'url': file_url,
+                    'student_count': count
+                },
+                presentation_id=session.id,
+                triggered_by=current_user.id
+            )
+    except Exception as e:
+        logger.error(f'[RECAP] Erro ao registrar document_shared: {e}')
+
     return jsonify({
         'success': True,
         'message': f'Documento enviado para {count} aluno(s)',
+        'count': count
+    })
+
+
+@presentation_bp.route('/<string:code>/share-video', methods=['POST'])
+@token_required
+def share_video_to_students(current_user, code):
+    """
+    Compartilha o video atual da apresentacao com os alunos da disciplina.
+    Requer que o conteudo atual seja um video.
+    """
+    from app.models.enrollment import Enrollment
+    from app.models.teaching import Teaching
+    from app.models.study_material import StudyMaterial
+    from app.models.subject import Subject
+
+    session = PresentationSession.query.filter_by(code=code).first()
+
+    if not session:
+        return jsonify({'success': False, 'error': 'Sessao nao encontrada'}), 404
+
+    if session.teacher_id != current_user.id:
+        return jsonify({'success': False, 'error': 'Nao autorizado'}), 403
+
+    if session.status != 'active':
+        return jsonify({'success': False, 'error': 'Sessao encerrada'}), 400
+
+    current = session.current_content or {}
+    if current.get('type') != 'video':
+        return jsonify({'success': False, 'error': 'Nenhum video na tela'}), 400
+
+    data = current.get('data') or {}
+    req_data = request.get_json(silent=True) or {}
+
+    subject_id = req_data.get('subject_id') or data.get('subject_id')
+    classroom_id = req_data.get('classroom_id') or data.get('classroom_id')
+    video_url = data.get('url') or data.get('video_url') or data.get('content_url')
+    title = req_data.get('title') or data.get('caption') or data.get('title') or 'Video da aula'
+
+    if not subject_id and classroom_id:
+        resolved_subject = None
+
+        try:
+            if str(classroom_id).isdigit():
+                resolved_subject = Subject.query.get(int(classroom_id))
+        except Exception:
+            resolved_subject = None
+
+        if not resolved_subject:
+            resolved_subject = Subject.query.filter_by(name=classroom_id).first()
+
+        if not resolved_subject:
+            resolved_subject = Subject.query.filter_by(code=classroom_id).first()
+
+        if resolved_subject:
+            subject_id = resolved_subject.id
+
+    if not subject_id:
+        try:
+            from app.routes.lesson_recap_routes import find_active_transcription_session
+            transcription_session = find_active_transcription_session(current_user.id)
+            if transcription_session:
+                subject_id = transcription_session.subject_id
+        except Exception as e:
+            logger.error(f'[SHARE VIDEO] Erro ao resolver disciplina por sessao ativa: {e}')
+
+    if not subject_id:
+        return jsonify({'success': False, 'error': 'Video sem disciplina vinculada'}), 400
+
+    if not video_url:
+        return jsonify({'success': False, 'error': 'Video sem URL compartilhavel'}), 400
+
+    teaching = Teaching.query.filter_by(
+        teacher_id=current_user.id,
+        subject_id=subject_id
+    ).first()
+
+    if not teaching:
+        return jsonify({'success': False, 'error': 'Sem permissao para esta disciplina'}), 403
+
+    enrollments = Enrollment.query.filter_by(subject_id=subject_id).all()
+    if not enrollments:
+        return jsonify({'success': True, 'message': 'Nenhum aluno matriculado', 'count': 0})
+
+    count = 0
+    for enrollment in enrollments:
+        material = StudyMaterial(
+            student_id=enrollment.student_id,
+            subject_id=subject_id,
+            activity_id=None,
+            title=title,
+            type='video',
+            content_url=video_url,
+            file_size=None
+        )
+        db.session.add(material)
+        count += 1
+
+    db.session.commit()
+
+    try:
+        from app.routes.lesson_recap_routes import log_lesson_event, find_active_transcription_session
+        ts = find_active_transcription_session(current_user.id)
+        if ts:
+            log_lesson_event(
+                session_id=ts.id,
+                event_type='video_shared',
+                event_data={
+                    'title': title,
+                    'url': video_url,
+                    'student_count': count
+                },
+                presentation_id=session.id,
+                triggered_by=current_user.id
+            )
+    except Exception as e:
+        logger.error(f'[RECAP] Erro ao registrar video_shared: {e}')
+
+    return jsonify({
+        'success': True,
+        'message': f'Video enviado para {count} aluno(s)',
         'count': count
     })
 
@@ -290,6 +476,20 @@ def clear_presentation(current_user, code):
         'timestamp': datetime.utcnow().isoformat()
     }
     db.session.commit()
+
+    # Registrar evento
+    try:
+        from app.routes.lesson_recap_routes import log_lesson_event, find_active_transcription_session
+        ts = find_active_transcription_session(current_user.id)
+        if ts:
+            log_lesson_event(
+                session_id=ts.id,
+                event_type='content_cleared',
+                presentation_id=session.id,
+                triggered_by=current_user.id
+            )
+    except Exception as e:
+        logger.error(f'[RECAP] Erro ao registrar content_cleared: {e}')
     
     return jsonify({
         'success': True,
@@ -312,6 +512,21 @@ def end_presentation(current_user, code):
         return jsonify({'success': False, 'error': 'Não autorizado'}), 403
     
     session.end_session()
+
+    # Registrar evento
+    try:
+        from app.routes.lesson_recap_routes import log_lesson_event, find_active_transcription_session
+        ts = find_active_transcription_session(current_user.id)
+        if ts:
+            log_lesson_event(
+                session_id=ts.id,
+                event_type='presentation_ended',
+                event_data={'presentation_code': code},
+                presentation_id=session.id,
+                triggered_by=current_user.id
+            )
+    except Exception as e:
+        logger.error(f'[RECAP] Erro ao registrar presentation_ended: {e}')
     
     logger.info(f"Apresentação encerrada: {code}")
     

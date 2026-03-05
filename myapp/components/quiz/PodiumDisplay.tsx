@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Animated, Dimensions, Easing } from 'react-native';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
@@ -35,14 +35,16 @@ function Spotlight({ delay, side }: { delay: number; side: 'left' | 'right' }) {
             Animated.sequence([
                 Animated.timing(rotateAnim, {
                     toValue: 1,
-                    duration: 2000,
+                    duration: 2600,
                     delay: delay,
-                    useNativeDriver: false,
+                    easing: Easing.inOut(Easing.quad),
+                    useNativeDriver: true,
                 }),
                 Animated.timing(rotateAnim, {
                     toValue: 0,
-                    duration: 2000,
-                    useNativeDriver: false,
+                    duration: 2600,
+                    easing: Easing.inOut(Easing.quad),
+                    useNativeDriver: true,
                 }),
             ])
         ).start();
@@ -82,12 +84,12 @@ function ShineEffect() {
                 Animated.timing(shineAnim, {
                     toValue: 200,
                     duration: 1000,
-                    useNativeDriver: false,
+                    useNativeDriver: true,
                 }),
                 Animated.timing(shineAnim, { // Reset quickly invisible
                     toValue: -100,
                     duration: 0,
-                    useNativeDriver: false
+                    useNativeDriver: true
                 })
             ])
         ).start();
@@ -110,6 +112,8 @@ function ShineEffect() {
 function PodiumPlace({ student, position, height, delay }: PodiumPlaceProps) {
     const slideAnim = useRef(new Animated.Value(200)).current;
     const scaleAnim = useRef(new Animated.Value(0)).current;
+    const winnerFloatAnim = useRef(new Animated.Value(0)).current;
+    const winnerGlowAnim = useRef(new Animated.Value(0.35)).current;
 
     useEffect(() => {
         // Animação de subida do pódio
@@ -118,18 +122,60 @@ function PodiumPlace({ student, position, height, delay }: PodiumPlaceProps) {
             Animated.parallel([
                 Animated.spring(slideAnim, {
                     toValue: 0,
-                    useNativeDriver: false,
+                    useNativeDriver: true,
                     tension: 50,
                     friction: 8,
                 }),
                 Animated.spring(scaleAnim, {
                     toValue: 1,
-                    useNativeDriver: false,
+                    useNativeDriver: true,
                     tension: 50,
                     friction: 8,
                 }),
             ]),
         ]).start();
+
+        if (position === 1) {
+            const floatLoop = Animated.loop(
+                Animated.sequence([
+                    Animated.timing(winnerFloatAnim, {
+                        toValue: -5,
+                        duration: 900,
+                        easing: Easing.inOut(Easing.quad),
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(winnerFloatAnim, {
+                        toValue: 0,
+                        duration: 900,
+                        easing: Easing.inOut(Easing.quad),
+                        useNativeDriver: true,
+                    }),
+                ])
+            );
+
+            const glowLoop = Animated.loop(
+                Animated.sequence([
+                    Animated.timing(winnerGlowAnim, {
+                        toValue: 0.9,
+                        duration: 900,
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(winnerGlowAnim, {
+                        toValue: 0.35,
+                        duration: 900,
+                        useNativeDriver: true,
+                    }),
+                ])
+            );
+
+            floatLoop.start();
+            glowLoop.start();
+
+            return () => {
+                floatLoop.stop();
+                glowLoop.stop();
+            };
+        }
     }, []);
 
     const getMedalColor = () => {
@@ -142,13 +188,12 @@ function PodiumPlace({ student, position, height, delay }: PodiumPlaceProps) {
         }
     };
 
-    const getMedalEmoji = () => {
-        // ... (same as before)
+    const getMedalIcon = () => {
         switch (position) {
-            case 1: return '🥇';
-            case 2: return '🥈';
-            case 3: return '🥉';
-            default: return '🏅';
+            case 1: return 'emoji-events';
+            case 2: return 'military-tech';
+            case 3: return 'workspace-premium';
+            default: return 'stars';
         }
     };
 
@@ -179,8 +224,46 @@ function PodiumPlace({ student, position, height, delay }: PodiumPlaceProps) {
             ]}
         >
             {/* Estudante no topo do pódio */}
-            <View style={[styles.studentCard, position === 1 && styles.studentCardWinner]}>
-                <Text style={styles.medalEmoji}>{getMedalEmoji()}</Text>
+            <Animated.View
+                style={[
+                    styles.studentCard,
+                    position === 1 && styles.studentCardWinner,
+                    position === 1 && {
+                        opacity: winnerGlowAnim.interpolate({
+                            inputRange: [0.35, 0.9],
+                            outputRange: [0.96, 1],
+                        }),
+                        transform: [{ translateY: winnerFloatAnim }],
+                    },
+                ]}
+            >
+                {position === 1 && (
+                    <Animated.View
+                        pointerEvents="none"
+                        style={[
+                            styles.winnerAura,
+                            {
+                                opacity: winnerGlowAnim,
+                                transform: [
+                                    {
+                                        scale: winnerGlowAnim.interpolate({
+                                            inputRange: [0.35, 0.9],
+                                            outputRange: [0.96, 1.08],
+                                        }),
+                                    },
+                                ],
+                            },
+                        ]}
+                    />
+                )}
+
+                <View style={[styles.rankChip, { borderColor: getMedalColor(), backgroundColor: `${getMedalColor()}22` }]}>
+                    <Text style={[styles.rankChipText, { color: getMedalColor() }]}>{position}º LUGAR</Text>
+                </View>
+
+                <View style={[styles.medalChip, { borderColor: getMedalColor() }]}>
+                    <MaterialIcons name={getMedalIcon()} size={position === 1 ? 24 : 20} color={getMedalColor()} />
+                </View>
                 <Text style={styles.studentName} numberOfLines={1}>
                     {student.student_name}
                 </Text>
@@ -193,10 +276,11 @@ function PodiumPlace({ student, position, height, delay }: PodiumPlaceProps) {
 
                 {/* Shine effect only for 1st place */}
                 {position === 1 && <ShineEffect />}
-            </View>
+            </Animated.View>
 
             {/* Base do pódio */}
             <View style={[styles.podiumBase, { height, backgroundColor: getMedalColor() }]}>
+                <View style={styles.podiumTopEdge} />
                 <Text style={styles.positionNumber}>{position}º</Text>
             </View>
         </Animated.View>
@@ -232,20 +316,20 @@ function ConfettiPiece({ index }: { index: number }) {
                 toValue: height + 100, // Fall off screen
                 duration: randomDuration,
                 delay: randomDelay,
-                useNativeDriver: false,
+                useNativeDriver: true,
             }),
             Animated.timing(rotateAnim, {
                 toValue: 360 * (2 + Math.random() * 2),
                 duration: randomDuration,
                 delay: randomDelay,
-                useNativeDriver: false,
+                useNativeDriver: true,
             }),
             Animated.sequence([
                 Animated.delay(randomDelay + randomDuration * 0.7),
                 Animated.timing(opacityAnim, {
                     toValue: 0,
                     duration: randomDuration * 0.3,
-                    useNativeDriver: false,
+                    useNativeDriver: true,
                 }),
             ]),
             // Sway animation
@@ -254,12 +338,12 @@ function ConfettiPiece({ index }: { index: number }) {
                     Animated.timing(swayAnim, {
                         toValue: 20,
                         duration: 1000 + Math.random() * 500,
-                        useNativeDriver: false,
+                        useNativeDriver: true,
                     }),
                     Animated.timing(swayAnim, {
                         toValue: -20,
                         duration: 1000 + Math.random() * 500,
-                        useNativeDriver: false,
+                        useNativeDriver: true,
                     })
                 ])
             )
@@ -314,35 +398,46 @@ export default function PodiumDisplay({ topStudents }: PodiumDisplayProps) {
 
             {/* Título com emoji de troféu */}
             <View style={styles.header}>
-                <Text style={styles.title}>🏆 Pódio Final 🏆</Text>
+                <View style={styles.titleRow}>
+                    <MaterialIcons name="emoji-events" size={32} color="#facc15" />
+                    <Text style={styles.title}>Pódio Final</Text>
+                    <MaterialIcons name="emoji-events" size={32} color="#facc15" />
+                </View>
                 <Text style={styles.subtitle}>Top 3 Melhores Desempenhos</Text>
             </View>
 
-            {/* Pódio */}
-            <View style={styles.podiumContainer}>
-                {/* 2º Lugar (Esquerda) */}
-                <PodiumPlace
-                    student={podiumData[1]}
-                    position={2}
-                    height={120}
-                    delay={200}
-                />
+            <View style={styles.podiumStageArea}>
+                <View pointerEvents="none" style={styles.stageAmbientGlow} />
+                <View pointerEvents="none" style={styles.stageFloor}>
+                    <View style={styles.stageTopLine} />
+                </View>
 
-                {/* 1º Lugar (Centro, mais alto) */}
-                <PodiumPlace
-                    student={podiumData[0]}
-                    position={1}
-                    height={160}
-                    delay={0}
-                />
+                {/* Pódio */}
+                <View style={styles.podiumContainer}>
+                    {/* 2º Lugar (Esquerda) */}
+                    <PodiumPlace
+                        student={podiumData[1]}
+                        position={2}
+                        height={120}
+                        delay={200}
+                    />
 
-                {/* 3º Lugar (Direita) */}
-                <PodiumPlace
-                    student={podiumData[2]}
-                    position={3}
-                    height={90}
-                    delay={400}
-                />
+                    {/* 1º Lugar (Centro, mais alto) */}
+                    <PodiumPlace
+                        student={podiumData[0]}
+                        position={1}
+                        height={160}
+                        delay={0}
+                    />
+
+                    {/* 3º Lugar (Direita) */}
+                    <PodiumPlace
+                        student={podiumData[2]}
+                        position={3}
+                        height={90}
+                        delay={400}
+                    />
+                </View>
             </View>
 
             {/* Confetes animados para o vencedor */}
@@ -354,12 +449,15 @@ export default function PodiumDisplay({ topStudents }: PodiumDisplayProps) {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        paddingVertical: spacing.xl,
+        paddingTop: spacing.xl,
+        paddingBottom: 0,
+        paddingHorizontal: spacing.md,
         overflow: 'hidden',
+        justifyContent: 'space-between',
     },
     header: {
         alignItems: 'center',
-        marginBottom: spacing.xl,
+        marginBottom: spacing.lg,
         zIndex: 5,
     },
     title: {
@@ -371,15 +469,59 @@ const styles = StyleSheet.create({
         textShadowOffset: { width: 0, height: 2 },
         textShadowRadius: 4,
     },
+    titleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+    },
     subtitle: {
         fontSize: typography.fontSize.base,
-        color: 'rgba(255,255,255,0.8)',
+        color: 'rgba(226,232,240,0.86)',
+        marginTop: 2,
+        letterSpacing: 0.3,
+    },
+    podiumStageArea: {
+        flex: 1,
+        justifyContent: 'flex-end',
+        position: 'relative',
+    },
+    stageAmbientGlow: {
+        position: 'absolute',
+        left: 40,
+        right: 40,
+        bottom: 120,
+        height: 140,
+        borderRadius: 100,
+        backgroundColor: 'rgba(99,102,241,0.22)',
+        zIndex: 1,
+    },
+    stageFloor: {
+        position: 'absolute',
+        left: -20,
+        right: -20,
+        bottom: 0,
+        height: 140,
+        backgroundColor: 'rgba(15,23,42,0.28)',
+        borderTopLeftRadius: borderRadius.xl,
+        borderTopRightRadius: borderRadius.xl,
+        borderWidth: 1,
+        borderColor: 'rgba(148,163,184,0.28)',
+        zIndex: 2,
+    },
+    stageTopLine: {
+        position: 'absolute',
+        top: 0,
+        left: 24,
+        right: 24,
+        height: 2,
+        backgroundColor: 'rgba(255,255,255,0.2)',
     },
     podiumContainer: {
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'flex-end',
-        paddingHorizontal: spacing.md,
+        paddingHorizontal: 0,
+        paddingBottom: 26,
         gap: spacing.sm,
         zIndex: 5,
     },
@@ -408,41 +550,69 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     studentCard: {
-        backgroundColor: colors.white,
+        backgroundColor: 'rgba(248,250,252,0.98)',
         padding: spacing.md,
         borderRadius: borderRadius.lg,
         alignItems: 'center',
         marginBottom: spacing.sm,
-        minWidth: 100,
+        minWidth: 112,
         borderWidth: 1,
-        borderColor: colors.slate200,
+        borderColor: 'rgba(148,163,184,0.32)',
         shadowColor: colors.black,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.22,
+        shadowRadius: 10,
         elevation: 6,
+        overflow: 'hidden',
     },
     studentCardWinner: {
         borderColor: '#FFD700',
         borderWidth: 2,
         shadowColor: '#FFD700',
-        shadowOpacity: 0.5,
-        shadowRadius: 15,
+        shadowOpacity: 0.42,
+        shadowRadius: 16,
         elevation: 10,
-        overflow: 'hidden',
+    },
+    winnerAura: {
+        position: 'absolute',
+        top: -6,
+        left: -6,
+        right: -6,
+        bottom: -6,
+        borderRadius: borderRadius.xl,
+        borderWidth: 2,
+        borderColor: 'rgba(250,204,21,0.8)',
     },
     shine: {
         position: 'absolute',
         top: 0,
         bottom: 0,
         left: 0,
-        width: 30,
-        backgroundColor: 'rgba(255,255,255,0.4)',
+        width: 26,
+        backgroundColor: 'rgba(255,255,255,0.35)',
         zIndex: 10,
     },
-    medalEmoji: {
-        fontSize: 40,
+    medalChip: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        borderWidth: 2,
+        alignItems: 'center',
+        justifyContent: 'center',
         marginBottom: spacing.xs,
+        backgroundColor: 'rgba(15,23,42,0.04)',
+    },
+    rankChip: {
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: borderRadius.full,
+        borderWidth: 1,
+        marginBottom: spacing.xs,
+    },
+    rankChipText: {
+        fontSize: typography.fontSize.xs,
+        fontWeight: typography.fontWeight.bold,
+        letterSpacing: 0.3,
     },
     studentName: {
         fontSize: typography.fontSize.sm,
@@ -456,10 +626,10 @@ const styles = StyleSheet.create({
         paddingVertical: spacing.xs,
         borderRadius: borderRadius.full,
         marginBottom: spacing.xs,
-        minWidth: 60,
+        minWidth: 68,
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: 'rgba(0,0,0,0.1)',
+        borderColor: 'rgba(15,23,42,0.14)',
     },
     pointsText: {
         fontSize: typography.fontSize.lg,
@@ -474,7 +644,7 @@ const styles = StyleSheet.create({
     percentage: {
         fontSize: typography.fontSize.sm,
         fontWeight: typography.fontWeight.semibold,
-        color: '#10b981',
+        color: '#059669',
         marginBottom: 2,
     },
     score: {
@@ -488,12 +658,21 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.2)',
+        borderColor: 'rgba(255, 255, 255, 0.28)',
         shadowColor: colors.black,
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-        elevation: 4,
+        shadowOpacity: 0.24,
+        shadowRadius: 6,
+        elevation: 6,
+        overflow: 'hidden',
+    },
+    podiumTopEdge: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 6,
+        backgroundColor: 'rgba(255,255,255,0.22)',
     },
     positionNumber: {
         fontSize: typography.fontSize['2xl'],

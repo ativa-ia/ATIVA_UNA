@@ -23,6 +23,7 @@ from app.models.calendar_event import CalendarEvent
 from app.models.user_notification import UserNotification
 from app.models.admin_user import AdminUser
 from app.models.audit_log import AuditLog
+from app.models.lesson_recap import LessonEvent, LessonRecap
 
 __all__ = [
     'User',
@@ -47,4 +48,6 @@ __all__ = [
     'UserNotification',
     'AdminUser',
     'AuditLog',
+    'LessonEvent',
+    'LessonRecap',
 ]

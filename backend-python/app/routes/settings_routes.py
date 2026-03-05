@@ -8,6 +8,9 @@ settings_bp = Blueprint('settings', __name__)
 @settings_bp.route('/public', methods=['GET'])
 def get_public_settings():
     """Retorna configurações públicas (sem auth)"""
+    # Forçar renovação do cache do SQLAlchemy para não enviar dados velhos
+    db.session.expire_all()
+    
     settings = SystemSetting.query.filter_by(is_public=True).all()
     # Converte para um dicionário simples key: value para fácil uso no frontend
     settings_dict = {s.key: s.value for s in settings}
@@ -20,6 +23,9 @@ def get_public_settings():
 @super_admin_jwt_required
 def get_all_settings(current_user):
     """Retorna todas as configurações (Super Admin)"""
+    # Forçar renovação do cache do SQLAlchemy
+    db.session.expire_all()
+    
     settings = SystemSetting.query.all()
     return jsonify({
         'success': True,
