@@ -1634,6 +1634,91 @@ export default function TranscriptionScreen() {
             const isSendIntent = /(envi|emvi|mand|manda|aplic|lanc|disponibiliz|liber|solt)/i.test(normalizedCmd)
                 || fuzzyHasKeyword(normalizedCmd, ['enviar', 'manda', 'mandar', 'liberar', 'disponibilizar']);
             const isGenerateIntent = /(ger|cri|faz|mont)/i.test(lowerCmd);
+            const hasShareVerb = /(envi|emvi|mand|compartilh|disponibiliz|liber|solt)/i.test(normalizedCmd)
+                || fuzzyHasKeyword(normalizedCmd, ['compartilhar', 'enviar', 'mandar', 'disponibilizar', 'liberar', 'soltar']);
+            const isGenericShareOnly = hasShareVerb &&
+                !/\b(v[íi]deo|youtube|link|documento|arquivo|material|pdf|apostila|slide|alunos?|estudantes?|turma|classe|todos)\b/i.test(lowerCmd);
+
+            if (isGenericShareOnly) {
+                console.log('[AI INTERCEPTOR] Comando genérico: Compartilhar (auto-detect da tela)');
+
+                if (!presentationCodeRef.current) {
+                    setFredCommand('Inicie uma apresentação primeiro!');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                }
+
+                let currentScreenType: 'video' | 'document' | null = presentationContentType;
+
+                if (!currentScreenType) {
+                    try {
+                        const { getPresentation } = require('@/services/presentation');
+                        const pres = await getPresentation(presentationCodeRef.current);
+                        if (pres?.success) {
+                            const detectedType = pres.current_content?.type;
+                            if (detectedType === 'video' || detectedType === 'document') {
+                                currentScreenType = detectedType;
+                                setPresentationContentType(detectedType);
+                            }
+                        }
+                    } catch (error) {
+                        console.error('[AI] Erro ao detectar conteúdo atual da tela:', error);
+                    }
+                }
+
+                if (currentScreenType === 'video') {
+                    setFredCommand('Enviando vídeo para alunos...');
+                    try {
+                        const { sharePresentationVideoToStudents } = require('@/services/api');
+                        const result = await sharePresentationVideoToStudents(presentationCodeRef.current, {
+                            subject_id: subjectId,
+                            classroom_id: subjectName
+                        });
+
+                        if (result.success) {
+                            const countText = typeof result.count === 'number' ? ` (${result.count})` : '';
+                            setFredCommand(`Vídeo enviado para alunos${countText}`);
+                        } else {
+                            setFredCommand(result.error || 'Erro ao compartilhar vídeo');
+                        }
+                    } catch (error) {
+                        console.error('[AI] Erro ao compartilhar video:', error);
+                        setFredCommand('Erro ao compartilhar vídeo');
+                    }
+
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                }
+
+                if (currentScreenType === 'document') {
+                    setFredCommand('Enviando documento para alunos...');
+                    try {
+                        const { sharePresentationDocumentToStudents } = require('@/services/api');
+                        const result = await sharePresentationDocumentToStudents(presentationCodeRef.current);
+
+                        if (result.success) {
+                            const countText = typeof result.count === 'number' ? ` (${result.count})` : '';
+                            setFredCommand(`Documento enviado para alunos${countText}`);
+                        } else {
+                            setFredCommand(result.error || 'Erro ao compartilhar documento');
+                        }
+                    } catch (error) {
+                        console.error('[AI] Erro ao compartilhar documento:', error);
+                        setFredCommand('Erro ao compartilhar documento');
+                    }
+
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                }
+
+                setFredCommand('Nenhum vídeo ou documento na tela para compartilhar');
+                setTimeout(() => setFredCommand(null), 3000);
+                setIsGenerating(false);
+                return;
+            }
 
             if (voiceSummaryConfirmModal.visible) {
                 const isConfirmVoiceCmd = /(confirm|confirmar|confirma|pode enviar|enviar agora|confirmo|ok|okay|pode ir)/i.test(normalizedCmd)
@@ -1780,7 +1865,7 @@ export default function TranscriptionScreen() {
 
             // 0.3 Compartilhar video da tela com os alunos
             const isShareVideoCmd =
-                /\b(envi(ar|e)|mand(ar|e)|compartilh(ar|e)|disponibiliz(ar|e)|liber(ar|e)|solt(ar|e))\b/i.test(lowerCmd) &&
+                hasShareVerb &&
                 (
                     /\b(v[íi]deo|youtube|link)\b/i.test(lowerCmd) ||
                     (/\b(alunos?|estudantes?|turma|classe|todos)\b/i.test(lowerCmd) && presentationContentType === 'video')
@@ -1846,7 +1931,7 @@ export default function TranscriptionScreen() {
             // 0.4 Compartilhar documento da tela com os alunos
             // Exemplos: "enviar documento para alunos", "mandar arquivo para turma", "compartilhar documento"
             const isShareDocCmd =
-                /\b(envi(ar|e)|mand(ar|e)|compartilh(ar|e)|disponibiliz(ar|e)|liber(ar|e)|solt(ar|e))\b.{0,20}\b(documento|arquivo|material|pdf|apostila|slide)\b(?:.{0,20}\b(alunos?|estudantes?|turma|classe)\b)?/i.test(lowerCmd) ||
+                (hasShareVerb && /\b(documento|arquivo|material|pdf|apostila|slide)\b/i.test(lowerCmd)) ||
                 /\b(alunos?|estudantes?|turma|classe)\b.{0,20}\b(envi(ar|e)|mand(ar|e)|compartilh(ar|e)|disponibiliz(ar|e)|liber(ar|e)|solt(ar|e))\b.{0,20}\b(documento|arquivo|material|pdf|apostila|slide)\b/i.test(lowerCmd);
 
             if (isShareDocCmd) {
