@@ -1778,7 +1778,72 @@ export default function TranscriptionScreen() {
             }
 
 
-            // 0.3 Compartilhar documento da tela com os alunos
+            // 0.3 Compartilhar video da tela com os alunos
+            const isShareVideoCmd =
+                /\b(envi(ar|e)|mand(ar|e)|compartilh(ar|e)|disponibiliz(ar|e)|liber(ar|e)|solt(ar|e))\b/i.test(lowerCmd) &&
+                (
+                    /\b(v[íi]deo|youtube|link)\b/i.test(lowerCmd) ||
+                    (/\b(alunos?|estudantes?|turma|classe|todos)\b/i.test(lowerCmd) && presentationContentType === 'video')
+                );
+
+            if (isShareVideoCmd) {
+                console.log('[AI INTERCEPTOR] Comando: Compartilhar video com alunos');
+
+                if (!presentationCodeRef.current) {
+                    setFredCommand('Inicie uma apresentação primeiro!');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                }
+
+                let hasVideoOnScreen = presentationContentType === 'video';
+
+                if (!hasVideoOnScreen) {
+                    try {
+                        const { getPresentation } = require('@/services/presentation');
+                        const pres = await getPresentation(presentationCodeRef.current);
+                        if (pres?.success && pres.current_content?.type === 'video') {
+                            hasVideoOnScreen = true;
+                            setPresentationContentType('video');
+                        }
+                    } catch (error) {
+                        console.error('[AI] Erro ao validar video na tela:', error);
+                    }
+                }
+
+                if (!hasVideoOnScreen) {
+                    setFredCommand('Nenhum vídeo na tela');
+                    setTimeout(() => setFredCommand(null), 3000);
+                    setIsGenerating(false);
+                    return;
+                }
+
+                setFredCommand('Enviando vídeo para alunos...');
+
+                try {
+                    const { sharePresentationVideoToStudents } = require('@/services/api');
+                    const result = await sharePresentationVideoToStudents(presentationCodeRef.current, {
+                        subject_id: subjectId,
+                        classroom_id: subjectName
+                    });
+
+                    if (result.success) {
+                        const countText = typeof result.count === 'number' ? ` (${result.count})` : '';
+                        setFredCommand(`Vídeo enviado para alunos${countText}`);
+                    } else {
+                        setFredCommand(result.error || 'Erro ao compartilhar vídeo');
+                    }
+                } catch (error) {
+                    console.error('[AI] Erro ao compartilhar video:', error);
+                    setFredCommand('Erro ao compartilhar vídeo');
+                }
+
+                setTimeout(() => setFredCommand(null), 3000);
+                setIsGenerating(false);
+                return;
+            }
+
+            // 0.4 Compartilhar documento da tela com os alunos
             // Exemplos: "enviar documento para alunos", "mandar arquivo para turma", "compartilhar documento"
             const isShareDocCmd =
                 /\b(envi(ar|e)|mand(ar|e)|compartilh(ar|e)|disponibiliz(ar|e)|liber(ar|e)|solt(ar|e))\b.{0,20}\b(documento|arquivo|material|pdf|apostila|slide)\b(?:.{0,20}\b(alunos?|estudantes?|turma|classe)\b)?/i.test(lowerCmd) ||
@@ -3469,7 +3534,9 @@ export default function TranscriptionScreen() {
                 // Usando a mesma função de envio de conteúdo multimídia
                 const result = await sendToPresentation(targetCode, payload.type, {
                     url: payload.url,
-                    caption: payload.caption || 'Enviado por Fred'
+                    caption: payload.caption || 'Enviado por Fred',
+                    subject_id: subjectId,
+                    classroom_id: subjectName
                 });
 
                 if (result.success) {
