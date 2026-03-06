@@ -17,7 +17,7 @@ from app.models.user import User
 from app import db
 from app.models.user_notification import UserNotification
 from app.models.study_material import StudyMaterial
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import os
 import uuid
@@ -2270,6 +2270,173 @@ def list_sessions(current_user, subject_id):
     return jsonify({
         'success': True,
         'sessions': [s.to_dict() for s in sessions]
+    })
+
+
+@transcription_bp.route('/subjects/<int:subject_id>/analytics', methods=['GET'])
+@token_required
+def get_subject_analytics(current_user, subject_id):
+    """Visão geral da turma por disciplina para o professor."""
+    if current_user.role != 'teacher':
+        return jsonify({'success': False, 'error': 'Apenas professores podem acessar analytics'}), 403
+
+    teaching = Teaching.query.filter_by(teacher_id=current_user.id, subject_id=subject_id).first()
+    if not teaching:
+        return jsonify({'success': False, 'error': 'Não autorizado para esta disciplina'}), 403
+
+    subject = Subject.query.get(subject_id)
+    if not subject:
+        return jsonify({'success': False, 'error': 'Disciplina não encontrada'}), 404
+
+    requested_days = request.args.get('days', type=int)
+    days = requested_days if requested_days in (7, 30) else None
+    cutoff_date = datetime.utcnow() - timedelta(days=days) if days else None
+
+    enrollments = Enrollment.query.filter_by(subject_id=subject_id).all()
+    enrolled_student_ids = [e.student_id for e in enrollments]
+    enrolled_count = len(enrolled_student_ids)
+
+    activities_query = LiveActivity.query.join(TranscriptionSession).filter(
+        TranscriptionSession.subject_id == subject_id,
+        LiveActivity.activity_type.in_(['quiz', 'summary']),
+        LiveActivity.shared_with_students == True
+    )
+    if cutoff_date:
+        activities_query = activities_query.filter(LiveActivity.created_at >= cutoff_date)
+
+    activities = activities_query.all()
+
+    quiz_activities = [a for a in activities if a.activity_type == 'quiz']
+    summary_activities = [a for a in activities if a.activity_type == 'summary']
+
+    quiz_ids = [a.id for a in quiz_activities]
+    summary_ids = [a.id for a in summary_activities]
+
+    responses = LiveActivityResponse.query.filter(
+        LiveActivityResponse.activity_id.in_([a.id for a in activities])
+    ).all() if activities else []
+
+    quiz_responses = [r for r in responses if r.activity_id in quiz_ids]
+    summary_responses = [r for r in responses if r.activity_id in summary_ids]
+
+    avg_quiz_score = round(
+        sum((r.percentage or 0) for r in quiz_responses) / len(quiz_responses), 1
+    ) if quiz_responses else 0.0
+    quiz_error_rate = round(100 - avg_quiz_score, 1) if quiz_responses else 0.0
+
+    unique_quiz_students = {r.student_id for r in quiz_responses}
+    quiz_participation_rate = round(
+        (len(unique_quiz_students) / enrolled_count * 100), 1
+    ) if enrolled_count > 0 else 0.0
+
+    # Mapa por aluno para visão individual
+    students_map = {}
+    if enrolled_student_ids:
+        students = User.query.filter(User.id.in_(enrolled_student_ids)).all()
+        for s in students:
+            students_map[s.id] = {
+                'student_id': s.id,
+                'student_name': s.name,
+                'quizzes_answered': 0,
+                'summary_interactions': 0,
+                'avg_score': 0.0,
+                'error_rate': 0.0,
+                'status': 'no_data',
+            }
+
+    per_student_scores = {}
+    for r in quiz_responses:
+        if r.student_id not in students_map:
+            continue
+        students_map[r.student_id]['quizzes_answered'] += 1
+        per_student_scores.setdefault(r.student_id, []).append(r.percentage or 0)
+
+    for r in summary_responses:
+        if r.student_id in students_map:
+            students_map[r.student_id]['summary_interactions'] += 1
+
+    for student_id, scores in per_student_scores.items():
+        avg_score = round(sum(scores) / len(scores), 1) if scores else 0.0
+        error_rate = round(100 - avg_score, 1)
+
+        status = 'doing_well'
+        if avg_score < 50:
+            status = 'needs_help'
+        elif avg_score < 70:
+            status = 'attention'
+
+        students_map[student_id]['avg_score'] = avg_score
+        students_map[student_id]['error_rate'] = error_rate
+        students_map[student_id]['status'] = status
+
+    status_priority = {'needs_help': 3, 'attention': 2, 'doing_well': 1, 'no_data': 0}
+    students_overview = sorted(
+        list(students_map.values()),
+        key=lambda item: (status_priority.get(item.get('status', 'no_data'), 0), item.get('error_rate') or 0),
+        reverse=True
+    )
+
+    # Distribuição por faixas de desempenho
+    bands_template = [
+        {'key': 'excellent', 'label': 'Excelente (80-100%)', 'min': 80, 'max': 100, 'count': 0},
+        {'key': 'good', 'label': 'Bom (70-79%)', 'min': 70, 'max': 79.99, 'count': 0},
+        {'key': 'attention', 'label': 'Atenção (50-69%)', 'min': 50, 'max': 69.99, 'count': 0},
+        {'key': 'critical', 'label': 'Crítico (<50%)', 'min': 0, 'max': 49.99, 'count': 0},
+    ]
+
+    for student in students_overview:
+        score = student.get('avg_score', 0)
+        if student.get('quizzes_answered', 0) == 0:
+            continue
+        for band in bands_template:
+            if band['min'] <= score <= band['max']:
+                band['count'] += 1
+                break
+
+    # Últimos quizzes com taxa de acerto/erro
+    recent_quizzes = []
+    for quiz in sorted(quiz_activities, key=lambda q: q.created_at or datetime.min, reverse=True)[:8]:
+        quiz_rs = [r for r in quiz_responses if r.activity_id == quiz.id]
+        response_count = len(quiz_rs)
+        avg_score = round(sum((r.percentage or 0) for r in quiz_rs) / response_count, 1) if response_count else 0.0
+        error_rate = round(100 - avg_score, 1) if response_count else 0.0
+        participation_rate = round((response_count / enrolled_count) * 100, 1) if enrolled_count else 0.0
+        recent_quizzes.append({
+            'activity_id': quiz.id,
+            'title': quiz.title,
+            'created_at': quiz.created_at.isoformat() if quiz.created_at else None,
+            'response_count': response_count,
+            'avg_score': avg_score,
+            'error_rate': error_rate,
+            'participation_rate': participation_rate,
+        })
+
+    return jsonify({
+        'success': True,
+        'subject': {
+            'id': subject.id,
+            'name': subject.name,
+            'code': subject.code,
+        },
+        'period': {
+            'days': days,
+            'start_date': cutoff_date.isoformat() if cutoff_date else None,
+            'end_date': datetime.utcnow().isoformat(),
+        },
+        'summary': {
+            'enrolled_students': enrolled_count,
+            'total_activities': len(activities),
+            'total_quizzes': len(quiz_activities),
+            'total_summaries': len(summary_activities),
+            'total_quiz_responses': len(quiz_responses),
+            'total_summary_interactions': len(summary_responses),
+            'quiz_avg_score': avg_quiz_score,
+            'quiz_error_rate': quiz_error_rate,
+            'quiz_participation_rate': quiz_participation_rate,
+        },
+        'performance_bands': bands_template,
+        'students': students_overview,
+        'recent_quizzes': recent_quizzes,
     })
 
 

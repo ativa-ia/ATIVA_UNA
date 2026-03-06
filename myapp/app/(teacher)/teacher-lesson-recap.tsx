@@ -143,6 +143,133 @@ export default function TeacherLessonRecapScreen() {
         return colors.primary;
     }
 
+    const sanitizeSummaryText = (value?: string) => {
+        const text = String(value || '').trim();
+        if (!text) return '';
+        return text
+            .replace(/^\s*\[\s*TYPE\s*:\s*SUM\w*\s*\]\s*/i, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    };
+
+    const renderActivitiesPerformed = () => {
+        const activities = recap?.recap_data?.activities_performed || [];
+        if (!activities.length) return null;
+
+        return (
+            <View style={styles.sectionCard}>
+                <View style={styles.sectionHeader}>
+                    <MaterialIcons name="task-alt" size={24} color={colors.primary} />
+                    <Text style={styles.sectionTitle}>Atividades Enviadas</Text>
+                </View>
+                <Text style={styles.sectionDesc}>Quiz e resumo enviados com participação e desempenho.</Text>
+
+                <View style={styles.activitiesList}>
+                    {activities.map((activity, index) => {
+                        const isQuiz = (activity.type || '').includes('quiz');
+                        const participants = activity.participants || [];
+                        const top = activity.top_performers || [];
+                        const attention = activity.needs_attention || [];
+                        const deliveredCount = activity.delivered_count ?? activity.enrolled_count ?? 0;
+
+                        return (
+                            <View key={`${activity.activity_id || index}`} style={styles.activityCard}>
+                                <View style={styles.activityHeader}>
+                                    <View style={styles.activityBadge}>
+                                        <MaterialIcons
+                                            name={isQuiz ? 'quiz' : 'description'}
+                                            size={14}
+                                            color={isQuiz ? '#92400e' : '#166534'}
+                                        />
+                                        <Text style={[styles.activityBadgeText, { color: isQuiz ? '#92400e' : '#166534' }]}>
+                                            {isQuiz ? 'Quiz' : 'Resumo'}
+                                        </Text>
+                                    </View>
+                                    <Text style={styles.activityTitle}>{activity.title || 'Atividade sem título'}</Text>
+                                </View>
+
+                                <View style={styles.metricsRow}>
+                                    {isQuiz ? (
+                                        <>
+                                            <Text style={styles.metricText}>Participação: {activity.participation_rate ?? 0}%</Text>
+                                            <Text style={styles.metricText}>Respostas: {activity.response_count ?? 0}/{activity.enrolled_count ?? 0}</Text>
+                                            <Text style={styles.metricText}>Média: {activity.average_score ?? 0}%</Text>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Text style={styles.metricText}>Distribuído para: {deliveredCount} aluno(s)</Text>
+                                        </>
+                                    )}
+                                    {isQuiz && activity.best_score !== undefined && activity.worst_score !== undefined && (
+                                        <Text style={styles.metricText}>Faixa: {activity.worst_score}% - {activity.best_score}%</Text>
+                                    )}
+                                </View>
+
+                                {isQuiz && activity.quiz?.questions && activity.quiz.questions.length > 0 && (
+                                    <View style={styles.blockWrap}>
+                                        <Text style={styles.blockTitle}>Perguntas enviadas ({activity.quiz.question_count || activity.quiz.questions.length})</Text>
+                                        {activity.quiz.questions.map((q, qIndex) => {
+                                            const optionLetters = ['A', 'B', 'C', 'D', 'E'];
+                                            const correctIndex = typeof q.correct === 'number' ? q.correct : -1;
+                                            return (
+                                                <View key={qIndex} style={styles.questionCard}>
+                                                    <Text style={styles.questionTitle}>{qIndex + 1}. {q.question || 'Pergunta sem texto'}</Text>
+                                                    {(q.options || []).map((opt, optIndex) => (
+                                                        <Text
+                                                            key={optIndex}
+                                                            style={[
+                                                                styles.optionText,
+                                                                correctIndex === optIndex && styles.correctOptionText
+                                                            ]}
+                                                        >
+                                                            {optionLetters[optIndex] || '?'} ) {opt}
+                                                        </Text>
+                                                    ))}
+                                                    {correctIndex >= 0 && (
+                                                        <Text style={styles.correctHint}>Resposta correta: {optionLetters[correctIndex] || correctIndex + 1}</Text>
+                                                    )}
+                                                </View>
+                                            );
+                                        })}
+                                    </View>
+                                )}
+
+                                {!isQuiz && activity.summary?.text && (
+                                    <View style={styles.blockWrap}>
+                                        <Text style={styles.blockTitle}>Resumo enviado</Text>
+                                        <Text style={styles.summaryPreview}>{sanitizeSummaryText(activity.summary.text)}</Text>
+                                    </View>
+                                )}
+
+                                {isQuiz && top.length > 0 && (
+                                    <View style={styles.blockWrap}>
+                                        <Text style={styles.blockTitle}>Destaques da turma</Text>
+                                        {top.slice(0, 5).map((p, pIndex) => (
+                                            <Text key={pIndex} style={styles.blockItem}>• {p.student_name || 'Aluno'} - {Math.round(p.percentage ?? 0)}%</Text>
+                                        ))}
+                                    </View>
+                                )}
+
+                                {isQuiz && attention.length > 0 && (
+                                    <View style={styles.blockWrap}>
+                                        <Text style={styles.blockTitle}>Pontos de atenção</Text>
+                                        {attention.slice(0, 5).map((p, pIndex) => (
+                                            <Text key={pIndex} style={styles.blockItem}>• {p.student_name || 'Aluno'} - {Math.round(p.percentage ?? 0)}%</Text>
+                                        ))}
+                                    </View>
+                                )}
+
+                                {isQuiz && participants.length === 0 && (
+                                    <Text style={styles.blockHint}>Sem respostas registradas para esta atividade.</Text>
+                                )}
+                            </View>
+                        );
+                    })}
+                </View>
+            </View>
+        );
+    };
+
     const renderHeader = () => (
         <LinearGradient
             colors={['#ec4899', '#db2777']}
@@ -304,6 +431,8 @@ export default function TeacherLessonRecapScreen() {
                         </View>
                     </View>
                 )}
+
+                {renderActivitiesPerformed()}
 
                 {/* Timeline */}
                 {recap_data?.timeline && recap_data.timeline.length > 0 && (
@@ -527,6 +656,109 @@ const styles = StyleSheet.create({
     contentItemTime: {
         fontSize: typography.fontSize.xs,
         color: colors.textSecondary,
+    },
+    activitiesList: {
+        gap: spacing.md,
+    },
+    activityCard: {
+        backgroundColor: colors.slate50,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        borderRadius: borderRadius.lg,
+        padding: spacing.md,
+        gap: spacing.sm,
+    },
+    activityHeader: {
+        gap: spacing.xs,
+    },
+    activityBadge: {
+        alignSelf: 'flex-start',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: borderRadius.full,
+        backgroundColor: colors.white,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+    },
+    activityBadgeText: {
+        fontSize: typography.fontSize.xs,
+        fontWeight: typography.fontWeight.semibold,
+    },
+    activityTitle: {
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.semibold,
+        color: colors.slate900,
+    },
+    metricsRow: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: spacing.sm,
+    },
+    metricText: {
+        fontSize: typography.fontSize.xs,
+        color: colors.slate700,
+        backgroundColor: colors.white,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: borderRadius.full,
+    },
+    blockWrap: {
+        backgroundColor: colors.white,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        borderRadius: borderRadius.md,
+        padding: spacing.sm,
+        gap: 4,
+    },
+    blockTitle: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: typography.fontWeight.semibold,
+        color: colors.slate800,
+    },
+    blockItem: {
+        fontSize: typography.fontSize.sm,
+        color: colors.slate700,
+    },
+    blockHint: {
+        fontSize: typography.fontSize.xs,
+        color: colors.slate500,
+    },
+    summaryPreview: {
+        fontSize: typography.fontSize.sm,
+        color: colors.slate700,
+        lineHeight: 20,
+    },
+    questionCard: {
+        backgroundColor: colors.slate50,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        borderRadius: borderRadius.md,
+        padding: spacing.sm,
+        gap: 4,
+    },
+    questionTitle: {
+        fontSize: typography.fontSize.sm,
+        fontWeight: typography.fontWeight.semibold,
+        color: colors.slate900,
+        marginBottom: 2,
+    },
+    optionText: {
+        fontSize: typography.fontSize.sm,
+        color: colors.slate700,
+    },
+    correctOptionText: {
+        color: '#166534',
+        fontWeight: typography.fontWeight.semibold,
+    },
+    correctHint: {
+        fontSize: typography.fontSize.xs,
+        color: '#166534',
+        marginTop: 2,
     },
     timeline: {
         marginTop: spacing.sm,

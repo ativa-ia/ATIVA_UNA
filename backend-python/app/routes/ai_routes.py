@@ -658,6 +658,32 @@ def send_kb_document_to_presentation(current_user, file_id):
             'timestamp': datetime.utcnow().isoformat()
         }
         db.session.commit()
+
+        # Registrar evento para recap: documento exibido no telão
+        try:
+            from app.routes.lesson_recap_routes import log_lesson_event, find_active_transcription_session
+            ts = find_active_transcription_session(current_user.id)
+            if ts:
+                doc_url = document_data.get('supabase_url') or document_data.get('file_url')
+                log_lesson_event(
+                    session_id=ts.id,
+                    event_type='content_displayed',
+                    event_data={
+                        'content_type': 'document',
+                        'title': document_data.get('filename') or 'Documento',
+                        'url': doc_url,
+                        'metadata': {
+                            'file_type': document_data.get('file_type'),
+                            'file_path': document_data.get('file_path'),
+                            'subject_id': document_data.get('subject_id'),
+                            'source': 'ai_context_file'
+                        }
+                    },
+                    presentation_id=session.id,
+                    triggered_by=current_user.id
+                )
+        except Exception as e:
+            logger.error(f"[RECAP] Erro ao registrar content_displayed (KB doc): {e}")
         
         logger.info(f"[SEND KB DOC] ✅ Documento {context_file.filename} enviado para apresentação {presentation_code}")
         
