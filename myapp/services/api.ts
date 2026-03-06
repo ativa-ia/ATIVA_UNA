@@ -695,6 +695,65 @@ export interface RankingData {
     }>;
 }
 
+export interface SubjectAnalyticsSummary {
+    enrolled_students: number;
+    total_activities: number;
+    total_quizzes: number;
+    total_summaries: number;
+    total_quiz_responses: number;
+    total_summary_interactions: number;
+    quiz_avg_score: number;
+    quiz_error_rate: number;
+    quiz_participation_rate: number;
+}
+
+export interface SubjectAnalyticsBand {
+    key: 'excellent' | 'good' | 'attention' | 'critical';
+    label: string;
+    min: number;
+    max: number;
+    count: number;
+}
+
+export interface SubjectAnalyticsStudent {
+    student_id: number;
+    student_name: string;
+    quizzes_answered: number;
+    summary_interactions: number;
+    avg_score: number;
+    error_rate: number;
+    status: 'needs_help' | 'attention' | 'doing_well' | 'no_data';
+}
+
+export interface SubjectAnalyticsQuiz {
+    activity_id: number;
+    title: string;
+    created_at: string | null;
+    response_count: number;
+    avg_score: number;
+    error_rate: number;
+    participation_rate: number;
+}
+
+export interface SubjectAnalyticsResponse {
+    success: boolean;
+    error?: string;
+    subject?: {
+        id: number;
+        name: string;
+        code?: string;
+    };
+    period?: {
+        days: number | null;
+        start_date: string | null;
+        end_date: string | null;
+    };
+    summary?: SubjectAnalyticsSummary;
+    performance_bands?: SubjectAnalyticsBand[];
+    students?: SubjectAnalyticsStudent[];
+    recent_quizzes?: SubjectAnalyticsQuiz[];
+}
+
 // Criar ou recuperar sessão de transcrição
 export const createTranscriptionSession = async (subjectId: number, title?: string): Promise<{ success: boolean; session: TranscriptionSession }> => {
     const token = await AsyncStorage.getItem('authToken');
@@ -1144,6 +1203,20 @@ export const getActiveActivitiesList = async (subjectId: number): Promise<{ succ
             'Authorization': `Bearer ${token}`,
         },
     });
+    return response.json();
+};
+
+// Professor: visão analítica da turma por disciplina
+export const getSubjectAnalytics = async (subjectId: number, days?: 7 | 30): Promise<SubjectAnalyticsResponse> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const query = days ? `?days=${days}` : '';
+
+    const response = await fetch(`${API_URL}/transcription/subjects/${subjectId}/analytics${query}`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
     return response.json();
 };
 
@@ -1741,8 +1814,48 @@ export interface LessonRecap {
         activities_performed: Array<{
             type: string;
             title: string;
+            activity_id?: number;
+            response_count?: number;
+            enrolled_count?: number;
+            delivered_count?: number;
             participation_rate?: number;
             average_score?: number;
+            best_score?: number;
+            worst_score?: number;
+            participants?: Array<{
+                student_id?: number;
+                student_name?: string;
+                score?: number;
+                total?: number;
+                percentage?: number;
+                submitted_at?: string;
+            }>;
+            top_performers?: Array<{
+                student_id?: number;
+                student_name?: string;
+                score?: number;
+                total?: number;
+                percentage?: number;
+            }>;
+            needs_attention?: Array<{
+                student_id?: number;
+                student_name?: string;
+                score?: number;
+                total?: number;
+                percentage?: number;
+            }>;
+            quiz?: {
+                question_count?: number;
+                questions?: Array<{
+                    question?: string;
+                    options?: string[];
+                    correct?: number;
+                }>;
+            };
+            summary?: {
+                text?: string;
+                length?: number;
+            };
         }>;
         key_statistics: any;
     };

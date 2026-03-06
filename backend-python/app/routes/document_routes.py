@@ -356,6 +356,32 @@ def send_to_presentation(current_user):
             'timestamp': datetime.utcnow().isoformat()
         }
         db.session.commit()
+
+        # Registrar evento para recap: documento exibido no telão
+        try:
+            from app.routes.lesson_recap_routes import log_lesson_event, find_active_transcription_session
+            ts = find_active_transcription_session(current_user.id)
+            if ts:
+                doc_url = final_document_data.get('supabase_url') or final_document_data.get('file_url')
+                log_lesson_event(
+                    session_id=ts.id,
+                    event_type='content_displayed',
+                    event_data={
+                        'content_type': 'document',
+                        'title': temp_doc.filename,
+                        'url': doc_url,
+                        'metadata': {
+                            'classroom_id': final_document_data.get('classroom_id'),
+                            'subject_id': final_document_data.get('subject_id'),
+                            'total_sections': final_document_data.get('total_sections'),
+                            'source': 'temp_document'
+                        }
+                    },
+                    presentation_id=session.id,
+                    triggered_by=current_user.id
+                )
+        except Exception as recap_err:
+            logger.error(f"[RECAP] Erro ao registrar content_displayed (temp doc): {recap_err}")
         
         return jsonify({
             'success': True,

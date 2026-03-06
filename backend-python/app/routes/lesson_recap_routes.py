@@ -15,6 +15,7 @@ from app import db
 from datetime import datetime
 import json
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,18 @@ def _build_recap_data(session, events):
     timeline = []
     contents_shown = []
     activities_performed = []
+    content_seen_keys = set()
+    last_content_timeline_signature = None
+    last_content_timeline_time = None
+
+    def _sanitize_recap_summary_text(value):
+        text = str(value or '').strip()
+        if not text:
+            return ''
+        # Remove marcadores antigos que podem vir na payload da IA
+        text = re.sub(r'^\s*\[\s*TYPE\s*:\s*SUM\w*\s*\]\s*', '', text, flags=re.IGNORECASE)
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text
 
     for event in events:
         entry = {
@@ -77,21 +90,66 @@ def _build_recap_data(session, events):
         }
         if event.activity_id:
             entry['activity_id'] = event.activity_id
-        timeline.append(entry)
+        # Evitar spam no recap quando polling reenvia o mesmo conteúdo muitas vezes
+        if event.event_type == 'content_displayed':
+            signature = (
+                str(event.event_data.get('content_type') or '').strip().lower(),
+                str(event.event_data.get('title') or '').strip().lower(),
+                str(event.event_data.get('url') or '').strip().lower(),
+            )
+            should_skip = False
+            if last_content_timeline_signature == signature and last_content_timeline_time and event.occurred_at:
+                delta_sec = (event.occurred_at - last_content_timeline_time).total_seconds()
+                if delta_sec <= 120:
+                    should_skip = True
+
+            if not should_skip:
+                timeline.append(entry)
+                last_content_timeline_signature = signature
+                last_content_timeline_time = event.occurred_at
+        else:
+            timeline.append(entry)
 
         # Acumular conteúdos exibidos
+        # OBS: document_shared/video_shared entram como fallback para recaps antigos
+        # que não registraram content_displayed no momento da exibição.
+        content_info = None
         if event.event_type == 'content_displayed':
             content_info = {
                 'type': event.event_data.get('content_type', 'unknown'),
                 'title': event.event_data.get('title', 'Conteúdo'),
                 'shown_at': event.occurred_at.strftime('%H:%M') if event.occurred_at else None,
             }
-            # Preservar URL se for vídeo, documento, etc.
             if event.event_data.get('url'):
                 content_info['url'] = event.event_data['url']
             if event.event_data.get('metadata'):
                 content_info['metadata'] = event.event_data['metadata']
-            contents_shown.append(content_info)
+        elif event.event_type == 'document_shared':
+            content_info = {
+                'type': 'document',
+                'title': event.event_data.get('filename') or event.event_data.get('title') or 'Documento',
+                'shown_at': event.occurred_at.strftime('%H:%M') if event.occurred_at else None,
+            }
+            if event.event_data.get('url'):
+                content_info['url'] = event.event_data['url']
+        elif event.event_type == 'video_shared':
+            content_info = {
+                'type': 'video',
+                'title': event.event_data.get('title') or 'Vídeo',
+                'shown_at': event.occurred_at.strftime('%H:%M') if event.occurred_at else None,
+            }
+            if event.event_data.get('url'):
+                content_info['url'] = event.event_data['url']
+
+        if content_info:
+            content_key = (
+                str(content_info.get('type') or '').strip().lower(),
+                str(content_info.get('title') or '').strip().lower(),
+                str(content_info.get('url') or '').strip().lower(),
+            )
+            if content_key not in content_seen_keys:
+                content_seen_keys.add(content_key)
+                contents_shown.append(content_info)
 
         # Acumular atividades
         if event.event_type in ('quiz_broadcast', 'summary_shared', 'open_question_created'):
@@ -113,11 +171,63 @@ def _build_recap_data(session, events):
                     act_info['participation_rate'] = round(
                         (total_responses / enrolled * 100) if enrolled > 0 else 0, 1
                     )
+
+                    # Ranking de participantes para visão de desempenho (somente quiz)
+                    if activity.activity_type == 'quiz' and activity.responses:
+                        ranking = sorted(
+                            [
+                                {
+                                    'student_id': r.student_id,
+                                    'student_name': r.student.name if r.student else f'Aluno {r.student_id}',
+                                    'score': r.score,
+                                    'total': r.total,
+                                    'percentage': r.percentage,
+                                    'submitted_at': r.submitted_at.isoformat() if r.submitted_at else None,
+                                }
+                                for r in activity.responses
+                            ],
+                            key=lambda item: (item.get('percentage') or 0, item.get('score') or 0),
+                            reverse=True
+                        )
+                        act_info['participants'] = ranking
+                        act_info['top_performers'] = ranking[:5]
+                        act_info['needs_attention'] = list(reversed(ranking[-5:])) if len(ranking) > 1 else ranking
+
                     # Média de pontuação p/ quiz
                     if activity.activity_type == 'quiz' and activity.responses:
                         scores = [r.percentage for r in activity.responses if r.percentage is not None]
                         if scores:
                             act_info['average_score'] = round(sum(scores) / len(scores), 1)
+                            act_info['best_score'] = round(max(scores), 1)
+                            act_info['worst_score'] = round(min(scores), 1)
+
+                    # Snapshot do conteúdo enviado para consulta no recap
+                    if activity.activity_type == 'quiz':
+                        questions = (activity.content or {}).get('questions', []) if isinstance(activity.content, dict) else []
+                        act_info['quiz'] = {
+                            'question_count': len(questions),
+                            'questions': [
+                                {
+                                    'question': q.get('question'),
+                                    'options': q.get('options') or [],
+                                    'correct': q.get('correct'),
+                                }
+                                for q in questions
+                                if isinstance(q, dict)
+                            ]
+                        }
+                    elif activity.activity_type == 'summary':
+                        summary_text = ''
+                        if isinstance(activity.content, dict):
+                            summary_text = activity.content.get('summary_text') or ''
+                        if not summary_text:
+                            summary_text = activity.ai_generated_content or ''
+                        summary_text = _sanitize_recap_summary_text(summary_text)
+                        act_info['summary'] = {
+                            'text': summary_text,
+                            'length': len(summary_text or '')
+                        }
+                        act_info['delivered_count'] = enrolled
 
             activities_performed.append(act_info)
 
@@ -158,6 +268,7 @@ def _event_description(event):
         'content_displayed': f"Conteúdo exibido: {event.event_data.get('content_type', '')} - {event.event_data.get('title', '')}",
         'content_cleared': 'Tela limpa',
         'document_shared': f"Documento compartilhado: {event.event_data.get('filename', '')}",
+        'video_shared': f"Vídeo compartilhado: {event.event_data.get('title', '')}",
         'audio_generated': f"Áudio gerado: {event.event_data.get('title', '')}",
         'presentation_ended': 'Apresentação encerrada',
     }

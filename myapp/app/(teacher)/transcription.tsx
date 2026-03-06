@@ -1634,10 +1634,33 @@ export default function TranscriptionScreen() {
             const isSendIntent = /(envi|emvi|mand|manda|aplic|lanc|disponibiliz|liber|solt)/i.test(normalizedCmd)
                 || fuzzyHasKeyword(normalizedCmd, ['enviar', 'manda', 'mandar', 'liberar', 'disponibilizar']);
             const isGenerateIntent = /(ger|cri|faz|mont)/i.test(lowerCmd);
+            const hasActiveSendableActivity = !!(isSendIntent && !isGenerateIntent && currentActivity && currentActivity.status !== 'ended');
+            const hasExplicitMediaTarget = /\b(v[íi]deo|youtube|link|documento|arquivo|material|pdf|apostila|slide)\b/i.test(lowerCmd);
             const hasShareVerb = /(envi|emvi|mand|compartilh|disponibiliz|liber|solt)/i.test(normalizedCmd)
                 || fuzzyHasKeyword(normalizedCmd, ['compartilhar', 'enviar', 'mandar', 'disponibilizar', 'liberar', 'soltar']);
             const isGenericShareOnly = hasShareVerb &&
+                !hasActiveSendableActivity &&
                 !/\b(v[íi]deo|youtube|link|documento|arquivo|material|pdf|apostila|slide|alunos?|estudantes?|turma|classe|todos)\b/i.test(lowerCmd);
+
+            // Prioridade: quando existir atividade ativa (quiz/resumo), comando genérico de envio
+            // deve enviar a atividade e não o conteúdo de mídia atualmente na apresentação.
+            if (hasActiveSendableActivity && !hasExplicitMediaTarget) {
+                const act = currentActivity!;
+                console.log('[AI INTERCEPTOR] Priorizando envio da atividade ativa:', act.id, act.activity_type);
+                setFredCommand(`Enviando ${act.activity_type === 'quiz' ? 'quiz' : 'resumo'}...`);
+
+                setTimeout(() => {
+                    if (act.activity_type === 'quiz') {
+                        performStartActivity(act.id, act.title || 'Quiz');
+                    } else if (act.activity_type === 'summary') {
+                        performShareSummary();
+                    }
+                    setIsGenerating(false);
+                    setFredCommand(null);
+                }, 1000);
+
+                return;
+            }
 
             if (isGenericShareOnly) {
                 console.log('[AI INTERCEPTOR] Comando genérico: Compartilhar (auto-detect da tela)');
@@ -1868,7 +1891,7 @@ export default function TranscriptionScreen() {
                 hasShareVerb &&
                 (
                     /\b(v[íi]deo|youtube|link)\b/i.test(lowerCmd) ||
-                    (/\b(alunos?|estudantes?|turma|classe|todos)\b/i.test(lowerCmd) && presentationContentType === 'video')
+                    (/\b(alunos?|estudantes?|turma|classe|todos)\b/i.test(lowerCmd) && presentationContentType === 'video' && !hasActiveSendableActivity)
                 );
 
             if (isShareVideoCmd) {
@@ -2402,31 +2425,6 @@ export default function TranscriptionScreen() {
                 setShowAnswerKey(false);
                 setIsGenerating(false);
                 setTimeout(() => setFredCommand(null), 2000);
-                return;
-            }
-
-            // 2. Enviar Atividade Atual (Quiz ou Resumo)
-
-            // Se quer enviar, MAS NÃO quer gerar, E temos atividade salva
-            // 2. Enviar Atividade Atual (Quiz ou Resumo) (IMPLEMENTAÇÃO ATUALIZADA - SEM ÁUDIO)
-            if (isSendIntent && !isGenerateIntent && currentActivity && currentActivity.status !== 'ended') {
-                console.log('[AI INTERCEPTOR] Comando de envio direto detectado:', command);
-                console.log('[AI INTERCEPTOR] Atividade atual:', currentActivity.id, currentActivity.title, currentActivity.activity_type);
-
-                const act = currentActivity;
-                setFredCommand(`Enviando ${act.activity_type === 'quiz' ? 'quiz' : 'resumo'}...`);
-
-                setTimeout(() => {
-                    if (act.activity_type === 'quiz') {
-                        performStartActivity(act.id, act.title || 'Quiz');
-                    } else if (act.activity_type === 'summary') {
-                        // SEPARAÇÃO: Enviar SOMENTE texto, sem áudio
-                        performShareSummary();
-                    }
-                    setIsGenerating(false);
-                    setFredCommand(null);
-                }, 1000);
-
                 return;
             }
 
@@ -3762,6 +3760,11 @@ export default function TranscriptionScreen() {
                 pathname: '/(teacher)/recaps',
                 params: { subjectId: session?.subject_id?.toString() || params.subjectId, subjectName: subjectName }
             });
+        } else if (route === 'class-analytics') {
+            router.push({
+                pathname: '/(teacher)/class-analytics',
+                params: { subjectId: session?.subject_id?.toString() || params.subjectId, subjectName: subjectName }
+            });
         }
     };
 
@@ -3865,6 +3868,16 @@ export default function TranscriptionScreen() {
                                     <MaterialIcons name="history-edu" size={20} color="#ec4899" />
                                 </View>
                                 <Text style={styles.sidebarLabel}>Recapitulando da Aula</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={styles.sidebarItem}
+                                onPress={() => handleSidebarNavigation('class-analytics')}
+                            >
+                                <View style={[styles.sidebarIcon, { backgroundColor: '#e0f2fe' }]}>
+                                    <MaterialIcons name="insights" size={20} color="#0284c7" />
+                                </View>
+                                <Text style={styles.sidebarLabel}>Análise da Turma</Text>
                             </TouchableOpacity>
 
 

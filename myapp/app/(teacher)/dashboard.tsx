@@ -19,7 +19,7 @@ import { Subject } from '@/types';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing } from '@/constants/spacing';
-import { getSubjects, Subject as APISubject, getTeacherClasses, TeacherClass, getMe } from '@/services/api';
+import { getSubjects, Subject as APISubject, getMe } from '@/services/api';
 
 /**
  * TeacherDashboardScreen - Dashboard do Professor
@@ -94,6 +94,7 @@ export default function TeacherDashboardScreen() {
         { id: 'recaps', label: 'Recapitulando', iconName: 'history-edu' },
     ];
     const [showSubjectModal, setShowSubjectModal] = useState(false);
+    const [modalMode, setModalMode] = useState<'recap' | 'analytics'>('recap');
 
     const handleRecapShortcut = () => {
         if (!subjects || subjects.length === 0) {
@@ -112,6 +113,26 @@ export default function TeacherDashboardScreen() {
         }
 
         // Multiple subjects: show modal to pick one
+        setModalMode('recap');
+        setShowSubjectModal(true);
+    };
+
+    const handleAnalyticsShortcut = () => {
+        if (!subjects || subjects.length === 0) {
+            router.push('./subjects');
+            return;
+        }
+
+        if (subjects.length === 1) {
+            const subject = subjects[0];
+            router.push({
+                pathname: '/(teacher)/class-analytics',
+                params: { subjectId: subject.id.toString(), subjectName: subject.name }
+            });
+            return;
+        }
+
+        setModalMode('analytics');
         setShowSubjectModal(true);
     };
 
@@ -175,6 +196,32 @@ export default function TeacherDashboardScreen() {
 
 
 
+                    <View style={styles.quickActionsSection}>
+                        <TouchableOpacity
+                            style={styles.analyticsShortcut}
+                            activeOpacity={0.85}
+                            onPress={handleAnalyticsShortcut}
+                        >
+                            <LinearGradient
+                                colors={['#0ea5e9', '#2563eb']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                                style={styles.analyticsGradient}
+                            >
+                                <View style={styles.analyticsContent}>
+                                    <MaterialIcons name="insights" size={24} color={colors.white} />
+                                    <View style={styles.analyticsTextWrap}>
+                                        <Text style={styles.analyticsTitle}>Analytics da Turma</Text>
+                                        <Text style={styles.analyticsSubtitle}>
+                                            Veja participação, taxa de erro e alunos que precisam de ajuda
+                                        </Text>
+                                    </View>
+                                    <MaterialIcons name="chevron-right" size={28} color={colors.white} />
+                                </View>
+                            </LinearGradient>
+                        </TouchableOpacity>
+                    </View>
+
                     {/* Minhas Disciplinas Section */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Minhas Disciplinas</Text>
@@ -226,7 +273,9 @@ export default function TeacherDashboardScreen() {
                 >
                     <View style={styles.modalOverlay}>
                         <View style={styles.modalContainer}>
-                            <Text style={styles.modalTitle}>Selecione a disciplina</Text>
+                            <Text style={styles.modalTitle}>
+                                {modalMode === 'analytics' ? 'Selecione a disciplina para analytics' : 'Selecione a disciplina'}
+                            </Text>
                             <ScrollView style={{ maxHeight: 300 }}>
                                 {subjects.map((subject) => (
                                     <TouchableOpacity
@@ -234,10 +283,17 @@ export default function TeacherDashboardScreen() {
                                         style={styles.modalItem}
                                         onPress={() => {
                                             setShowSubjectModal(false);
-                                            router.push({
-                                                pathname: '/(teacher)/recaps',
-                                                params: { subjectId: subject.id.toString(), subjectName: subject.name }
-                                            });
+                                            if (modalMode === 'analytics') {
+                                                router.push({
+                                                    pathname: '/(teacher)/class-analytics',
+                                                    params: { subjectId: subject.id.toString(), subjectName: subject.name }
+                                                });
+                                            } else {
+                                                router.push({
+                                                    pathname: '/(teacher)/recaps',
+                                                    params: { subjectId: subject.id.toString(), subjectName: subject.name }
+                                                });
+                                            }
                                         }}
                                     >
                                         <Text style={styles.modalItemText}>{subject.name}</Text>
@@ -309,6 +365,38 @@ const styles = StyleSheet.create({
     },
     section: {
         marginTop: spacing.lg,
+    },
+    quickActionsSection: {
+        marginTop: spacing.lg,
+        paddingHorizontal: spacing.base,
+    },
+    analyticsShortcut: {
+        borderRadius: 16,
+        overflow: 'hidden',
+    },
+    analyticsGradient: {
+        paddingHorizontal: spacing.base,
+        paddingVertical: spacing.md,
+    },
+    analyticsContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+    },
+    analyticsTextWrap: {
+        flex: 1,
+    },
+    analyticsTitle: {
+        color: colors.white,
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.bold,
+        fontFamily: typography.fontFamily.display,
+    },
+    analyticsSubtitle: {
+        marginTop: 2,
+        color: 'rgba(255,255,255,0.88)',
+        fontSize: typography.fontSize.xs,
+        fontFamily: typography.fontFamily.body,
     },
     sectionTitle: {
         fontSize: typography.fontSize.lg,
