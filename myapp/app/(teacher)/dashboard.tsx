@@ -4,6 +4,7 @@ import {
     View,
     Text,
     Modal,
+    Alert,
     StyleSheet,
     ScrollView,
     SafeAreaView,
@@ -96,10 +97,16 @@ export default function TeacherDashboardScreen() {
     const [showSubjectModal, setShowSubjectModal] = useState(false);
     const [modalMode, setModalMode] = useState<'recap' | 'analytics'>('recap');
 
+    const closeSubjectModal = () => {
+        setShowSubjectModal(false);
+        setModalMode('recap');
+        // Evita manter o item de recap ativo quando o professor cancela o modal.
+        setActiveNavId('dashboard');
+    };
+
     const handleRecapShortcut = () => {
         if (!subjects || subjects.length === 0) {
-            // No subjects: redirect to subjects screen (or open selection page)
-            router.push('./subjects');
+            Alert.alert('Sem disciplinas', 'Nenhuma disciplina encontrada para abrir os recaps.');
             return;
         }
 
@@ -114,12 +121,13 @@ export default function TeacherDashboardScreen() {
 
         // Multiple subjects: show modal to pick one
         setModalMode('recap');
+        setActiveNavId('recaps');
         setShowSubjectModal(true);
     };
 
     const handleAnalyticsShortcut = () => {
         if (!subjects || subjects.length === 0) {
-            router.push('./subjects');
+            Alert.alert('Sem disciplinas', 'Nenhuma disciplina encontrada para abrir analytics.');
             return;
         }
 
@@ -137,13 +145,13 @@ export default function TeacherDashboardScreen() {
     };
 
     const handleNavPress = (id: string) => {
-        setActiveNavId(id);
-
         switch (id) {
             case 'dashboard':
+                setActiveNavId('dashboard');
                 // Already on dashboard
                 break;
             case 'calendar':
+                setActiveNavId('calendar');
                 router.push('./calendar');
                 break;
             case 'recaps':
@@ -268,22 +276,46 @@ export default function TeacherDashboardScreen() {
                 <Modal
                     visible={showSubjectModal}
                     transparent={true}
-                    animationType="slide"
-                    onRequestClose={() => setShowSubjectModal(false)}
+                    animationType="fade"
+                    onRequestClose={closeSubjectModal}
                 >
                     <View style={styles.modalOverlay}>
                         <View style={styles.modalContainer}>
-                            <Text style={styles.modalTitle}>
-                                {modalMode === 'analytics' ? 'Selecione a disciplina para analytics' : 'Selecione a disciplina'}
-                            </Text>
-                            <ScrollView style={{ maxHeight: 300 }}>
+                            <LinearGradient
+                                colors={modalMode === 'analytics' ? ['#0ea5e9', '#2563eb'] : ['#4f46e5', '#7c3aed']}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                                style={styles.modalHeader}
+                            >
+                                <View style={styles.modalHeaderIconWrap}>
+                                    <MaterialIcons
+                                        name={modalMode === 'analytics' ? 'insights' : 'history-edu'}
+                                        size={22}
+                                        color={colors.white}
+                                    />
+                                </View>
+                                <View style={styles.modalHeaderTextWrap}>
+                                    <Text style={styles.modalTitle}>
+                                        {modalMode === 'analytics' ? 'Escolha uma disciplina para Analytics' : 'Escolha uma disciplina para Recapitulando'}
+                                    </Text>
+                                    <Text style={styles.modalSubtitle}>
+                                        {modalMode === 'analytics'
+                                            ? 'Vamos abrir os indicadores da turma da disciplina selecionada.'
+                                            : 'Selecione a disciplina para ver os recaps e continuar o acompanhamento da aula.'}
+                                    </Text>
+                                </View>
+                            </LinearGradient>
+
+                            <ScrollView style={styles.modalList} contentContainerStyle={styles.modalListContent}>
                                 {subjects.map((subject) => (
                                     <TouchableOpacity
                                         key={subject.id}
                                         style={styles.modalItem}
+                                        activeOpacity={0.85}
                                         onPress={() => {
-                                            setShowSubjectModal(false);
-                                            if (modalMode === 'analytics') {
+                                            const selectedMode = modalMode;
+                                            closeSubjectModal();
+                                            if (selectedMode === 'analytics') {
                                                 router.push({
                                                     pathname: '/(teacher)/class-analytics',
                                                     params: { subjectId: subject.id.toString(), subjectName: subject.name }
@@ -296,12 +328,16 @@ export default function TeacherDashboardScreen() {
                                             }
                                         }}
                                     >
+                                        <View style={styles.modalItemIcon}>
+                                            <MaterialIcons name="school" size={18} color={colors.primary} />
+                                        </View>
                                         <Text style={styles.modalItemText}>{subject.name}</Text>
+                                        <MaterialIcons name="chevron-right" size={20} color={colors.slate500} />
                                     </TouchableOpacity>
                                 ))}
                             </ScrollView>
                             <View style={styles.modalFooter}>
-                                <TouchableOpacity style={styles.modalCancel} onPress={() => setShowSubjectModal(false)}>
+                                <TouchableOpacity style={styles.modalCancel} onPress={closeSubjectModal}>
                                     <Text style={styles.modalCancelText}>Cancelar</Text>
                                 </TouchableOpacity>
                             </View>
@@ -467,48 +503,106 @@ const styles = StyleSheet.create({
     },
     modalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'flex-end',
+        backgroundColor: 'rgba(15, 23, 42, 0.58)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: spacing.base,
+        paddingVertical: spacing.lg,
     },
     modalContainer: {
+        width: '100%',
+        maxWidth: 760,
         backgroundColor: colors.white,
-        borderTopLeftRadius: 16,
-        borderTopRightRadius: 16,
+        borderRadius: 24,
+        overflow: 'hidden',
+        elevation: 18,
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.25,
+        shadowRadius: 24,
+    },
+    modalHeader: {
         paddingHorizontal: spacing.base,
-        paddingTop: spacing.lg,
-        paddingBottom: spacing.base,
+        paddingTop: spacing.base,
+        paddingBottom: spacing.lg,
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: spacing.sm,
+    },
+    modalHeaderIconWrap: {
+        width: 40,
+        height: 40,
+        borderRadius: 12,
+        backgroundColor: 'rgba(255,255,255,0.18)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 2,
+    },
+    modalHeaderTextWrap: {
+        flex: 1,
     },
     modalTitle: {
         fontSize: typography.fontSize.lg,
         fontWeight: typography.fontWeight.bold,
         fontFamily: typography.fontFamily.display,
-        color: colors.textPrimary,
-        marginBottom: spacing.md,
+        color: colors.white,
+        lineHeight: 24,
+    },
+    modalSubtitle: {
+        marginTop: 6,
+        fontSize: typography.fontSize.sm,
+        fontFamily: typography.fontFamily.body,
+        color: 'rgba(255,255,255,0.88)',
+        lineHeight: 20,
+    },
+    modalList: {
+        maxHeight: 320,
+    },
+    modalListContent: {
+        paddingHorizontal: spacing.base,
+        paddingTop: spacing.base,
+        gap: spacing.sm,
     },
     modalItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
         paddingVertical: spacing.md,
         paddingHorizontal: spacing.base,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.backgroundLight,
+        borderRadius: 14,
+        backgroundColor: colors.slate50,
+        borderWidth: 1,
+        borderColor: colors.slate200,
+    },
+    modalItemIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: 10,
+        backgroundColor: colors.primaryOpacity20,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     modalItemText: {
+        flex: 1,
         fontSize: typography.fontSize.base,
-        fontFamily: typography.fontFamily.body,
+        fontFamily: typography.fontFamily.display,
         color: colors.textPrimary,
     },
     modalFooter: {
-        marginTop: spacing.md,
+        marginTop: spacing.base,
+        paddingHorizontal: spacing.base,
+        paddingBottom: spacing.base,
     },
     modalCancel: {
         paddingVertical: spacing.md,
         alignItems: 'center',
-        backgroundColor: colors.backgroundLight,
-        borderRadius: 8,
+        backgroundColor: colors.slate100,
+        borderRadius: 12,
     },
     modalCancelText: {
         fontSize: typography.fontSize.base,
         fontWeight: typography.fontWeight.semibold,
         fontFamily: typography.fontFamily.display,
-        color: colors.textSecondary,
+        color: colors.slate700,
     },
 });

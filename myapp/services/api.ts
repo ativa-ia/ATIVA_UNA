@@ -34,6 +34,19 @@ export interface SupportMessageResponse {
     message: string;
 }
 
+export interface TeacherSupportNotificationResponse {
+    success: boolean;
+    message: string;
+    notification?: {
+        title: string;
+        message: string;
+        type: string;
+        subject_name?: string;
+        sent_to_students: number;
+        targeted?: boolean;
+    };
+}
+
 // Login
 export const login = async (data: LoginData): Promise<AuthResponse> => {
     const response = await fetch(`${API_URL}/auth/login`, {
@@ -104,6 +117,33 @@ export const sendSupportMessage = async (payload: {
             'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
+    });
+
+    return response.json();
+};
+
+export const sendTargetedSupportNotification = async (payload: {
+    subjectId: number;
+    studentIds: number[];
+    title: string;
+    message: string;
+    type?: string;
+}): Promise<TeacherSupportNotificationResponse> => {
+    const token = await AsyncStorage.getItem('authToken');
+
+    const response = await fetch(`${API_URL}/notifications/send`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+            subject_id: payload.subjectId,
+            student_ids: payload.studentIds,
+            title: payload.title,
+            message: payload.message,
+            type: payload.type || 'support',
+        }),
     });
 
     return response.json();

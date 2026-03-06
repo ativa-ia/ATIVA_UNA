@@ -56,6 +56,7 @@ def send_notification(current_user):
     title = data.get('title')
     message = data.get('message')
     notif_type = data.get('type', 'general')
+    requested_student_ids = data.get('student_ids')
     
     if not all([subject_id, title, message]):
         return jsonify({'success': False, 'message': 'Dados incompletos'}), 400
@@ -68,8 +69,30 @@ def send_notification(current_user):
     subject = Subject.query.get(subject_id)
         
     enrolled_student_ids = [row[0] for row in db.session.query(Enrollment.student_id).filter_by(subject_id=subject_id).all()]
+
+    # Modo direcionado: professor escolhe alunos específicos da disciplina.
+    recipient_ids = enrolled_student_ids
+    targeted_mode = isinstance(requested_student_ids, list) and len(requested_student_ids) > 0
+    if targeted_mode:
+        requested_set = set()
+        for raw_id in requested_student_ids:
+            try:
+                requested_set.add(int(raw_id))
+            except (ValueError, TypeError):
+                continue
+
+        # Mantem apenas alunos realmente matriculados na disciplina.
+        enrolled_set = set(enrolled_student_ids)
+        recipient_ids = sorted(list(requested_set & enrolled_set))
+
+        if not recipient_ids:
+            return jsonify({
+                'success': False,
+                'message': 'Nenhum aluno válido para envio nesta disciplina'
+            }), 400
+
     sent_count = _create_user_notifications(
-        recipient_ids=enrolled_student_ids,
+        recipient_ids=recipient_ids,
         title=title,
         message=message,
         notif_type=notif_type,
@@ -93,6 +116,7 @@ def send_notification(current_user):
             'type': notif_type,
             'subject_name': subject.name if subject else None,
             'sent_to_students': sent_count,
+            'targeted': targeted_mode,
         }
     }), 201
 

@@ -2,36 +2,87 @@ import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
+    Modal,
     StyleSheet,
     FlatList,
     TouchableOpacity,
     ActivityIndicator,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
-import { getSubjectRecaps, LessonRecap } from '@/services/api';
+import { getSubjectRecaps, getSubjects, LessonRecap, Subject as APISubject } from '@/services/api';
+
+interface SubjectOption {
+    id: number;
+    name: string;
+}
 
 export default function TeacherRecapsScreen() {
     const { subjectId, subjectName } = useLocalSearchParams();
-    const parsedSubjectId = parseInt(subjectId as string, 10);
+    const parsedSubjectId = Number(subjectId as string);
+    const hasValidSubjectId = Number.isFinite(parsedSubjectId) && parsedSubjectId > 0;
     const insets = useSafeAreaInsets();
 
     const [recaps, setRecaps] = useState<LessonRecap[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [subjectOptions, setSubjectOptions] = useState<SubjectOption[]>([]);
+    const [showSubjectPicker, setShowSubjectPicker] = useState(false);
 
     useEffect(() => {
-        loadRecaps();
-    }, [parsedSubjectId]);
+        if (hasValidSubjectId) {
+            loadRecaps();
+        } else {
+            initSubjectSelection();
+        }
+    }, [hasValidSubjectId, parsedSubjectId]);
+
+    const initSubjectSelection = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+
+            const subjects = await getSubjects();
+            const options: SubjectOption[] = subjects.map((subject: APISubject) => ({
+                id: subject.id,
+                name: subject.name,
+            }));
+
+            if (options.length === 1) {
+                const only = options[0];
+                router.replace({
+                    pathname: '/(teacher)/recaps',
+                    params: { subjectId: String(only.id), subjectName: only.name },
+                });
+                return;
+            }
+
+            setSubjectOptions(options);
+            setShowSubjectPicker(options.length > 1);
+
+            if (options.length === 0) {
+                setError('Nenhuma disciplina encontrada para abrir recaps.');
+            }
+        } catch (err) {
+            console.error(err);
+            setError('Erro ao carregar disciplinas para recaps.');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const loadRecaps = async () => {
-        if (!parsedSubjectId) return;
+        if (!hasValidSubjectId) {
+            await initSubjectSelection();
+            return;
+        }
+
         try {
             setLoading(true);
             setError(null);
@@ -47,6 +98,19 @@ export default function TeacherRecapsScreen() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const closeSubjectPicker = () => {
+        setShowSubjectPicker(false);
+        router.replace('/(teacher)/dashboard');
+    };
+
+    const handleSelectSubject = (subject: SubjectOption) => {
+        setShowSubjectPicker(false);
+        router.replace({
+            pathname: '/(teacher)/recaps',
+            params: { subjectId: String(subject.id), subjectName: subject.name },
+        });
     };
 
     const formatDate = (dateString: string) => {
@@ -76,7 +140,7 @@ export default function TeacherRecapsScreen() {
             </TouchableOpacity>
             <View style={{ flex: 1, marginLeft: spacing.sm }}>
                 <Text style={{ color: colors.white, fontSize: typography.fontSize.lg, fontWeight: typography.fontWeight.semibold }}>
-                    Recaps - {subjectName || 'Disciplina'}
+                    {hasValidSubjectId ? `Recaps - ${subjectName || 'Disciplina'}` : 'Recaps - selecionar disciplina'}
                 </Text>
             </View>
             <TouchableOpacity onPress={loadRecaps} style={{ padding: spacing.xs }}>
@@ -173,6 +237,57 @@ export default function TeacherRecapsScreen() {
                     ListEmptyComponent={renderEmpty}
                 />
             )}
+
+            <Modal
+                visible={showSubjectPicker}
+                transparent
+                animationType="fade"
+                onRequestClose={closeSubjectPicker}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.modalContainer}>
+                        <LinearGradient
+                            colors={['#ec4899', '#db2777']}
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={styles.modalHeader}
+                        >
+                            <View style={styles.modalHeaderIconWrap}>
+                                <MaterialIcons name="history-edu" size={20} color={colors.white} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.modalTitle}>Escolha a disciplina do recap</Text>
+                                <Text style={styles.modalSubtitle}>
+                                    Selecione uma disciplina para abrir a timeline de recapitulação.
+                                </Text>
+                            </View>
+                        </LinearGradient>
+
+                        <View style={styles.modalList}>
+                            {subjectOptions.map((subject) => (
+                                <TouchableOpacity
+                                    key={subject.id}
+                                    style={styles.modalItem}
+                                    activeOpacity={0.85}
+                                    onPress={() => handleSelectSubject(subject)}
+                                >
+                                    <View style={styles.modalItemIcon}>
+                                        <MaterialIcons name="school" size={18} color="#db2777" />
+                                    </View>
+                                    <Text style={styles.modalItemText}>{subject.name}</Text>
+                                    <MaterialIcons name="chevron-right" size={20} color={colors.slate500} />
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        <View style={styles.modalFooter}>
+                            <TouchableOpacity style={styles.modalCancelButton} onPress={closeSubjectPicker}>
+                                <Text style={styles.modalCancelButtonText}>Cancelar</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </View>
     );
 }
@@ -316,5 +431,97 @@ const styles = StyleSheet.create({
         fontWeight: typography.fontWeight.medium,
         color: colors.slate700,
         marginLeft: 4,
+    },
+    modalOverlay: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: spacing.base,
+        backgroundColor: 'rgba(15, 23, 42, 0.58)',
+    },
+    modalContainer: {
+        width: '100%',
+        maxWidth: 700,
+        borderRadius: 22,
+        overflow: 'hidden',
+        backgroundColor: colors.white,
+        elevation: 16,
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.24,
+        shadowRadius: 22,
+    },
+    modalHeader: {
+        paddingHorizontal: spacing.base,
+        paddingVertical: spacing.base,
+        flexDirection: 'row',
+        gap: spacing.sm,
+        alignItems: 'flex-start',
+    },
+    modalHeaderIconWrap: {
+        width: 38,
+        height: 38,
+        borderRadius: 12,
+        backgroundColor: 'rgba(255,255,255,0.18)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    modalTitle: {
+        color: colors.white,
+        fontFamily: typography.fontFamily.display,
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.bold,
+    },
+    modalSubtitle: {
+        marginTop: 4,
+        color: 'rgba(255,255,255,0.88)',
+        fontFamily: typography.fontFamily.body,
+        fontSize: typography.fontSize.sm,
+    },
+    modalList: {
+        padding: spacing.base,
+        gap: spacing.sm,
+    },
+    modalItem: {
+        borderWidth: 1,
+        borderColor: colors.slate200,
+        borderRadius: 14,
+        backgroundColor: colors.slate50,
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.base,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
+    },
+    modalItemIcon: {
+        width: 30,
+        height: 30,
+        borderRadius: 10,
+        backgroundColor: 'rgba(219, 39, 119, 0.14)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    modalItemText: {
+        flex: 1,
+        color: colors.textPrimary,
+        fontFamily: typography.fontFamily.display,
+        fontSize: typography.fontSize.base,
+    },
+    modalFooter: {
+        paddingHorizontal: spacing.base,
+        paddingBottom: spacing.base,
+    },
+    modalCancelButton: {
+        backgroundColor: colors.slate100,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: spacing.sm,
+    },
+    modalCancelButtonText: {
+        color: colors.slate700,
+        fontFamily: typography.fontFamily.display,
+        fontSize: typography.fontSize.base,
+        fontWeight: typography.fontWeight.semibold,
     },
 });
