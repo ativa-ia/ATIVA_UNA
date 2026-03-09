@@ -37,6 +37,8 @@ export default function Index() {
           router.replace('/(student)/dashboard');
         } else if (role === 'teacher') {
           router.replace('/(teacher)/dashboard');
+        } else if (role === 'coordinator') {
+          router.replace('/(coordinator)/dashboard');
         } else {
           router.replace('/(auth)/login');
         }

@@ -25,6 +25,8 @@ from app.models.admin_user import AdminUser
 from app.models.audit_log import AuditLog
 from app.models.lesson_recap import LessonEvent, LessonRecap
 
+from app.models.student_request import StudentRequest
+
 __all__ = [
     'User',
     'Course',
@@ -50,4 +52,5 @@ __all__ = [
     'AuditLog',
     'LessonEvent',
     'LessonRecap',
+    'StudentRequest',
 ]

@@ -1958,3 +1958,286 @@ export const shareRecap = async (recapId: number): Promise<{ success: boolean; r
     }
 };
 
+// ========== COORDINATOR API ==========
+
+export interface CoordinatorDashboard {
+    success: boolean;
+    course: { id: number; name: string; code: string; description?: string };
+    kpis: {
+        total_students: number;
+        total_teachers: number;
+        total_subjects: number;
+        total_classes: number;
+        quiz_avg_score: number;
+        quiz_participation_rate: number;
+        quiz_error_rate: number;
+    };
+    signal: { label: string; message: string; level: 'stable' | 'attention' | 'critical' };
+    risk_students: Array<{
+        student_id: number;
+        student_name: string;
+        avg_score: number;
+        error_rate: number;
+        status: string;
+    }>;
+    pending_requests: Array<{
+        id: number;
+        student_name: string;
+        request_type: string;
+        created_at: string;
+    }>;
+    teacher_deadlines: Array<{
+        id: number;
+        title: string;
+        date: string;
+    }>;
+    upcoming_events: Array<{
+        id: number;
+        title: string;
+        date: string;
+    }>;
+    available_semesters: string[];
+    chart_data: {
+        labels: string[];
+        datasets: Array<{
+            name: string;
+            data: number[];
+        }>;
+    };
+}
+
+export interface CoordinatorSubject {
+    id: number;
+    name: string;
+    code: string;
+    description?: string;
+    credits: number;
+    image_url?: string;
+    enrolled_students: number;
+    teachers: string[];
+}
+
+// ========== COORDINATOR CLASSES API ==========
+
+export interface CourseClass {
+    id: number;
+    course_id: number;
+    name: string;
+    semester: string;
+    year: number;
+    created_at?: string;
+    student_count?: number;
+    teacher_count?: number;
+    subjects?: string[];
+}
+
+export interface CourseClassDetails {
+    class_info: CourseClass;
+    subjects: Array<{ id: number; name: string; code: string }>;
+    teachers: Array<{ id: number; name: string; email: string; subjects: Array<{ id: number; name: string; code: string }> }>;
+    students: Array<{ id: number; name: string; email: string; enrolled_subjects: Array<{ id: number; name: string; code: string }> }>;
+}
+
+export interface TeacherOverview {
+    id: number;
+    name: string;
+    email: string;
+    subjects: string[];
+    subject_count: number;
+    sessions_count: number;
+    last_activity: string | null;
+}
+
+export interface CourseStudent {
+    student_id: number;
+    student_name: string;
+    email: string;
+    registration_number: string;
+    attendance_count: number;
+    socratic_sessions: number;
+    days_inactive: number;
+    last_active: string | null;
+    status: 'doing_well' | 'attention' | 'needs_help' | 'no_data';
+}
+
+export interface CoordinatorRecapGroup {
+    subject_id: number;
+    subject_name: string;
+    subject_code: string;
+    recap_count: number;
+    recaps: Array<{
+        id: number;
+        session_id: number;
+        title: string;
+        ai_summary: string;
+        teacher_name: string;
+        shared_with_students: boolean;
+        created_at: string;
+    }>;
+}
+
+export const getCoordinatorDashboard = async (subjectId?: number | null, studentId?: number | null, semester?: string | null): Promise<CoordinatorDashboard> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const queryParams = new URLSearchParams();
+    if (subjectId) queryParams.append('subject_id', String(subjectId));
+    if (studentId) queryParams.append('student_id', String(studentId));
+    if (semester) queryParams.append('semester', semester);
+    const qs = queryParams.toString();
+    const url = qs ? `${API_URL}/coordinator/dashboard?${qs}` : `${API_URL}/coordinator/dashboard`;
+
+    const response = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+    return response.json();
+};
+
+export const getCoordinatorSubjects = async (): Promise<{ success: boolean; subjects: CoordinatorSubject[] }> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/coordinator/subjects`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+    return response.json();
+};
+
+export const getCoordinatorSubjectAnalytics = async (subjectId: number, days?: 7 | 30): Promise<SubjectAnalyticsResponse> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const query = days ? `?days=${days}` : '';
+    const response = await fetch(`${API_URL}/coordinator/subjects/${subjectId}/analytics${query}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+    return response.json();
+};
+
+export const getCoordinatorTeachers = async (): Promise<{ success: boolean; teachers: TeacherOverview[] }> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/coordinator/teachers`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+    return response.json();
+};
+
+export interface StudentOverview {
+    id: number;
+    name: string;
+    email: string;
+    class_name: string;
+    course_name: string;
+    days_inactive: number;
+    evasion_risk: string;
+    status: string;
+}
+
+export const getCoordinatorStudents = async (params?: { subject_id?: number; status?: string; search?: string }): Promise<{ success: boolean; students: StudentOverview[] }> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const queryParams = new URLSearchParams();
+    if (params?.subject_id) queryParams.append('subject_id', String(params.subject_id));
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.search) queryParams.append('search', params.search);
+    const qs = queryParams.toString();
+    const response = await fetch(`${API_URL}/coordinator/students${qs ? `?${qs}` : ''}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+    return response.json();
+};
+
+export const getCoordinatorRecaps = async (): Promise<{ success: boolean; subjects: CoordinatorRecapGroup[] }> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/coordinator/recaps`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+    return response.json();
+};
+
+export const getCoordinatorClasses = async (): Promise<{ success: boolean; classes: CourseClass[] }> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/coordinator/classes`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+    return response.json();
+};
+
+export const getCoordinatorClassDetails = async (classId: number): Promise<{ success: boolean; class_info?: CourseClass; subjects?: any[]; teachers?: any[]; students?: any[] }> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/coordinator/classes/${classId}/details`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+    return response.json();
+};
+
+export const createCourseClass = async (data: { name: string; semester: string; year: number }): Promise<{ success: boolean; message?: string; class?: CourseClass }> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/coordinator/classes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(data),
+    });
+    return response.json();
+};
+
+export const updateCourseClass = async (classId: number, data: { name?: string; semester?: string; year?: number }): Promise<{ success: boolean; message?: string }> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/coordinator/classes/${classId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(data),
+    });
+    return response.json();
+};
+
+export const deleteCourseClass = async (classId: number): Promise<{ success: boolean; message?: string }> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/coordinator/classes/${classId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+    return response.json();
+};
+
+export const assignTeacherToClass = async (classId: number, data: { teacher_id: number; subject_id: number; schedule?: string; location?: string }): Promise<{ success: boolean; message?: string }> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/coordinator/classes/${classId}/assign-teacher`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(data),
+    });
+    return response.json();
+};
+
+export const updateCoordinatorSubject = async (subjectId: number, data: { name?: string; credits?: number; description?: string }): Promise<{ success: boolean; message?: string; subject?: CoordinatorSubject }> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/coordinator/subjects/${subjectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(data),
+    });
+    return response.json();
+};
+
+export const assignTeacherToSubject = async (subjectId: number, data: { teacher_id: number; class_id?: number; schedule?: string; location?: string }): Promise<{ success: boolean; message?: string }> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/coordinator/subjects/${subjectId}/assign-teacher`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(data),
+    });
+    return response.json();
+};
+
+export const removeTeacherFromSubject = async (subjectId: number, teacherId: number): Promise<{ success: boolean; message?: string }> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/coordinator/subjects/${subjectId}/remove-teacher/${teacherId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+    return response.json();
+};
+
+export const sendCoordinatorNotification = async (data: { title: string; message: string; target: 'students' | 'teachers' | 'all'; subject_id?: number }): Promise<{ success: boolean; message?: string; sent_count?: number }> => {
+    const token = await AsyncStorage.getItem('authToken');
+    const response = await fetch(`${API_URL}/coordinator/notifications/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(data),
+    });
+    return response.json();
+};

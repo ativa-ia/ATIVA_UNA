@@ -10,7 +10,7 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True, nullable=False, index=True)
     password = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.String(20), nullable=False)  # 'student' ou 'teacher'
+    role = db.Column(db.String(20), nullable=False)  # 'student', 'teacher', 'coordinator'
     name = db.Column(db.String(100), nullable=False)
     registration_number = db.Column(db.String(50), unique=True, nullable=True)  # Matrícula do aluno
     course_id = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=True)  # Curso do aluno

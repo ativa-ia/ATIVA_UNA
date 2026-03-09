@@ -71,6 +71,8 @@ export default function LoginScreen() {
             router.replace('/(admin)/dashboard');
         } else if (role === 'student') {
             router.replace('/(student)/dashboard');
+        } else if (role === 'coordinator') {
+            router.replace('/(coordinator)/dashboard');
         } else {
             router.replace('/(teacher)/dashboard');
         }
