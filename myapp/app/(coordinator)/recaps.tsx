@@ -55,10 +55,10 @@ export default function RecapsScreen() {
                     {groups.length === 0 ? (
                         <View style={s.emptyBox}><MaterialIcons name="history-edu" size={40} color="#cbd5e1" /><Text style={s.emptyText}>Nenhum recap disponível</Text></View>
                     ) : groups.map((group) => {
-                        const isOpen = expanded[group.subject_id] ?? true;
+                        const isOpen = expanded[group.class_subject_id || group.subject_id] ?? true;
                         return (
-                            <View key={group.subject_id} style={s.groupCard}>
-                                <TouchableOpacity style={s.groupHeader} onPress={() => toggle(group.subject_id)}>
+                            <View key={group.class_subject_id || group.subject_id} style={s.groupCard}>
+                                <TouchableOpacity style={s.groupHeader} onPress={() => toggle(group.class_subject_id || group.subject_id)}>
                                     <View style={s.groupIcon}><MaterialIcons name="menu-book" size={18} color="#6366f1" /></View>
                                     <View style={{ flex: 1 }}>
                                         <Text style={s.groupName}>{group.subject_name}</Text>

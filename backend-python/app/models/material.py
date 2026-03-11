@@ -7,7 +7,7 @@ class Material(db.Model):
     __tablename__ = 'materials'
     
     id = db.Column(db.Integer, primary_key=True)
-    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False)
+    class_subject_id = db.Column(db.Integer, db.ForeignKey('class_subjects.id'), nullable=False)
     title = db.Column(db.String(200), nullable=False)
     type = db.Column(db.String(20), nullable=False)  # 'pdf', 'video', 'link'
     url = db.Column(db.String(500))  # URL do arquivo ou link
@@ -25,7 +25,7 @@ class Material(db.Model):
         """Converter para dicionário"""
         return {
             'id': self.id,
-            'subject_id': self.subject_id,
+            'class_subject_id': self.class_subject_id,
             'title': self.title,
             'type': self.type,
             'url': self.url,

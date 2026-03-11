@@ -10,7 +10,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LineChart } from 'react-native-chart-kit';
 import { colors } from '@/constants/colors';
 import { spacing, borderRadius } from '@/constants/spacing';
-import { CoordinatorDashboard, getCoordinatorDashboard, getCoordinatorSubjects, CoordinatorSubject, getCoordinatorStudents, StudentOverview } from '@/services/api';
+import { CoordinatorDashboard, getCoordinatorDashboard, getCoordinatorSubjects, CoordinatorSubject, getCoordinatorStudents, CourseStudent } from '@/services/api';
 
 type DropdownType = 'semester' | 'subject' | 'student' | null;
 
@@ -26,7 +26,7 @@ export default function CoordinatorDashboardScreen() {
     const [error, setError] = useState<string | null>(null);
 
     const [subjects, setSubjects] = useState<CoordinatorSubject[]>([]);
-    const [students, setStudents] = useState<StudentOverview[]>([]);
+    const [students, setStudents] = useState<CourseStudent[]>([]);
 
     // Filters
     const [selectedSemester, setSelectedSemester] = useState<string | null>(null);
@@ -77,7 +77,7 @@ export default function CoordinatorDashboardScreen() {
     // Load students when subject changes
     useEffect(() => {
         if (selectedSubjectId) {
-            getCoordinatorStudents({ subject_id: selectedSubjectId }).then(res => {
+            getCoordinatorStudents({ class_subject_id: selectedSubjectId }).then(res => {
                 if (res.success) setStudents(res.students);
             }).catch(console.log);
         } else {
@@ -111,7 +111,7 @@ export default function CoordinatorDashboardScreen() {
     const navItems = [
         { key: 'classes', icon: 'groups' as const, label: 'Turmas', route: '/(coordinator)/classes' },
         { key: 'subjects', icon: 'menu-book' as const, label: 'Disciplines', route: '/(coordinator)/subjects' },
-        { key: 'teachers', icon: 'person-tie' as const, label: 'Professores', route: '/(coordinator)/teachers', fallbackIcon: 'person' as const },
+        { key: 'teachers', icon: 'person' as const, label: 'Professores', route: '/(coordinator)/teachers' },
         { key: 'students', icon: 'school' as const, label: 'Alunos', route: '/(coordinator)/students' },
         { key: 'recaps', icon: 'assignment' as const, label: 'Recaps', route: '/(coordinator)/recaps' },
         { key: 'settings', icon: 'settings' as const, label: 'Config', route: '/(coordinator)/settings' },
@@ -156,10 +156,10 @@ export default function CoordinatorDashboardScreen() {
                 <View style={s.center}>
                     <MaterialIcons name="error-outline" size={40} color="#ef4444" />
                     <Text style={s.errorText}>{error}</Text>
-                    <TouchableOpacity style={s.retryBtn} onPress={() => loadDashboard()}><Text style={s.retryText}>Tentar novamente</Text></TouchableOpacity>
+                    <TouchableOpacity style={s.retryBtn} onPress={() => fetchDashboardData(selectedSubjectId, selectedStudentId, selectedSemester)}><Text style={s.retryText}>Tentar novamente</Text></TouchableOpacity>
                 </View>
             ) : (
-                <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadDashboard(true)} />} showsVerticalScrollIndicator={false}>
+                <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchDashboardData(selectedSubjectId, selectedStudentId, selectedSemester, true)} />} showsVerticalScrollIndicator={false}>
 
                     {/* KPI Cards */}
                     <View style={[s.kpiRow, isDesktop && s.kpiRowDesktop]}>
@@ -257,7 +257,7 @@ export default function CoordinatorDashboardScreen() {
                                 {/* Subject Dropdown */}
                                 <TouchableOpacity style={s.dropdownBtn} onPress={() => setDropdownOpen('subject')}>
                                     <Text style={s.dropdownBtnText} numberOfLines={1}>
-                                        {selectedSubjectId ? subjects.find(sub => sub.id === selectedSubjectId)?.name : 'Todas as Disciplinas'}
+                                        {selectedSubjectId ? subjects.find(sub => (sub.class_subject_id || sub.id) === selectedSubjectId)?.name : 'Todas as Disciplinas'}
                                     </Text>
                                     <MaterialIcons name="arrow-drop-down" size={24} color="#64748b" />
                                 </TouchableOpacity>
@@ -269,7 +269,7 @@ export default function CoordinatorDashboardScreen() {
                                     disabled={!selectedSubjectId}
                                 >
                                     <Text style={s.dropdownBtnText} numberOfLines={1}>
-                                        {selectedStudentId ? students.find(s => s.id === selectedStudentId)?.name : 'Médias da Turma'}
+                                        {selectedStudentId ? students.find(s => s.student_id === selectedStudentId)?.student_name : 'Médias da Turma'}
                                     </Text>
                                     <MaterialIcons name="arrow-drop-down" size={24} color="#64748b" />
                                 </TouchableOpacity>
@@ -355,11 +355,14 @@ export default function CoordinatorDashboardScreen() {
                                             <TouchableOpacity style={s.modalOption} onPress={() => { setSelectedSubjectId(null); setSelectedStudentId(null); setDropdownOpen(null); }}>
                                                 <Text style={[s.modalOptionText, selectedSubjectId === null && { color: '#5e35b1', fontWeight: 'bold' }]}>Todas as Disciplinas</Text>
                                             </TouchableOpacity>
-                                            {subjects.map(sub => (
-                                                <TouchableOpacity key={sub.id} style={s.modalOption} onPress={() => { setSelectedSubjectId(sub.id); setSelectedStudentId(null); setDropdownOpen(null); }}>
-                                                    <Text style={[s.modalOptionText, selectedSubjectId === sub.id && { color: '#5e35b1', fontWeight: 'bold' }]}>{sub.name}</Text>
-                                                </TouchableOpacity>
-                                            ))}
+                                            {subjects.map(sub => {
+                                                const actId = sub.class_subject_id || sub.id;
+                                                return (
+                                                    <TouchableOpacity key={actId} style={s.modalOption} onPress={() => { setSelectedSubjectId(actId); setSelectedStudentId(null); setDropdownOpen(null); }}>
+                                                        <Text style={[s.modalOptionText, selectedSubjectId === actId && { color: '#5e35b1', fontWeight: 'bold' }]}>{sub.name}</Text>
+                                                    </TouchableOpacity>
+                                                );
+                                            })}
                                         </>
                                     )}
 
@@ -369,8 +372,8 @@ export default function CoordinatorDashboardScreen() {
                                                 <Text style={[s.modalOptionText, selectedStudentId === null && { color: '#5e35b1', fontWeight: 'bold' }]}>Médias da Turma</Text>
                                             </TouchableOpacity>
                                             {students.map(st => (
-                                                <TouchableOpacity key={st.id} style={s.modalOption} onPress={() => { setSelectedStudentId(st.id); setDropdownOpen(null); }}>
-                                                    <Text style={[s.modalOptionText, selectedStudentId === st.id && { color: '#5e35b1', fontWeight: 'bold' }]}>{st.name}</Text>
+                                                <TouchableOpacity key={st.student_id} style={s.modalOption} onPress={() => { setSelectedStudentId(st.student_id); setDropdownOpen(null); }}>
+                                                    <Text style={[s.modalOptionText, selectedStudentId === st.student_id && { color: '#5e35b1', fontWeight: 'bold' }]}>{st.student_name}</Text>
                                                 </TouchableOpacity>
                                             ))}
                                         </>

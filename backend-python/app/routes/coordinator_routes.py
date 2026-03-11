@@ -8,6 +8,7 @@ from app.models.user import User
 from app.models.course import Course
 from app.models.class_model import Class
 from app.models.subject import Subject
+from app.models.class_subject import ClassSubject
 from app.models.enrollment import Enrollment
 from app.models.teaching import Teaching
 from app.models.lesson_recap import LessonRecap
@@ -28,14 +29,27 @@ coordinator_bp = Blueprint('coordinator', __name__)
 
 
 # ───────────────────────── helpers ──────────────────────────
+def _get_course_class_subject_ids(course_id):
+    """Retorna IDs de ofertas de disciplina (ClassSubject) do curso via classes."""
+    class_ids = [c.id for c in Class.query.filter_by(course_id=course_id).all()]
+    if not class_ids:
+        return []
+    cs_ids = (
+        db.session.query(ClassSubject.id)
+        .filter(ClassSubject.class_id.in_(class_ids))
+        .all()
+    )
+    return [c[0] for c in cs_ids]
+
+
 def _get_course_subject_ids(course_id):
-    """Retorna IDs de disciplinas do curso via classes → teachings."""
+    """Retorna IDs de disciplinas (catálogo) do curso via ClassSubject."""
     class_ids = [c.id for c in Class.query.filter_by(course_id=course_id).all()]
     if not class_ids:
         return []
     subject_ids = (
-        db.session.query(distinct(Teaching.subject_id))
-        .filter(Teaching.class_id.in_(class_ids))
+        db.session.query(distinct(ClassSubject.subject_id))
+        .filter(ClassSubject.class_id.in_(class_ids))
         .all()
     )
     return [s[0] for s in subject_ids]
@@ -43,12 +57,12 @@ def _get_course_subject_ids(course_id):
 
 def _get_course_student_ids(course_id):
     """Retorna IDs de alunos matriculados no curso."""
-    class_ids = [c.id for c in Class.query.filter_by(course_id=course_id).all()]
-    if not class_ids:
+    cs_ids = _get_course_class_subject_ids(course_id)
+    if not cs_ids:
         return []
     student_ids = (
         db.session.query(distinct(Enrollment.student_id))
-        .filter(Enrollment.class_id.in_(class_ids))
+        .filter(Enrollment.class_subject_id.in_(cs_ids))
         .all()
     )
     return [s[0] for s in student_ids]
@@ -56,12 +70,12 @@ def _get_course_student_ids(course_id):
 
 def _get_course_teacher_ids(course_id):
     """Retorna IDs de professores que lecionam no curso."""
-    class_ids = [c.id for c in Class.query.filter_by(course_id=course_id).all()]
-    if not class_ids:
+    cs_ids = _get_course_class_subject_ids(course_id)
+    if not cs_ids:
         return []
     teacher_ids = (
         db.session.query(distinct(Teaching.teacher_id))
-        .filter(Teaching.class_id.in_(class_ids))
+        .filter(Teaching.class_subject_id.in_(cs_ids))
         .all()
     )
     return [t[0] for t in teacher_ids]
@@ -69,12 +83,15 @@ def _get_course_teacher_ids(course_id):
 
 def _verify_coordinator(current_user):
     """Verifica se o coordenador tem curso vinculado. Retorna (course, error_response)."""
-    if not current_user.course_id:
+    from app.models.course_enrollment import CourseEnrollment
+    enrollment = CourseEnrollment.query.filter_by(user_id=current_user.id, status='active').first()
+    
+    if not enrollment or not enrollment.course_id:
         return None, (jsonify({
             'success': False,
             'message': 'Coordenador sem curso vinculado'
         }), 400)
-    course = Course.query.get(current_user.course_id)
+    course = Course.query.get(enrollment.course_id)
     if not course:
         return None, (jsonify({
             'success': False,
@@ -96,10 +113,11 @@ def coordinator_dashboard(current_user):
     if err:
         return err
 
-    subject_filter = request.args.get('subject_id', type=int)
+    subject_filter = request.args.get('class_subject_id', type=int) or request.args.get('subject_id', type=int)
     student_filter = request.args.get('student_id', type=int)
     semester_filter = request.args.get('semester', type=str)
 
+    cs_ids = _get_course_class_subject_ids(course.id)
     subject_ids = _get_course_subject_ids(course.id)
     student_ids = _get_course_student_ids(course.id)
     teacher_ids = _get_course_teacher_ids(course.id)
@@ -108,8 +126,7 @@ def coordinator_dashboard(current_user):
     quiz_stats = {'avg_score': 0, 'participation_rate': 0, 'error_rate': 0}
     risk_students = []
 
-    if subject_ids and student_ids:
-        # Recuperando as médias de quiz num único agrupamento
+    if cs_ids and student_ids:
         quiz_query = (
             db.session.query(
                 LiveActivityResponse.student_id,
@@ -121,7 +138,7 @@ def coordinator_dashboard(current_user):
             .join(LiveActivity, LiveActivity.id == LiveActivityResponse.activity_id)
             .outerjoin(TranscriptionSession, TranscriptionSession.id == LiveActivity.session_id)
             .filter(
-                TranscriptionSession.subject_id.in_(subject_ids),
+                TranscriptionSession.class_subject_id.in_(cs_ids),
                 LiveActivity.activity_type == 'quiz',
                 LiveActivity.status == 'ended'
             )
@@ -228,18 +245,20 @@ def coordinator_dashboard(current_user):
     class_ids = [c.id for c in classes_query.all()]
     
     # Alunos elegíveis (daquelas turmas/semestre)
-    eligible_enrollments = Enrollment.query.filter(Enrollment.class_id.in_(class_ids)).all()
+    eligible_enrollments = Enrollment.query.filter(Enrollment.class_subject_id.in_(
+        db.session.query(ClassSubject.id).filter(ClassSubject.class_id.in_(class_ids))
+    )).all()
     eligible_student_ids = [e.student_id for e in eligible_enrollments]
 
     query_activities = (
         db.session.query(LiveActivity)
         .join(TranscriptionSession, TranscriptionSession.id == LiveActivity.session_id)
-        .filter(TranscriptionSession.subject_id.in_(subject_ids))
+        .filter(TranscriptionSession.class_subject_id.in_(cs_ids))
         .filter(LiveActivity.activity_type == 'quiz')
         .filter(LiveActivity.status == 'ended')
     )
     if subject_filter:
-        query_activities = query_activities.filter(TranscriptionSession.subject_id == subject_filter)
+        query_activities = query_activities.filter(TranscriptionSession.class_subject_id == subject_filter)
         
     activities = query_activities.order_by(LiveActivity.created_at.asc()).all()
     
@@ -318,72 +337,77 @@ def list_subjects(current_user):
     if err:
         return err
 
-    subject_ids = _get_course_subject_ids(course.id)
-    if not subject_ids:
+    cs_ids = _get_course_class_subject_ids(course.id)
+    if not cs_ids:
         return jsonify({'success': True, 'subjects': []})
 
-    # Total de matrículas agrupadas por disciplina em uma única Query
+    # Total de matrículas agrupadas por class_subject_id
     enrollment_counts = (
-        db.session.query(Enrollment.subject_id, func.count('*'))
-        .filter(Enrollment.subject_id.in_(subject_ids))
-        .group_by(Enrollment.subject_id)
+        db.session.query(Enrollment.class_subject_id, func.count('*'))
+        .filter(Enrollment.class_subject_id.in_(cs_ids))
+        .group_by(Enrollment.class_subject_id)
         .all()
     )
     enroll_map = {e[0]: e[1] for e in enrollment_counts}
 
-    # Professores agrupados por disciplina em uma única Query
+    # Professores agrupados por class_subject_id
     teachings = (
-        db.session.query(Teaching.subject_id, User.name)
+        db.session.query(Teaching.class_subject_id, User.name)
         .join(User, User.id == Teaching.teacher_id)
-        .filter(Teaching.subject_id.in_(subject_ids))
-        .group_by(Teaching.subject_id, User.name)
+        .filter(Teaching.class_subject_id.in_(cs_ids))
+        .group_by(Teaching.class_subject_id, User.name)
         .all()
     )
     teacher_map = {}
     for t in teachings:
         teacher_map.setdefault(t[0], set()).add(t[1])
 
-    subjects = Subject.query.filter(Subject.id.in_(subject_ids)).all()
+    class_subjects = ClassSubject.query.filter(ClassSubject.id.in_(cs_ids)).all()
 
     result = []
-    for subj in subjects:
+    for cs_obj in class_subjects:
+        subj = cs_obj.subject
         result.append({
-            **subj.to_dict(),
-            'enrolled_students': enroll_map.get(subj.id, 0),
-            'teachers': list(teacher_map.get(subj.id, [])),
+            'id': subj.id,
+            'class_subject_id': cs_obj.id,
+            'name': subj.name,
+            'code': subj.code,
+            'credits': subj.credits,
+            'description': subj.description,
+            'image_url': subj.image_url,
+            'enrolled_students': enroll_map.get(cs_obj.id, 0),
+            'teachers': list(teacher_map.get(cs_obj.id, [])),
         })
 
     return jsonify({'success': True, 'subjects': result})
 
 
-@coordinator_bp.route('/subjects/<int:subject_id>/analytics', methods=['GET'])
+@coordinator_bp.route('/subjects/<int:class_subject_id>/analytics', methods=['GET'])
 @token_required
 @role_required('coordinator')
-def subject_analytics(current_user, subject_id):
-    """Analytics detalhado de uma disciplina (reutiliza lógica do professor)."""
+def subject_analytics(current_user, class_subject_id):
+    """Analytics detalhado de uma oferta de disciplina."""
     course, err = _verify_coordinator(current_user)
     if err:
         return err
 
-    # Verificar se disciplina pertence ao curso
-    subject_ids = _get_course_subject_ids(course.id)
-    if subject_id not in subject_ids:
+    cs_ids = _get_course_class_subject_ids(course.id)
+    if class_subject_id not in cs_ids:
         return jsonify({'success': False, 'error': 'Disciplina não pertence ao seu curso'}), 403
 
-    # Importar e reutilizar lógica existente
     try:
         from app.routes.transcription_routes import _build_subject_analytics
         days = request.args.get('days', type=int)
-        result = _build_subject_analytics(subject_id, days)
+        result = _build_subject_analytics(class_subject_id, days)
         return jsonify(result)
     except (ImportError, AttributeError):
-        # Fallback: analytics básico inline
-        subject = Subject.query.get(subject_id)
+        cs = ClassSubject.query.get(class_subject_id)
+        subject = cs.subject if cs else None
         if not subject:
             return jsonify({'success': False, 'error': 'Disciplina não encontrada'}), 404
 
-        enrolled = Enrollment.query.filter_by(subject_id=subject_id).count()
-        sessions = TranscriptionSession.query.filter_by(subject_id=subject_id).all()
+        enrolled = Enrollment.query.filter_by(class_subject_id=class_subject_id).count()
+        sessions = TranscriptionSession.query.filter_by(class_subject_id=class_subject_id).all()
         session_ids = [s.id for s in sessions]
 
         activities = []
@@ -412,7 +436,7 @@ def subject_analytics(current_user, subject_id):
 
         return jsonify({
             'success': True,
-            'subject': {'id': subject.id, 'name': subject.name, 'code': subject.code},
+            'subject': {'id': subject.id, 'name': subject.name, 'code': subject.code, 'class_subject_id': class_subject_id},
             'summary': {
                 'enrolled_students': enrolled,
                 'total_activities': len(activities),
@@ -450,8 +474,9 @@ def list_teachers(current_user):
     if class_ids:
         teachings = (
             db.session.query(Teaching.teacher_id, Subject.name)
-            .join(Subject, Subject.id == Teaching.subject_id)
-            .filter(Teaching.teacher_id.in_(teacher_ids), Teaching.class_id.in_(class_ids))
+            .join(ClassSubject, ClassSubject.id == Teaching.class_subject_id)
+            .join(Subject, Subject.id == ClassSubject.subject_id)
+            .filter(Teaching.teacher_id.in_(teacher_ids), ClassSubject.class_id.in_(class_ids))
             .all()
         )
     else:
@@ -507,7 +532,7 @@ def list_students(current_user):
     if not student_ids:
         return jsonify({'success': True, 'students': []})
 
-    filter_subject = request.args.get('subject_id', type=int)
+    filter_subject = request.args.get('class_subject_id', type=int) or request.args.get('subject_id', type=int)
     filter_status = request.args.get('status')
     search = request.args.get('search', '').strip()
 
@@ -521,11 +546,11 @@ def list_students(current_user):
     students = student_query.all()
     filtered_student_ids = [s.id for s in students]
 
-    target_subjects = [filter_subject] if filter_subject else subject_ids
+    target_cs_ids = [filter_subject] if filter_subject else cs_ids
 
     # Carregando Participação (LiveActivities respondidas) para simular engajamento num agrupamento
     activity_stats = []
-    if filtered_student_ids and target_subjects:
+    if filtered_student_ids and target_cs_ids:
         activity_stats = (
             db.session.query(
                 LiveActivityResponse.student_id,
@@ -536,7 +561,7 @@ def list_students(current_user):
             .outerjoin(TranscriptionSession, TranscriptionSession.id == LiveActivity.session_id)
             .filter(
                 LiveActivityResponse.student_id.in_(filtered_student_ids),
-                TranscriptionSession.subject_id.in_(target_subjects)
+                TranscriptionSession.class_subject_id.in_(target_cs_ids)
             )
             .group_by(LiveActivityResponse.student_id)
             .all()
@@ -601,25 +626,23 @@ def list_recaps(current_user):
     if err:
         return err
 
-    subject_ids = _get_course_subject_ids(course.id)
-    if not subject_ids:
+    cs_ids = _get_course_class_subject_ids(course.id)
+    if not cs_ids:
         return jsonify({'success': True, 'subjects': []})
 
-    subjects = Subject.query.filter(Subject.id.in_(subject_ids)).all()
-
-    # Busca recaps e professores num único JOIN
+    # Busca recaps via ClassSubject
     recaps_query = (
         db.session.query(LessonRecap, User.name.label('teacher_name'))
         .outerjoin(User, User.id == LessonRecap.teacher_id)
-        .filter(LessonRecap.subject_id.in_(subject_ids))
+        .filter(LessonRecap.class_subject_id.in_(cs_ids))
         .order_by(LessonRecap.created_at.desc())
         .all()
     )
 
-    # Organiza recaps por disciplina
-    recaps_by_subject = {}
+    # Organiza recaps por class_subject_id
+    recaps_by_cs = {}
     for recap, t_name in recaps_query:
-        recaps_by_subject.setdefault(recap.subject_id, []).append({
+        recaps_by_cs.setdefault(recap.class_subject_id, []).append({
             'id': recap.id,
             'session_id': recap.session_id,
             'title': recap.title,
@@ -629,10 +652,13 @@ def list_recaps(current_user):
             'created_at': recap.created_at.isoformat() if recap.created_at else None,
         })
 
+    class_subjects = ClassSubject.query.filter(ClassSubject.id.in_(cs_ids)).all()
     grouped = []
-    for sub in subjects:
-        recap_list = recaps_by_subject.get(sub.id, [])
+    for cs_obj in class_subjects:
+        sub = cs_obj.subject
+        recap_list = recaps_by_cs.get(cs_obj.id, [])
         grouped.append({
+            'class_subject_id': cs_obj.id,
             'subject_id': sub.id,
             'subject_name': sub.name,
             'subject_code': sub.code,
@@ -658,19 +684,20 @@ def get_recap(current_user, recap_id):
     if not recap:
         return jsonify({'success': False, 'error': 'Recap não encontrado'}), 404
 
-    subject_ids = _get_course_subject_ids(course.id)
-    if recap.subject_id not in subject_ids:
+    cs_ids = _get_course_class_subject_ids(course.id)
+    if recap.class_subject_id not in cs_ids:
         return jsonify({'success': False, 'error': 'Recap não pertence ao seu curso'}), 403
 
     teacher = User.find_by_id(recap.teacher_id) if recap.teacher_id else None
-    subject = Subject.query.get(recap.subject_id)
+    cs = ClassSubject.query.get(recap.class_subject_id)
+    subject = cs.subject if cs else None
 
     return jsonify({
         'success': True,
         'recap': {
             'id': recap.id,
             'session_id': recap.session_id,
-            'subject_id': recap.subject_id,
+            'class_subject_id': recap.class_subject_id,
             'subject_name': subject.name if subject else None,
             'teacher_id': recap.teacher_id,
             'teacher_name': teacher.name if teacher else 'Desconhecido',
@@ -711,11 +738,14 @@ def list_classes(current_user):
     )
     enroll_map = {e[0]: e[1] for e in enrollments_counts}
 
-    # Professores únicos por turma
     teachers_counts = (
-        db.session.query(Teaching.class_id, func.count(distinct(Teaching.teacher_id)))
-        .filter(Teaching.class_id.in_(class_ids))
-        .group_by(Teaching.class_id)
+        db.session.query(
+            ClassSubject.class_id,
+            func.count(distinct(Teaching.teacher_id))
+        )
+        .join(Teaching, Teaching.class_subject_id == ClassSubject.id)
+        .filter(ClassSubject.class_id.in_(class_ids))
+        .group_by(ClassSubject.class_id)
         .all()
     )
     teach_map = {t[0]: t[1] for t in teachers_counts}
@@ -723,9 +753,9 @@ def list_classes(current_user):
     # Disciplinas únicas por turma
     subject_map = {}
     teachings = (
-        db.session.query(Teaching.class_id, Subject.name)
-        .join(Subject, Subject.id == Teaching.subject_id)
-        .filter(Teaching.class_id.in_(class_ids))
+        db.session.query(ClassSubject.class_id, Subject.name)
+        .join(Subject, Subject.id == ClassSubject.subject_id)
+        .filter(ClassSubject.class_id.in_(class_ids))
         .all()
     )
     for class_id, s_name in teachings:
@@ -756,24 +786,27 @@ def get_class_details(current_user, class_id):
     if not cls or cls.course_id != course.id:
         return jsonify({'success': False, 'message': 'Turma não encontrada'}), 404
 
-    # 1. Disciplinas desta turma
-    class_subjects_query = (
-        db.session.query(Subject)
-        .join(Teaching, Teaching.subject_id == Subject.id)
-        .filter(Teaching.class_id == class_id)
-        .distinct()
-        .all()
-    )
-    subjects_dict = {subj.id: {'id': subj.id, 'name': subj.name, 'code': subj.code} for subj in class_subjects_query}
+    # 1. Disciplinas desta turma via ClassSubject
+    class_subjects_query = ClassSubject.query.filter_by(class_id=class_id).all()
+    subjects_dict = {}
+    for cs_obj in class_subjects_query:
+        subj = cs_obj.subject
+        subjects_dict[cs_obj.id] = {
+            'id': subj.id,
+            'class_subject_id': cs_obj.id,
+            'name': subj.name,
+            'code': subj.code
+        }
 
-    # 2. Professores da turma (agrupando por disciplinas lecionadas nela)
+    # 2. Professores da turma
     teachings = (
         db.session.query(Teaching, User.name, User.email)
         .join(User, User.id == Teaching.teacher_id)
-        .filter(Teaching.class_id == class_id)
+        .join(ClassSubject, ClassSubject.id == Teaching.class_subject_id)
+        .filter(ClassSubject.class_id == class_id)
         .all()
     )
-    
+
     teachers_map = {}
     for t_obj, t_name, t_email in teachings:
         tid = t_obj.teacher_id
@@ -784,15 +817,16 @@ def get_class_details(current_user, class_id):
                 'email': t_email,
                 'subjects': []
             }
-        subj_data = subjects_dict.get(t_obj.subject_id)
+        subj_data = subjects_dict.get(t_obj.class_subject_id)
         if subj_data:
             teachers_map[tid]['subjects'].append(subj_data)
 
-    # 3. Alunos matriculados (agrupando quais disciplinas eles participam dentro desta turma)
+    # 3. Alunos matriculados
     enrollments = (
         db.session.query(Enrollment, User.name, User.email)
         .join(User, User.id == Enrollment.student_id)
-        .filter(Enrollment.class_id == class_id)
+        .join(ClassSubject, ClassSubject.id == Enrollment.class_subject_id)
+        .filter(ClassSubject.class_id == class_id)
         .all()
     )
 
@@ -806,7 +840,7 @@ def get_class_details(current_user, class_id):
                 'email': s_email,
                 'enrolled_subjects': []
             }
-        subj_data = subjects_dict.get(e_obj.subject_id)
+        subj_data = subjects_dict.get(e_obj.class_subject_id)
         if subj_data:
             students_map[sid]['enrolled_subjects'].append(subj_data)
 
@@ -922,23 +956,38 @@ def assign_teacher_to_class(current_user, class_id):
     data = request.get_json()
     teacher_id = data.get('teacher_id')
     subject_id = data.get('subject_id')
+    class_subject_id = data.get('class_subject_id')
     schedule = data.get('schedule', '')
     location = data.get('location', '')
 
-    if not all([teacher_id, subject_id]):
-        return jsonify({'success': False, 'message': 'teacher_id e subject_id são obrigatórios'}), 400
+    if not teacher_id:
+        return jsonify({'success': False, 'message': 'teacher_id é obrigatório'}), 400
 
-    # Verificar se já existe
+    # Se class_subject_id fornecido, usar diretamente
+    if class_subject_id:
+        cs = ClassSubject.query.get(class_subject_id)
+        if not cs or cs.class_id != class_id:
+            return jsonify({'success': False, 'message': 'Oferta de disciplina não pertence a esta turma'}), 400
+    elif subject_id:
+        # Buscar ou criar ClassSubject para esta turma+disciplina
+        cs = ClassSubject.query.filter_by(class_id=class_id, subject_id=subject_id).first()
+        if not cs:
+            cs = ClassSubject(class_id=class_id, subject_id=subject_id, status='active')
+            db.session.add(cs)
+            db.session.flush()
+        class_subject_id = cs.id
+    else:
+        return jsonify({'success': False, 'message': 'subject_id ou class_subject_id é obrigatório'}), 400
+
     existing = Teaching.query.filter_by(
-        teacher_id=teacher_id, subject_id=subject_id, class_id=class_id
+        teacher_id=teacher_id, class_subject_id=class_subject_id
     ).first()
     if existing:
         return jsonify({'success': False, 'message': 'Professor já atribuído a esta disciplina nesta turma'}), 409
 
     teaching = Teaching(
         teacher_id=teacher_id,
-        subject_id=subject_id,
-        class_id=class_id,
+        class_subject_id=class_subject_id,
         schedule=schedule,
         location=location,
     )
@@ -946,7 +995,7 @@ def assign_teacher_to_class(current_user, class_id):
     db.session.commit()
 
     teacher = User.find_by_id(teacher_id)
-    subject = Subject.query.get(subject_id)
+    subject = cs.subject
 
     return jsonify({
         'success': True,
@@ -969,11 +1018,20 @@ def remove_teacher_from_class(current_user, class_id):
 
     data = request.get_json()
     teacher_id = data.get('teacher_id')
+    class_subject_id = data.get('class_subject_id')
     subject_id = data.get('subject_id')
 
-    teaching = Teaching.query.filter_by(
-        teacher_id=teacher_id, subject_id=subject_id, class_id=class_id
-    ).first()
+    if class_subject_id:
+        teaching = Teaching.query.filter_by(
+            teacher_id=teacher_id, class_subject_id=class_subject_id
+        ).first()
+    elif subject_id:
+        cs = ClassSubject.query.filter_by(class_id=class_id, subject_id=subject_id).first()
+        teaching = Teaching.query.filter_by(
+            teacher_id=teacher_id, class_subject_id=cs.id
+        ).first() if cs else None
+    else:
+        teaching = None
 
     if not teaching:
         return jsonify({'success': False, 'message': 'Vínculo não encontrado'}), 404
@@ -988,20 +1046,24 @@ def remove_teacher_from_class(current_user, class_id):
 #  GESTÃO DE DISCIPLINAS
 # ═══════════════════════════════════════════════════════════════
 
-@coordinator_bp.route('/subjects/<int:subject_id>', methods=['PUT'])
+@coordinator_bp.route('/subjects/<int:class_subject_id>', methods=['PUT'])
 @token_required
 @role_required('coordinator')
-def update_subject(current_user, subject_id):
+def update_subject(current_user, class_subject_id):
     """Editar disciplina (nome, créditos, ementa/descrição)."""
     course, err = _verify_coordinator(current_user)
     if err:
         return err
 
-    subject_ids = _get_course_subject_ids(course.id)
-    if subject_id not in subject_ids:
+    cs_ids = _get_course_class_subject_ids(course.id)
+    if class_subject_id not in cs_ids:
         return jsonify({'success': False, 'message': 'Disciplina não pertence ao seu curso'}), 403
 
-    subject = Subject.query.get(subject_id)
+    cs = ClassSubject.query.get(class_subject_id)
+    if not cs:
+        return jsonify({'success': False, 'message': 'Oferta não encontrada'}), 404
+
+    subject = cs.subject
     if not subject:
         return jsonify({'success': False, 'message': 'Disciplina não encontrada'}), 404
 
@@ -1020,49 +1082,40 @@ def update_subject(current_user, subject_id):
     return jsonify({
         'success': True,
         'message': 'Disciplina atualizada com sucesso',
-        'subject': subject.to_dict(),
+        'subject': {**subject.to_dict(), 'class_subject_id': cs.id},
     })
 
 
-@coordinator_bp.route('/subjects/<int:subject_id>/assign-teacher', methods=['POST'])
+@coordinator_bp.route('/subjects/<int:class_subject_id>/assign-teacher', methods=['POST'])
 @token_required
 @role_required('coordinator')
-def assign_teacher_to_subject(current_user, subject_id):
-    """Designar professor para disciplina."""
+def assign_teacher_to_subject(current_user, class_subject_id):
+    """Designar professor para oferta de disciplina."""
     course, err = _verify_coordinator(current_user)
     if err:
         return err
 
-    subject_ids = _get_course_subject_ids(course.id)
-    if subject_id not in subject_ids:
+    cs_ids = _get_course_class_subject_ids(course.id)
+    if class_subject_id not in cs_ids:
         return jsonify({'success': False, 'message': 'Disciplina não pertence ao seu curso'}), 403
 
     data = request.get_json()
     teacher_id = data.get('teacher_id')
-    class_id = data.get('class_id')
     schedule = data.get('schedule', '')
     location = data.get('location', '')
 
     if not teacher_id:
         return jsonify({'success': False, 'message': 'teacher_id é obrigatório'}), 400
 
-    # Se não informar class_id, usar a primeira turma do curso
-    if not class_id:
-        first_class = Class.query.filter_by(course_id=course.id).first()
-        if not first_class:
-            return jsonify({'success': False, 'message': 'Nenhuma turma encontrada no curso'}), 400
-        class_id = first_class.id
-
     existing = Teaching.query.filter_by(
-        teacher_id=teacher_id, subject_id=subject_id, class_id=class_id
+        teacher_id=teacher_id, class_subject_id=class_subject_id
     ).first()
     if existing:
         return jsonify({'success': False, 'message': 'Professor já atribuído a esta disciplina'}), 409
 
     teaching = Teaching(
         teacher_id=teacher_id,
-        subject_id=subject_id,
-        class_id=class_id,
+        class_subject_id=class_subject_id,
         schedule=schedule,
         location=location,
     )
@@ -1072,20 +1125,20 @@ def assign_teacher_to_subject(current_user, subject_id):
     return jsonify({'success': True, 'message': 'Professor designado com sucesso'}), 201
 
 
-@coordinator_bp.route('/subjects/<int:subject_id>/remove-teacher/<int:teacher_id>', methods=['DELETE'])
+@coordinator_bp.route('/subjects/<int:class_subject_id>/remove-teacher/<int:teacher_id>', methods=['DELETE'])
 @token_required
 @role_required('coordinator')
-def remove_teacher_from_subject(current_user, subject_id, teacher_id):
-    """Remover professor de disciplina."""
+def remove_teacher_from_subject(current_user, class_subject_id, teacher_id):
+    """Remover professor de oferta de disciplina."""
     course, err = _verify_coordinator(current_user)
     if err:
         return err
 
-    subject_ids = _get_course_subject_ids(course.id)
-    if subject_id not in subject_ids:
+    cs_ids = _get_course_class_subject_ids(course.id)
+    if class_subject_id not in cs_ids:
         return jsonify({'success': False, 'message': 'Disciplina não pertence ao seu curso'}), 403
 
-    teachings = Teaching.query.filter_by(teacher_id=teacher_id, subject_id=subject_id).all()
+    teachings = Teaching.query.filter_by(teacher_id=teacher_id, class_subject_id=class_subject_id).all()
     if not teachings:
         return jsonify({'success': False, 'message': 'Professor não encontrado nesta disciplina'}), 404
 
@@ -1113,7 +1166,7 @@ def send_notification(current_user):
     title = data.get('title', '').strip()
     message = data.get('message', '').strip()
     target = data.get('target', 'all')  # 'students', 'teachers', 'all'
-    subject_id = data.get('subject_id')  # Opcional: filtrar por disciplina
+    class_subject_id = data.get('class_subject_id') or data.get('subject_id')
 
     if not all([title, message]):
         return jsonify({'success': False, 'message': 'Título e mensagem são obrigatórios'}), 400
@@ -1121,16 +1174,16 @@ def send_notification(current_user):
     recipient_ids = set()
     subject_name = None
 
-    if subject_id:
-        subject = Subject.query.get(subject_id)
-        subject_name = subject.name if subject else None
+    if class_subject_id:
+        cs = ClassSubject.query.get(class_subject_id)
+        subject_name = cs.subject.name if cs and cs.subject else None
 
         if target in ('students', 'all'):
-            enrollments = Enrollment.query.filter_by(subject_id=subject_id).all()
+            enrollments = Enrollment.query.filter_by(class_subject_id=class_subject_id).all()
             recipient_ids.update(e.student_id for e in enrollments)
 
         if target in ('teachers', 'all'):
-            teachings = Teaching.query.filter_by(subject_id=subject_id).all()
+            teachings = Teaching.query.filter_by(class_subject_id=class_subject_id).all()
             recipient_ids.update(t.teacher_id for t in teachings)
     else:
         if target in ('students', 'all'):

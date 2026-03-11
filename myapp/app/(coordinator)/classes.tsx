@@ -9,7 +9,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialIcons } from '@expo/vector-icons';
 import { colors } from '@/constants/colors';
 import { spacing } from '@/constants/spacing';
-import { CourseClass, CourseClassDetails, getCoordinatorClasses, getCoordinatorClassDetails, createCourseClass, updateCourseClass, deleteCourseClass } from '@/services/api';
+import { 
+    CourseClass, CourseClassDetails, getCoordinatorClasses, getCoordinatorClassDetails, 
+    createCourseClass, updateCourseClass, deleteCourseClass,
+    assignTeacherToClass, getCoordinatorSubjects, getCoordinatorTeachers,
+    CoordinatorSubject, TeacherOverview
+} from '@/services/api';
 
 export default function ClassesScreen() {
     const insets = useSafeAreaInsets();
@@ -27,15 +32,38 @@ export default function ClassesScreen() {
     const [detailsModalVisible, setDetailsModalVisible] = useState(false);
     const [detailsLoading, setDetailsLoading] = useState(false);
     const [classDetails, setClassDetails] = useState<CourseClassDetails | null>(null);
-    const [detailsTab, setDetailsTab] = useState<'students' | 'teachers'>('students');
+    const [detailsTab, setDetailsTab] = useState<'students' | 'teachers' | 'offers'>('students');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedSubject, setSelectedSubject] = useState<number | 'all'>('all');
+    
+    // Assign Teacher/Subject View States
+    const [assignModalVisible, setAssignModalVisible] = useState(false);
+    const [assignLoading, setAssignLoading] = useState(false);
+    const [availableSubjects, setAvailableSubjects] = useState<CoordinatorSubject[]>([]);
+    const [availableTeachers, setAvailableTeachers] = useState<TeacherOverview[]>([]);
+    
+    // Form for assignment
+    const [assignForm, setAssignForm] = useState({
+        subject_id: '',
+        teacher_id: '',
+        schedule: '',
+        location: ''
+    });
 
     const load = useCallback(async (isRefresh = false) => {
         try {
             if (isRefresh) setRefreshing(true); else setLoading(true);
             const result = await getCoordinatorClasses();
             if (result.success) setClasses(result.classes || []);
+            
+            // Prefetch subjects and teachers for the assign modal
+            const [subjRes, teachRes] = await Promise.all([
+                getCoordinatorSubjects(),
+                getCoordinatorTeachers()
+            ]);
+            if (subjRes.success) setAvailableSubjects(subjRes.subjects || []);
+            if (teachRes.success) setAvailableTeachers(teachRes.teachers || []);
+            
         } catch { } finally { setLoading(false); setRefreshing(false); }
     }, []);
 
@@ -78,6 +106,41 @@ export default function ClassesScreen() {
             Alert.alert('Erro', 'Falha ao carregar detalhes da turma');
         } finally {
             setDetailsLoading(false);
+        }
+    };
+    
+    const openAssignModal = () => {
+        setAssignForm({ subject_id: '', teacher_id: '', schedule: '', location: '' });
+        setAssignModalVisible(true);
+    };
+
+    const handleAssignSave = async () => {
+        if (!classDetails) return;
+        if (!assignForm.subject_id || !assignForm.teacher_id) {
+            Alert.alert('Erro', 'Selecione a disciplina e o professor.');
+            return;
+        }
+        
+        setAssignLoading(true);
+        try {
+            const res = await assignTeacherToClass(classDetails.class_info.id, {
+                subject_id: Number(assignForm.subject_id),
+                teacher_id: Number(assignForm.teacher_id),
+                schedule: assignForm.schedule,
+                location: assignForm.location
+            });
+            
+            if (res.success) {
+                setAssignModalVisible(false);
+                // Reload details to show new offer
+                openDetails(classDetails.class_info as any);
+            } else {
+                Alert.alert('Erro', res.message || 'Falha ao vincular.');
+            }
+        } catch (e: any) {
+            Alert.alert('Erro', 'Falha de conexão ao vincular. Tente novamente.');
+        } finally {
+            setAssignLoading(false);
         }
     };
 
@@ -125,7 +188,7 @@ export default function ClassesScreen() {
                                 <View style={s.stat}><MaterialIcons name="people" size={16} color="#3b82f6" /><Text style={s.statText}>{cls.student_count} alunos</Text></View>
                                 <View style={s.stat}><MaterialIcons name="school" size={16} color="#8b5cf6" /><Text style={s.statText}>{cls.teacher_count} professores</Text></View>
                             </View>
-                            {cls.subjects.length > 0 && (
+                            {cls.subjects && cls.subjects.length > 0 && (
                                 <View style={s.tagRow}>{cls.subjects.map((subj, i) => (<View key={i} style={s.tag}><Text style={s.tagText}>{subj}</Text></View>))}</View>
                             )}
                         </View>
@@ -178,38 +241,44 @@ export default function ClassesScreen() {
                                         <MaterialIcons name="school" size={18} color={detailsTab === 'teachers' ? '#6366f1' : '#64748b'} />
                                         <Text style={[s.tabText, detailsTab === 'teachers' && s.tabTextActive]}>Professores ({classDetails.teachers.length})</Text>
                                     </TouchableOpacity>
+                                    <TouchableOpacity style={[s.tab, detailsTab === 'offers' && s.tabActive]} onPress={() => setDetailsTab('offers')}>
+                                        <MaterialIcons name="menu-book" size={18} color={detailsTab === 'offers' ? '#6366f1' : '#64748b'} />
+                                        <Text style={[s.tabText, detailsTab === 'offers' && s.tabTextActive]}>Ofertas ({classDetails.subjects.length})</Text>
+                                    </TouchableOpacity>
                                 </View>
 
-                                {/* Filtros */}
-                                <View style={s.filtersContainer}>
-                                    <View style={s.searchBox}>
-                                        <MaterialIcons name="search" size={20} color="#94a3b8" />
-                                        <TextInput
-                                            style={s.searchInput}
-                                            placeholder={`Buscar ${detailsTab === 'students' ? 'aluno' : 'professor'}...`}
-                                            value={searchQuery}
-                                            onChangeText={setSearchQuery}
-                                        />
-                                    </View>
+                                {/* Filtros - Apenas visíveis para alunos e professores */}
+                                {detailsTab !== 'offers' && (
+                                    <View style={s.filtersContainer}>
+                                        <View style={s.searchBox}>
+                                            <MaterialIcons name="search" size={20} color="#94a3b8" />
+                                            <TextInput
+                                                style={s.searchInput}
+                                                placeholder={`Buscar ${detailsTab === 'students' ? 'aluno' : 'professor'}...`}
+                                                value={searchQuery}
+                                                onChangeText={setSearchQuery}
+                                            />
+                                        </View>
 
-                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.subjectFilters} contentContainerStyle={{ gap: 8, paddingRight: 20 }}>
-                                        <TouchableOpacity
-                                            style={[s.filterChip, selectedSubject === 'all' && s.filterChipActive]}
-                                            onPress={() => setSelectedSubject('all')}
-                                        >
-                                            <Text style={[s.filterChipText, selectedSubject === 'all' && s.filterChipTextActive]}>Todas</Text>
-                                        </TouchableOpacity>
-                                        {classDetails.subjects.map(subj => (
+                                        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.subjectFilters} contentContainerStyle={{ gap: 8, paddingRight: 20 }}>
                                             <TouchableOpacity
-                                                key={subj.id}
-                                                style={[s.filterChip, selectedSubject === subj.id && s.filterChipActive]}
-                                                onPress={() => setSelectedSubject(subj.id)}
+                                                style={[s.filterChip, selectedSubject === 'all' && s.filterChipActive]}
+                                                onPress={() => setSelectedSubject('all')}
                                             >
-                                                <Text style={[s.filterChipText, selectedSubject === subj.id && s.filterChipTextActive]}>{subj.name}</Text>
+                                                <Text style={[s.filterChipText, selectedSubject === 'all' && s.filterChipTextActive]}>Todas</Text>
                                             </TouchableOpacity>
-                                        ))}
-                                    </ScrollView>
-                                </View>
+                                            {classDetails.subjects.map(subj => (
+                                                <TouchableOpacity
+                                                    key={subj.id}
+                                                    style={[s.filterChip, selectedSubject === subj.id && s.filterChipActive]}
+                                                    onPress={() => setSelectedSubject(subj.id)}
+                                                >
+                                                    <Text style={[s.filterChipText, selectedSubject === subj.id && s.filterChipTextActive]}>{subj.name}</Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </ScrollView>
+                                    </View>
+                                )}
 
                                 {/* Lista */}
                                 <ScrollView style={s.detailsList} contentContainerStyle={{ paddingBottom: 20, gap: 12 }}>
@@ -235,7 +304,7 @@ export default function ClassesScreen() {
                                                 </View>
                                             </View>
                                         ))
-                                    ) : (
+                                    ) : detailsTab === 'teachers' ? (
                                         filteredTeachers.length === 0 ? (
                                             <Text style={s.noResults}>Nenhum professor encontrado.</Text>
                                         ) : filteredTeachers.map(teacher => (
@@ -257,10 +326,90 @@ export default function ClassesScreen() {
                                                 </View>
                                             </View>
                                         ))
-                                    )}
+                                    ) : detailsTab === 'offers' ? (
+                                        <View>
+                                            <TouchableOpacity style={s.createOfferBtn} onPress={openAssignModal}>
+                                                <MaterialIcons name="add-circle-outline" size={20} color="#fff" />
+                                                <Text style={s.createOfferText}>Nova Oferta de Disciplina</Text>
+                                            </TouchableOpacity>
+                                            
+                                            {classDetails.subjects.length === 0 ? (
+                                                <Text style={s.noResults}>Nenhuma disciplina ofertada nesta turma ainda.</Text>
+                                            ) : classDetails.subjects.map(subj => {
+                                                // Find if any teacher is teaching this subject in this class
+                                                const teachingTeacher = classDetails.teachers.find(t => t.subjects.some(s => s.id === subj.id));
+                                                
+                                                return (
+                                                    <View key={subj.id} style={s.personCard}>
+                                                        <View style={s.personHeader}>
+                                                            <View style={[s.avatar, { backgroundColor: '#e2e8f0', width: 40, height: 40, borderRadius: 8 }]}><MaterialIcons name="menu-book" size={20} color="#64748b"/></View>
+                                                            <View style={{ flex: 1 }}>
+                                                                <Text style={s.personName}>{subj.name}</Text>
+                                                                {teachingTeacher ? (
+                                                                    <Text style={s.personEmail}>Prof. {teachingTeacher.name}</Text>
+                                                                ) : (
+                                                                    <Text style={[s.personEmail, {color: '#ef4444'}]}>Sem professor atribuído</Text>
+                                                                )}
+                                                            </View>
+                                                        </View>
+                                                    </View>
+                                                );
+                                            })}
+                                        </View>
+                                    ) : null}
                                 </ScrollView>
                             </>
                         ) : null}
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Modal para Vincular Novo Professor / Disciplina */}
+            <Modal visible={assignModalVisible} transparent animationType="slide" onRequestClose={() => setAssignModalVisible(false)}>
+                <View style={s.modalOverlay}>
+                    <View style={s.modal}>
+                        <View style={s.modalHeaderRow}>
+                            <Text style={s.modalTitle}>Vincular Oferta</Text>
+                        </View>
+                        
+                        <Text style={s.pickerLabel}>Disciplina (Catálogo)</Text>
+                        <ScrollView style={s.pickerScroll} horizontal showsHorizontalScrollIndicator={false}>
+                            {availableSubjects.map(subj => (
+                                <TouchableOpacity 
+                                    key={subj.id} 
+                                    style={[s.pickerOption, assignForm.subject_id === String(subj.id) && s.pickerOptionActive]}
+                                    onPress={() => setAssignForm({...assignForm, subject_id: String(subj.id)})}
+                                >
+                                    <Text style={[s.pickerText, assignForm.subject_id === String(subj.id) && s.pickerTextActive]} numberOfLines={1}>{subj.name}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+
+                        <Text style={s.pickerLabel}>Professor Responsável</Text>
+                        <ScrollView style={s.pickerScroll} horizontal showsHorizontalScrollIndicator={false}>
+                            {availableTeachers.map(t => (
+                                <TouchableOpacity 
+                                    key={t.id} 
+                                    style={[s.pickerOption, assignForm.teacher_id === String(t.id) && s.pickerOptionActive]}
+                                    onPress={() => setAssignForm({...assignForm, teacher_id: String(t.id)})}
+                                >
+                                    <Text style={[s.pickerText, assignForm.teacher_id === String(t.id) && s.pickerTextActive]} numberOfLines={1}>{t.name}</Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+
+                        <Text style={s.pickerLabel}>Horário (Opcional)</Text>
+                        <TextInput style={s.input} placeholder="Ex: Terças 19h" value={assignForm.schedule} onChangeText={(t) => setAssignForm({ ...assignForm, schedule: t })} />
+                        
+                        <Text style={s.pickerLabel}>Local (Opcional)</Text>
+                        <TextInput style={s.input} placeholder="Ex: Sala 204" value={assignForm.location} onChangeText={(t) => setAssignForm({ ...assignForm, location: t })} />
+
+                        <View style={s.modalActions}>
+                            <TouchableOpacity style={s.cancelBtn} onPress={() => setAssignModalVisible(false)}><Text style={s.cancelText}>Cancelar</Text></TouchableOpacity>
+                            <TouchableOpacity style={[s.saveBtn, assignLoading && { opacity: 0.6 }]} onPress={handleAssignSave} disabled={assignLoading}>
+                                {assignLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={s.saveText}>Vincular</Text>}
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
             </Modal>
@@ -336,4 +485,15 @@ const s = StyleSheet.create({
     personSubjects: { marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#f1f5f9' },
     enrolledLabel: { fontSize: 12, fontWeight: '600', color: '#94a3b8', textTransform: 'uppercase', marginBottom: 8 },
     noResults: { textAlign: 'center', color: '#94a3b8', marginTop: 40, fontSize: 15 },
+
+    // Assign UI
+    createOfferBtn: { backgroundColor: '#10b981', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 14, borderRadius: 12, marginBottom: 20, gap: 8},
+    createOfferText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+    modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+    pickerLabel: { fontSize: 13, fontWeight: '600', color: '#64748b', marginBottom: 8, marginTop: 4 },
+    pickerScroll: { marginBottom: 16, flexGrow: 0 },
+    pickerOption: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, backgroundColor: '#f1f5f9', marginRight: 8, borderWidth: 1, borderColor: '#e2e8f0', maxWidth: 180 },
+    pickerOptionActive: { backgroundColor: '#eef2ff', borderColor: '#6366f1' },
+    pickerText: { color: '#475569', fontSize: 14, fontWeight: '500' },
+    pickerTextActive: { color: '#6366f1', fontWeight: '700' }
 });

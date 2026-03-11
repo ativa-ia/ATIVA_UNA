@@ -62,11 +62,11 @@ ai_bp = Blueprint('ai', __name__)
     #     })
 
 
-@ai_bp.route('/session/<int:subject_id>', methods=['GET'])
+@ai_bp.route('/session/<int:class_subject_id>', methods=['GET'])
 @token_required
-def get_session(current_user, subject_id):
-    """Retorna ou cria sessão ativa para a disciplina"""
-    session = create_or_get_session(current_user.id, subject_id)
+def get_session(current_user, class_subject_id):
+    """Retorna ou cria sessão ativa para a oferta de disciplina"""
+    session = create_or_get_session(current_user.id, class_subject_id)
     return jsonify({
         'success': True,
         'session': session.to_dict()
@@ -95,13 +95,13 @@ def get_messages(current_user, session_id):
     })
 
 
-@ai_bp.route('/sessions/<int:subject_id>/all', methods=['GET'])
+@ai_bp.route('/sessions/<int:class_subject_id>/all', methods=['GET'])
 @token_required
-def list_sessions(current_user, subject_id):
-    """Lista todas as sessões de chat da disciplina"""
+def list_sessions(current_user, class_subject_id):
+    """Lista todas as sessões de chat da oferta de disciplina"""
     sessions = AISession.query.filter_by(
         teacher_id=current_user.id,
-        subject_id=subject_id
+        class_subject_id=class_subject_id
     ).order_by(AISession.started_at.desc()).all()
     
     return jsonify({
@@ -115,20 +115,20 @@ def list_sessions(current_user, subject_id):
 def create_new_session(current_user):
     """
     Cria uma NOVA sessão de chat (arquiva a anterior se houver)
-    Body: { "subject_id": int }
+    Body: { "class_subject_id": int }
     """
     data = request.get_json()
-    subject_id = data.get('subject_id')
+    class_subject_id = data.get('class_subject_id')
     
-    if not subject_id:
-        return jsonify({'success': False, 'error': 'ID da disciplina necessário'}), 400
+    if not class_subject_id:
+        return jsonify({'success': False, 'error': 'ID da oferta de disciplina necessário'}), 400
 
     from datetime import datetime
     
-    # 1. Encontrar sessão ativa anterior e encerrar (opcional, mas bom pra organização)
+    # 1. Encontrar sessão ativa anterior e encerrar
     active_session = AISession.query.filter_by(
         teacher_id=current_user.id,
-        subject_id=subject_id,
+        class_subject_id=class_subject_id,
         status='active'
     ).first()
     
@@ -139,7 +139,7 @@ def create_new_session(current_user):
     # 2. Criar nova sessão
     new_session = AISession(
         teacher_id=current_user.id,
-        subject_id=subject_id,
+        class_subject_id=class_subject_id,
         status='active'
     )
     db.session.add(new_session)
@@ -169,7 +169,7 @@ def activate_session(current_user, session_id):
     # 1. Desativar qualquer outra sessão ativa desta disciplina
     active_sessions = AISession.query.filter_by(
         teacher_id=current_user.id,
-        subject_id=session.subject_id,
+        class_subject_id=session.class_subject_id,
         status='active'
     ).all()
     
@@ -271,8 +271,8 @@ def upload_context(current_user):
     
     file_stream = None
     filename = None
-    subject_id = None
-    session_id = None  # CORREÇÃO: Inicializar aqui
+    class_subject_id = None
+    session_id = None
     file_type = "document"
     file_url = None
     file_path = None  # CORREÇÃO: Inicializar aqui
@@ -282,8 +282,8 @@ def upload_context(current_user):
         data = request.get_json()
         print(f"DEBUG UPLOAD: Received data: {data}")
         file_url = data.get('file_url')
-        subject_id = data.get('subject_id')
-        session_id = data.get('session_id') # Opcional agora
+        class_subject_id = data.get('class_subject_id') or data.get('subject_id')  # retrocompat
+        session_id = data.get('session_id')
         filename = data.get('filename', 'downloaded_file.pdf')
         
         # Extrair file_path do file_url (path após o bucket)
@@ -305,7 +305,7 @@ def upload_context(current_user):
     elif 'file' in request.files:
         # Fallback para upload direto se necessário, mas frontend usa URL
         file = request.files['file']
-        subject_id = request.form.get('subject_id')
+        class_subject_id = request.form.get('class_subject_id') or request.form.get('subject_id')
         session_id = request.form.get('session_id')
         filename = file.filename
         # file_url e file_path já inicializados no topo, atualizar após upload Drive
@@ -335,26 +335,29 @@ def upload_context(current_user):
             print(f"Erro no upload para Drive: {str(e)}")
             return jsonify({'success': False, 'error': f'Erro no upload: {str(e)}'}), 500
     
-    if not subject_id:
-        return jsonify({'success': False, 'error': 'ID da disciplina necessário'}), 400
+    if not class_subject_id:
+        return jsonify({'success': False, 'error': 'ID da oferta de disciplina necessário'}), 400
         
     try:
-        # 2. SEGURANÇA: Verificar se o professor tem acesso à disciplina
+        # 2. SEGURANÇA: Verificar se o professor tem acesso à oferta
         from app.models.teaching import Teaching
-        subject = Subject.query.get(subject_id)
-        if not subject:
-             return jsonify({'success': False, 'error': 'Disciplina não encontrada'}), 404
+        from app.models.class_subject import ClassSubject
+        cs = ClassSubject.query.get(class_subject_id)
+        if not cs:
+             return jsonify({'success': False, 'error': 'Oferta de disciplina não encontrada'}), 404
         
-        # Verificar se o professor leciona esta disciplina (relação via Teaching)
+        subject = cs.subject
+        
+        # Verificar se o professor leciona esta oferta (relação via Teaching)
         teaching = Teaching.query.filter_by(
             teacher_id=current_user.id,
-            subject_id=subject_id
+            class_subject_id=class_subject_id
         ).first()
         
         if not teaching:
             return jsonify({'success': False, 'error': 'Sem permissão para fazer upload nesta disciplina'}), 403
              
-        classroom_id = subject.name # Usando o NOME como ID para o fluxo
+        classroom_id = subject.name  # Usando o NOME como ID para o fluxo
         
         # 3. Preparar arquivo para envio ao N8N
         files_to_send = {}
@@ -439,19 +442,18 @@ def upload_context(current_user):
         
         session = None
         if session_id:
-             session = create_or_get_session(current_user.id, subject_id) # Valida se existe
+             session = create_or_get_session(current_user.id, class_subject_id)
         else:
-             # Tenta pegar qualquer uma ou cria
-             session = create_or_get_session(current_user.id, subject_id)
+             session = create_or_get_session(current_user.id, class_subject_id)
         
         context_file = AIContextFile(
-            subject_id=subject_id,
+            class_subject_id=class_subject_id,
             session_id=session.id, 
             filename=filename,
             content=placeholder_content,
             file_type=file_type,
-            file_url=file_url,  # Salvar URL do arquivo original
-            file_path=file_path if file_url else None  # Path no Storage
+            file_url=file_url,
+            file_path=file_path if file_url else None
         )
         db.session.add(context_file)  # CORREÇÃO: Estava faltando!
         db.session.commit()
@@ -469,34 +471,33 @@ def upload_context(current_user):
         return jsonify({'success': False, 'error': f'Erro ao processar arquivo: {str(e)}'}), 500
 
 
-@ai_bp.route('/documents/<int:subject_id>', methods=['GET'])
+@ai_bp.route('/documents/<int:class_subject_id>', methods=['GET'])
 @token_required
-def get_subject_documents(current_user, subject_id):
+def get_subject_documents(current_user, class_subject_id):
     """
-    Lista todos os documentos da Base de Conhecimento da disciplina (para comandos de voz)
+    Lista todos os documentos da Base de Conhecimento da oferta de disciplina
     Returns: { "success": bool, "documents": [{ "id": str, "filename": str, "created_at": str }] }
     """
     from app.models.ai_session import AIContextFile
-    from app.models.subject import Subject
+    from app.models.class_subject import ClassSubject
     
     try:
-        # SEGURANÇA: Verificar se o professor tem acesso à disciplina
+        # SEGURANÇA: Verificar se o professor tem acesso
         from app.models.teaching import Teaching
-        subject = Subject.query.get(subject_id)
-        if not subject:
-            return jsonify({'success': False, 'error': 'Disciplina não encontrada'}), 404
+        cs = ClassSubject.query.get(class_subject_id)
+        if not cs:
+            return jsonify({'success': False, 'error': 'Oferta de disciplina não encontrada'}), 404
         
-        # Verificar se o professor leciona esta disciplina (relação via Teaching)
         teaching = Teaching.query.filter_by(
             teacher_id=current_user.id,
-            subject_id=subject_id
+            class_subject_id=class_subject_id
         ).first()
         
         if not teaching:
             return jsonify({'success': False, 'error': 'Sem permissão para acessar esta disciplina'}), 403
         
-        # Buscar todos os arquivos da disciplina (independente de sessão)
-        files = AIContextFile.query.filter_by(subject_id=subject_id)\
+        # Buscar todos os arquivos desta oferta
+        files = AIContextFile.query.filter_by(class_subject_id=class_subject_id)\
             .order_by(AIContextFile.created_at.desc())\
             .all()
         
@@ -641,7 +642,7 @@ def send_kb_document_to_presentation(current_user, file_id):
             
             document_data = {
                 'file_id': context_file.id,
-                'subject_id': context_file.subject_id,
+                'class_subject_id': context_file.class_subject_id,
                 'filename': context_file.filename,
                 'sections': sections,
                 'total_sections': len(sections),
@@ -685,7 +686,7 @@ def send_kb_document_to_presentation(current_user, file_id):
         except Exception as e:
             logger.error(f"[RECAP] Erro ao registrar content_displayed (KB doc): {e}")
         
-        logger.info(f"[SEND KB DOC] ✅ Documento {context_file.filename} enviado para apresentação {presentation_code}")
+        logger.info(f"[SEND KB DOC] -> Documento {context_file.filename} enviado para apresentação {presentation_code}")
         
         return jsonify({
             'success': True,
@@ -694,7 +695,7 @@ def send_kb_document_to_presentation(current_user, file_id):
         }), 200
         
     except Exception as e:
-        logger.error(f"[SEND KB DOC] ❌ Erro: {type(e).__name__}: {str(e)}")
+        logger.error(f"[SEND KB DOC] Error: {type(e).__name__}: {str(e)}")
         import traceback
         logger.error(f"[SEND KB DOC] Traceback: {traceback.format_exc()}")
         return jsonify({
@@ -703,9 +704,9 @@ def send_kb_document_to_presentation(current_user, file_id):
         }), 500
 
 
-@ai_bp.route('/context-files/<int:subject_id>', methods=['GET'])
+@ai_bp.route('/context-files/<int:class_subject_id>', methods=['GET'])
 @token_required
-def get_context_files(current_user, subject_id):
+def get_context_files(current_user, class_subject_id):
     """
     Lista arquivos de contexto (da sessão atual ou todos se não tiver session_id na query)
     Query param: session_id (opcional)
@@ -714,7 +715,7 @@ def get_context_files(current_user, subject_id):
     
     session_id = request.args.get('session_id')
     
-    query = AIContextFile.query.filter_by(subject_id=subject_id)
+    query = AIContextFile.query.filter_by(class_subject_id=class_subject_id)
     
     if session_id:
         query = query.filter_by(session_id=session_id)
@@ -738,12 +739,12 @@ def delete_context_file(current_user, file_id):
     if not file:
         return jsonify({'success': False, 'error': 'Arquivo não encontrado'}), 404
         
-    subject_id = file.subject_id
+    class_subject_id = file.class_subject_id
     db.session.delete(file)
     db.session.commit()
     
-    # Verificar se ainda existem arquivos para esta disciplina
-    remaining = AIContextFile.query.filter_by(subject_id=subject_id).count()
+    # Verificar se ainda existem arquivos para esta oferta
+    remaining = AIContextFile.query.filter_by(class_subject_id=class_subject_id).count()
     
     if remaining == 0:
         # Se não há mais arquivos, fazer RESET TOTAL (Limpar histórico)
@@ -752,12 +753,12 @@ def delete_context_file(current_user, file_id):
             from app.models.ai_session import AISession, AIMessage
             
             # 1. Limpar Chat UI
-            ChatMessage.clear_history(current_user.id, subject_id)
+            ChatMessage.clear_history(current_user.id, class_subject_id)
             
             # 2. Limpar Memória IA
             ai_session = AISession.query.filter_by(
                 teacher_id=current_user.id, 
-                subject_id=subject_id
+                class_subject_id=class_subject_id
             ).first()
             
             if ai_session:

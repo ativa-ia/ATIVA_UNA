@@ -72,21 +72,21 @@ def create_session(current_user):
     
     Body:
     {
-        "subject_id": int,
+        "class_subject_id": int,
         "title": str (opcional)
     }
     """
     data = request.get_json() or {}
-    subject_id = data.get('subject_id')
+    class_subject_id = data.get('class_subject_id')
     
-    if not subject_id:
-        return jsonify({'success': False, 'error': 'subject_id é obrigatório'}), 400
+    if not class_subject_id:
+        return jsonify({'success': False, 'error': 'class_subject_id é obrigatório'}), 400
     
     title = data.get('title', 'Conversa Socrática')
     
     session = SocraticSession(
         user_id=current_user.id,
-        subject_id=subject_id,
+        class_subject_id=class_subject_id,
         title=title,
         messages_data=[],
         status='active'
@@ -104,17 +104,17 @@ def create_session(current_user):
 @token_required
 def get_sessions(current_user):
     """
-    Lista as sessões do aluno, opcionalmente filtradas por disciplina.
+    Lista as sessões do aluno, opcionalmente filtradas por oferta de disciplina.
     
     Query Params:
-        subject_id: int (opcional)
+        class_subject_id: int (opcional)
     """
-    subject_id = request.args.get('subject_id', type=int)
+    class_subject_id = request.args.get('class_subject_id', type=int)
     
     query = SocraticSession.query.filter_by(user_id=current_user.id)
     
-    if subject_id:
-        query = query.filter_by(subject_id=subject_id)
+    if class_subject_id:
+        query = query.filter_by(class_subject_id=class_subject_id)
     
     sessions = query.order_by(SocraticSession.updated_at.desc()).all()
     

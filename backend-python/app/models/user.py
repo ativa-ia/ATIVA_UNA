@@ -12,12 +12,7 @@ class User(db.Model):
     password = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), nullable=False)  # 'student', 'teacher', 'coordinator'
     name = db.Column(db.String(100), nullable=False)
-    registration_number = db.Column(db.String(50), unique=True, nullable=True)  # Matrícula do aluno
-    course_id = db.Column(db.Integer, db.ForeignKey('courses.id'), nullable=True)  # Curso do aluno
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # Relationships
-    course = db.relationship('Course', backref='students', lazy=True)
     
     def __repr__(self):
         return f'<User {self.email}>'
@@ -32,14 +27,22 @@ class User(db.Model):
     
     def to_dict(self, include_token=False):
         """Converter para dicionário (sem senha)"""
+        # Buscar primeira matrícula ativa (para retrocompatibilidade)
+        active_enrollment = None
+        if self.role == 'student' and self.course_enrollments:
+            active_enrollment = next(
+                (ce for ce in self.course_enrollments if ce.status == 'active'),
+                self.course_enrollments[0] if self.course_enrollments else None
+            )
+
         data = {
             'id': self.id,
             'email': self.email,
             'role': self.role,
             'name': self.name,
-            'registration_number': self.registration_number,
-            'course_id': self.course_id,
-            'course_name': self.course.name if self.course else None,
+            'registration_number': active_enrollment.registration_number if active_enrollment else None,
+            'course_id': active_enrollment.course_id if active_enrollment else None,
+            'course_name': active_enrollment.course.name if active_enrollment and active_enrollment.course else None,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
         return data
@@ -61,10 +64,20 @@ class User(db.Model):
             email=email,
             role=role,
             name=name,
-            registration_number=registration_number,
-            course_id=course_id
         )
         user.set_password(password)
         db.session.add(user)
+        db.session.flush()  # Garante que o user.id existe antes de criar o enrollment
+
+        # Se informou course_id, criar a matrícula institucional
+        if course_id:
+            from app.models.course_enrollment import CourseEnrollment
+            enrollment = CourseEnrollment(
+                user_id=user.id,
+                course_id=course_id,
+                registration_number=registration_number,
+            )
+            db.session.add(enrollment)
+
         db.session.commit()
         return user

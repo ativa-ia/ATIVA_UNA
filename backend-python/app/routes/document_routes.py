@@ -26,9 +26,9 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 else:
     try:
         supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-        logger.info("✅ Supabase client criado com sucesso!")
+        logger.info("-> Supabase client criado com sucesso!")
     except Exception as e:
-        logger.error(f"❌ Erro ao criar cliente Supabase: {type(e).__name__}: {str(e)}")
+        logger.error(f"Error ao criar cliente Supabase: {type(e).__name__}: {str(e)}")
         supabase = None
 
 

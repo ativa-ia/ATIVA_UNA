@@ -77,11 +77,9 @@ def _send_support_email(from_user, subject: str, message: str):
 
 def _perform_auto_enrollment(user):
     """Lógica compartilhada de auto-matrícula.
-    Consulta as configurações ENABLE_AUTO_ENROLLMENT e AUTO_ENROLLMENT_SUBJECTS
-    antes de matricular o aluno.
+    Matricula o aluno em todas as ofertas de disciplina ativas (ClassSubject).
     Retorna a quantidade de matrículas criadas (não faz commit).
     """
-    # Forçar o SQLAlchemy a descartar o cache de sessão e buscar a config atualizada
     db.session.expire_all()
 
     # Verificar se auto-matrícula está habilitada
@@ -90,53 +88,30 @@ def _perform_auto_enrollment(user):
         print(f'ℹ️ Auto-matrícula desabilitada para {user.email}')
         return 0
 
-    # Verificar quais disciplinas matricular
-    subjects_setting = SystemSetting.query.get('AUTO_ENROLLMENT_SUBJECTS')
-    
-    if subjects_setting and subjects_setting.value and subjects_setting.value != 'all':
-        try:
-            # Frontend salva como lista separada por vírgula (ex: "1,2,3")
-            subject_ids_str = subjects_setting.value.split(',')
-            subject_ids = [int(s.strip()) for s in subject_ids_str if s.strip().isdigit()]
-            
-            if len(subject_ids) > 0:
-                subjects = Subject.query.filter(Subject.id.in_(subject_ids)).all()
-            else:
-                subjects = Subject.query.all()
-        except Exception:
-            subjects = Subject.query.all()
-    else:
-        subjects = Subject.query.all()
+    from app.models.class_subject import ClassSubject
 
-    if not subjects:
-        print(f'⚠️ Nenhuma disciplina disponível para auto-matrícula de {user.email}')
-        return 0
+    # Buscar ofertas ativas
+    class_subjects = ClassSubject.query.filter_by(status='active').all()
 
-    from app.models.class_model import Class
-    default_class = Class.query.first()
-
-    if not default_class:
-        print(f'⚠️ Nenhuma turma disponível para auto-matrícula de {user.email}')
+    if not class_subjects:
+        print(f'⚠️ Nenhuma oferta de disciplina disponível para auto-matrícula de {user.email}')
         return 0
 
     enrollments_created = 0
-    for subject in subjects:
-        # Evitar duplicatas
+    for cs in class_subjects:
         existing = Enrollment.query.filter_by(
-            student_id=user.id, subject_id=subject.id
+            student_id=user.id, class_subject_id=cs.id
         ).first()
         if not existing:
             enrollment = Enrollment(
                 student_id=user.id,
-                subject_id=subject.id,
-                class_id=default_class.id
+                class_subject_id=cs.id
             )
             db.session.add(enrollment)
             enrollments_created += 1
 
-    if enrollments_created > 0:
-        print(f'✅ Auto-matrícula: {enrollments_created} disciplinas para {user.email}')
-    
+    db.session.commit()
+    print(f'-> Auto-matrícula: {enrollments_created} ofertas para {user.email}')
     return enrollments_created
 
 
@@ -159,9 +134,7 @@ def register():
             email=data['email'],
             password=data['password'],
             role=data.get('role', 'student'),
-            name=data['name'],
-            registration_number=data.get('registration_number'),
-            course_id=data.get('course_id')
+            name=data['name']
         )
         
         # Auto-matrícula para estudantes (consulta configurações)
@@ -418,7 +391,7 @@ def quick_access():
         
         if existing_user:
             # Usuário existe - fazer login automático
-            print(f'✅ Quick Access - Login automático: {email}')
+            print(f'-> Quick Access - Login automático: {email}')
             token = generate_token(existing_user)
             
             return jsonify({
@@ -431,7 +404,7 @@ def quick_access():
         
         else:
             # Usuário não existe - criar conta student com senha padrão
-            print(f'✅ Quick Access - Criando novo aluno: {email}')
+            print(f'-> Quick Access - Criando novo aluno: {email}')
             
             # Senha padrão para acesso rápido
             default_password = 'ativaai2024'
@@ -464,7 +437,7 @@ def quick_access():
     except Exception as e:
         import traceback
         error_details = traceback.format_exc()
-        print(f'❌ Erro no quick access: {str(e)}')
+        print(f'Error no quick access: {str(e)}')
         print(f'Detalhes: {error_details}')
         db.session.rollback()
         return jsonify({

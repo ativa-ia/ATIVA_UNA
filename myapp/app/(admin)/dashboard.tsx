@@ -652,7 +652,7 @@ export default function AdminDashboard() {
                         disabled={!enrollPick.studentId || !enrollPick.subjectId}
                         onPress={() => handleAction('enroll', {
                             student_id: enrollPick.studentId,
-                            subject_id: enrollPick.subjectId
+                            class_subject_id: enrollPick.subjectId
                         })}>
                         <MaterialIcons name="how-to-reg" size={18} color={colors.white} />
                         <Text style={styles.primaryButtonText}>Matricular</Text>
@@ -1015,7 +1015,7 @@ export default function AdminDashboard() {
                                         </View>
                                         <TouchableOpacity style={styles.deleteBtn}
                                             onPress={() => confirmDelete(`professor "${t.name}" desta disciplina`, () =>
-                                                handleDeleteWithBody('unteach', { teacher_id: t.id, subject_id: detailSubject.id })
+                                                handleDeleteWithBody('unteach', { teacher_id: t.id, class_subject_id: detailSubject.id })
                                             )}>
                                             <MaterialIcons name="person-remove" size={16} color="#ef4444" />
                                         </TouchableOpacity>
@@ -1036,7 +1036,7 @@ export default function AdminDashboard() {
                                         </View>
                                         <TouchableOpacity style={styles.deleteBtn}
                                             onPress={() => confirmDelete(`aluno "${s.name}" desta disciplina`, () =>
-                                                handleDeleteWithBody('unenroll', { student_id: s.id, subject_id: detailSubject.id })
+                                                handleDeleteWithBody('unenroll', { student_id: s.id, class_subject_id: detailSubject.id })
                                             )}>
                                             <MaterialIcons name="person-remove" size={16} color="#ef4444" />
                                         </TouchableOpacity>

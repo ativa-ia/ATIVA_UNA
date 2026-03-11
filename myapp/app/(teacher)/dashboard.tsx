@@ -76,8 +76,8 @@ export default function TeacherDashboardScreen() {
             // Converter para o formato esperado pelo componente
             const formattedSubjects: Subject[] = data.map((subject: APISubject) => ({
                 id: subject.id.toString(),
-                name: subject.name,
-                imageUrl: subject.imageUrl || subject.image_url || 'https://via.placeholder.com/400'
+                name: subject.class_name ? `${subject.name} - ${subject.class_name}` : subject.name,
+                imageUrl: subject.image_url || subject.imageUrl || 'https://via.placeholder.com/400'
             }));
 
             setSubjects(formattedSubjects);

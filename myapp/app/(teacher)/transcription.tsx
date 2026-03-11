@@ -1695,7 +1695,7 @@ export default function TranscriptionScreen() {
                     try {
                         const { sharePresentationVideoToStudents } = require('@/services/api');
                         const result = await sharePresentationVideoToStudents(presentationCodeRef.current, {
-                            subject_id: subjectId,
+                            class_subject_id: subjectId,
                             classroom_id: subjectName
                         });
 
@@ -1931,7 +1931,7 @@ export default function TranscriptionScreen() {
                 try {
                     const { sharePresentationVideoToStudents } = require('@/services/api');
                     const result = await sharePresentationVideoToStudents(presentationCodeRef.current, {
-                        subject_id: subjectId,
+                        class_subject_id: subjectId,
                         classroom_id: subjectName
                     });
 
@@ -3743,27 +3743,27 @@ export default function TranscriptionScreen() {
         } else if (route === 'ai-assistant') {
             router.push({
                 pathname: '/(teacher)/ai-assistant',
-                params: { subject: subjectName, subjectId: session?.subject_id?.toString() || params.subjectId }
+                params: { subject: subjectName, subjectId: session?.class_subject_id?.toString() || session?.subject_id?.toString() || params.subjectId }
             });
         } else if (route === 'activities') {
             router.push({
                 pathname: '/(teacher)/activities',
-                params: { subjectId: session?.subject_id?.toString() || params.subjectId, subjectName: subjectName }
+                params: { subjectId: session?.class_subject_id?.toString() || session?.subject_id?.toString() || params.subjectId, subjectName: subjectName }
             });
         } else if (route === 'active-activities') {
             router.push({
                 pathname: '/(teacher)/active-activities',
-                params: { subjectId: session?.subject_id?.toString() || params.subjectId, subjectName: subjectName }
+                params: { subjectId: session?.class_subject_id?.toString() || session?.subject_id?.toString() || params.subjectId, subjectName: subjectName }
             });
         } else if (route === 'recaps') {
             router.push({
                 pathname: '/(teacher)/recaps',
-                params: { subjectId: session?.subject_id?.toString() || params.subjectId, subjectName: subjectName }
+                params: { subjectId: session?.class_subject_id?.toString() || session?.subject_id?.toString() || params.subjectId, subjectName: subjectName }
             });
         } else if (route === 'class-analytics') {
             router.push({
                 pathname: '/(teacher)/class-analytics',
-                params: { subjectId: session?.subject_id?.toString() || params.subjectId, subjectName: subjectName }
+                params: { subjectId: session?.class_subject_id?.toString() || session?.subject_id?.toString() || params.subjectId, subjectName: subjectName }
             });
         }
     };
@@ -4681,7 +4681,7 @@ Pressione o botão do microfone para começar a falar."
                                                 router.replace({
                                                     pathname: '/(teacher)/recaps',
                                                     params: {
-                                                        subjectId: session?.subject_id?.toString() || params.subjectId,
+                                                        subjectId: session?.class_subject_id?.toString() || session?.subject_id?.toString() || params.subjectId,
                                                         subjectName: subjectName
                                                     }
                                                 });

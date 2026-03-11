@@ -12,6 +12,7 @@ export interface QuizQuestion {
 export interface Quiz {
     id: number;
     subject_id: number;
+    class_subject_id?: number;
     title: string;
     description?: string;
     time_limit: number;
@@ -111,7 +112,7 @@ export const createQuiz = async (
             'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-            subject_id: subjectId,
+            class_subject_id: subjectId,
             title,
             description,
             time_limit: timeLimit,
@@ -279,7 +280,7 @@ export const processContent = async (
         body: JSON.stringify({
             content,
             action,
-            subject_id: subjectId
+            class_subject_id: subjectId
         }),
     });
 

@@ -8,6 +8,9 @@ export interface Subject {
     name: string;
     imageUrl: string;
     professor?: string;
+    class_name?: string;
+    class_year?: number;
+    class_semester?: string;
 }
 
 export interface Notice {
@@ -32,7 +35,7 @@ export interface Material {
     uploadDate: string;
     size?: string;
     url?: string;
-    subjectId?: number;
+    classSubjectId?: number;
     source?: string;
 }
 
@@ -42,7 +45,18 @@ export interface Student {
     avatarUrl?: string;
 }
 
+export interface Course {
+    id: number;
+    name: string;
+    code: string;
+}
 
+export interface CourseEnrollment {
+    id: number;
+    course_id: number;
+    course_name: string;
+    status: string;
+}
 
 export type UserRole = 'student' | 'teacher' | 'admin';
 

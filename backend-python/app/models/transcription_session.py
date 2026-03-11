@@ -10,7 +10,7 @@ class TranscriptionSession(db.Model):
     __tablename__ = 'transcription_sessions'
     
     id = db.Column(db.Integer, primary_key=True)
-    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False)
+    class_subject_id = db.Column(db.Integer, db.ForeignKey('class_subjects.id'), nullable=False)
     teacher_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     title = db.Column(db.String(200), default='Transcrição de Aula')
     full_transcript = db.Column(db.Text, default='')  # Transcrição completa
@@ -24,7 +24,6 @@ class TranscriptionSession(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    subject = db.relationship('Subject', backref=db.backref('transcription_sessions', lazy=True))
     teacher = db.relationship('User', backref=db.backref('transcription_sessions', lazy=True))
     checkpoints = db.relationship('TranscriptionCheckpoint', backref='session', lazy=True, cascade='all, delete-orphan')
     activities = db.relationship('LiveActivity', backref='session', lazy=True, cascade='all, delete-orphan')
@@ -55,7 +54,7 @@ class TranscriptionSession(db.Model):
     def to_dict(self, include_checkpoints=False, include_activities=False):
         data = {
             'id': self.id,
-            'subject_id': self.subject_id,
+            'class_subject_id': self.class_subject_id,
             'teacher_id': self.teacher_id,
             'title': self.title,
             'full_transcript': self.full_transcript,
@@ -109,9 +108,6 @@ class LiveActivity(db.Model):
     title = db.Column(db.String(200), nullable=False)
     
     # Conteúdo da atividade (JSON)
-    # Quiz: {"questions": [{"question": "...", "options": [...], "correct": 0}, ...]}
-    # Summary: {"summary_text": "..."}
-    # Open Question: {"question": "Qual sua maior dúvida?"}
     content = db.Column(db.JSON, nullable=True)
     
     # Conteúdo gerado pela IA
@@ -132,8 +128,8 @@ class LiveActivity(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Campos para suporte personalizado
-    target_students = db.Column(db.JSON, nullable=True)  # Lista de IDs ou null para todos
-    is_support_content = db.Column(db.Boolean, default=False)  # Se é conteúdo de reforço
+    target_students = db.Column(db.JSON, nullable=True)
+    is_support_content = db.Column(db.Boolean, default=False)
     parent_activity_id = db.Column(db.Integer, db.ForeignKey('live_activities.id'), nullable=True)
     
     # Relationships
@@ -209,8 +205,6 @@ class LiveActivityResponse(db.Model):
     student_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     
     # Dados da resposta (JSON)
-    # Quiz: {"answers": {question_id: answer_index, ...}}
-    # Open Question: {"text": "resposta do aluno"}
     response_data = db.Column(db.JSON, nullable=False)
     
     # Para quiz: resultado
@@ -233,25 +227,17 @@ class LiveActivityResponse(db.Model):
         questions = activity.content.get('questions', [])
         answers = self.response_data.get('answers', {})
         
-        print(f"🔍 DEBUG calculate_quiz_score:")
-        print(f"  Total questions: {len(questions)}")
-        print(f"  Answers received: {answers}")
-        print(f"  Answer keys: {list(answers.keys())}")
-        
         correct_count = 0
         total_questions = len(questions)
         
         for i, question in enumerate(questions):
-            # Tentar encontrar resposta pelo ID da questão ou pelo índice
             q_id = str(question.get('id', i))
             student_answer = answers.get(q_id)
             
-            # Fallback: tentar pelo índice string se não achou pelo ID
             if student_answer is None and q_id != str(i):
                 student_answer = answers.get(str(i))
                 
             if student_answer is not None:
-                # Converter para int se necessário para comparar
                 try:
                     ans_int = int(student_answer)
                     correct_int = int(question.get('correct'))
@@ -259,8 +245,6 @@ class LiveActivityResponse(db.Model):
                         correct_count += 1
                 except (ValueError, TypeError):
                     pass
-        
-        print(f"  ✅ Final score: {correct_count}/{total_questions}")
         
         self.score = correct_count
         self.total = total_questions

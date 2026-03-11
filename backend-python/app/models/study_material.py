@@ -6,7 +6,7 @@ class StudyMaterial(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     student_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False)
+    class_subject_id = db.Column(db.Integer, db.ForeignKey('class_subjects.id'), nullable=False)
     activity_id = db.Column(db.Integer, db.ForeignKey('live_activities.id'), nullable=True)
     
     title = db.Column(db.String(255), nullable=False)
@@ -16,15 +16,11 @@ class StudyMaterial(db.Model):
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # Relacionamentos
-    # student = db.relationship('User', backref='materials')
-    # subject = db.relationship('Subject', backref='materials')
-
     def to_dict(self):
         return {
             'id': self.id,
             'student_id': self.student_id,
-            'subject_id': self.subject_id,
+            'class_subject_id': self.class_subject_id,
             'activity_id': self.activity_id,
             'title': self.title,
             'type': self.type,

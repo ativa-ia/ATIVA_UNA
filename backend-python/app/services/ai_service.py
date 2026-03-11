@@ -304,18 +304,18 @@ JSON:"""
         return f"Erro ao formatar quiz: {str(e)}"
 
 
-def create_or_get_session(teacher_id: int, subject_id: int) -> AISession:
-    """Retorna ou cria uma sessão ativa para o professor na disciplina"""
+def create_or_get_session(teacher_id: int, class_subject_id: int) -> AISession:
+    """Retorna ou cria uma sessão ativa para o professor na oferta de disciplina"""
     session = AISession.query.filter_by(
         teacher_id=teacher_id,
-        subject_id=subject_id,
+        class_subject_id=class_subject_id,
         status='active'
     ).first()
     
     if not session:
         session = AISession(
             teacher_id=teacher_id,
-            subject_id=subject_id
+            class_subject_id=class_subject_id
         )
         db.session.add(session)
         db.session.commit()
@@ -323,14 +323,14 @@ def create_or_get_session(teacher_id: int, subject_id: int) -> AISession:
     return session
 
 
-def _prepare_ai_context(teacher_id: int, subject_id: int):
+def _prepare_ai_context(teacher_id: int, class_subject_id: int):
     """Prepara a sessão e o contexto para o chat"""
     api_key, _ = get_ai_config()
     
     if not api_key:
         raise Exception("API Key não configurada")
         
-    session = create_or_get_session(teacher_id, subject_id)
+    session = create_or_get_session(teacher_id, class_subject_id)
     
     # Buscar contexto de arquivos
     from app.models.ai_session import AIContextFile, AIMessage
@@ -378,14 +378,14 @@ ATENÇÃO - REGRA CRÍTICA:
     return session, messages, context_files
 
 
-def chat_with_ai(teacher_id: int, subject_id: int, message: str) -> str:
+def chat_with_ai(teacher_id: int, class_subject_id: int, message: str) -> str:
     """Processa mensagem no chat e retorna resposta completa usando OpenAI"""
     api_key, model_name = get_ai_config()
     client = get_client()
 
     try:
         from app.models.ai_session import AIMessage
-        session, messages, context_files = _prepare_ai_context(teacher_id, subject_id)
+        session, messages, context_files = _prepare_ai_context(teacher_id, class_subject_id)
         
         # Salvar mensagem do usuário
         user_msg = AIMessage(session_id=session.id, role='user', content=message)
@@ -423,14 +423,14 @@ def chat_with_ai(teacher_id: int, subject_id: int, message: str) -> str:
 # Alias for compatibility if needed, but better updated in routes
 chat_with_gemini = chat_with_ai
 
-def chat_stream(teacher_id: int, subject_id: int, message: str):
+def chat_stream(teacher_id: int, class_subject_id: int, message: str):
     """Gera resposta em stream usando OpenAI"""
     api_key, model_name = get_ai_config()
     client = get_client()
 
     try:
         from app.models.ai_session import AIMessage
-        session, messages, context_files = _prepare_ai_context(teacher_id, subject_id)
+        session, messages, context_files = _prepare_ai_context(teacher_id, class_subject_id)
         
         # Salvar mensagem do usuário
         user_msg = AIMessage(session_id=session.id, role='user', content=message)

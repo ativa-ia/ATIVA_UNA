@@ -3,6 +3,8 @@ from app.models.user import User
 from app.models.course import Course
 from app.models.class_model import Class
 from app.models.subject import Subject
+from app.models.course_enrollment import CourseEnrollment
+from app.models.class_subject import ClassSubject
 from app.models.enrollment import Enrollment
 from app.models.teaching import Teaching
 from app.models.material import Material
@@ -32,6 +34,8 @@ __all__ = [
     'Course',
     'Class',
     'Subject',
+    'CourseEnrollment',
+    'ClassSubject',
     'Enrollment',
     'Teaching',
     'Material',

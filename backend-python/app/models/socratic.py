@@ -12,13 +12,12 @@ class SocraticSession(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False)
+    class_subject_id = db.Column(db.Integer, db.ForeignKey('class_subjects.id'), nullable=False)
 
     title = db.Column(db.String(200), default='Conversa Socrática')
     status = db.Column(db.String(20), default='active')  # active, finished
 
     # Array JSON com todas as mensagens da sessão
-    # Formato: [{"role": "user"|"assistant", "content": "...", "timestamp": "ISO..."}]
     messages_data = db.Column(db.JSON, default=list)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -26,7 +25,6 @@ class SocraticSession(db.Model):
 
     # Relacionamentos
     user = db.relationship('User', backref=db.backref('socratic_sessions', lazy=True))
-    subject = db.relationship('Subject', backref=db.backref('socratic_sessions', lazy=True))
 
     def add_message(self, role, content):
         """Adiciona uma mensagem ao histórico JSON da sessão"""
@@ -37,7 +35,6 @@ class SocraticSession(db.Model):
             'content': content,
             'timestamp': datetime.utcnow().isoformat()
         }
-        # SQLAlchemy não detecta mutação em JSON, precisamos forçar
         updated = list(self.messages_data)
         updated.append(msg)
         self.messages_data = updated
@@ -52,7 +49,7 @@ class SocraticSession(db.Model):
         data = {
             'id': self.id,
             'user_id': self.user_id,
-            'subject_id': self.subject_id,
+            'class_subject_id': self.class_subject_id,
             'title': self.title,
             'status': self.status,
             'message_count': len(self.messages_data) if self.messages_data else 0,

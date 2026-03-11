@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    ActivityIndicator, RefreshControl, ScrollView, StyleSheet,
-    Text, TextInput, TouchableOpacity, View,
+    ActivityIndicator, Modal, RefreshControl, ScrollView, StyleSheet,
+    Text, TextInput, TouchableWithoutFeedback, TouchableOpacity, View,
 } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,12 +20,13 @@ export default function StudentsScreen() {
     const [search, setSearch] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('');
     const [filterSubject, setFilterSubject] = useState<number | undefined>();
+    const [dropdownOpen, setDropdownOpen] = useState(false);
 
     const load = useCallback(async (isRefresh = false) => {
         try {
             if (isRefresh) setRefreshing(true); else setLoading(true);
             const [studentsRes, subjectsRes] = await Promise.all([
-                getCoordinatorStudents({ search, status: filterStatus || undefined, subject_id: filterSubject }),
+                getCoordinatorStudents({ search, status: filterStatus || undefined, class_subject_id: filterSubject }),
                 getCoordinatorSubjects(),
             ]);
             if (studentsRes.success) setStudents(studentsRes.students || []);
@@ -62,6 +63,13 @@ export default function StudentsScreen() {
                     <MaterialIcons name="search" size={18} color="#94a3b8" />
                     <TextInput style={s.searchInput} placeholder="Buscar por nome ou matrícula..." placeholderTextColor="#94a3b8" value={search} onChangeText={setSearch} onSubmitEditing={() => load()} returnKeyType="search" />
                 </View>
+                <TouchableOpacity style={s.subjectDropdownBtn} onPress={() => setDropdownOpen(true)}>
+                    <MaterialIcons name="menu-book" size={18} color="#6366f1" />
+                    <Text style={s.subjectDropdownText} numberOfLines={1}>
+                        {filterSubject ? subjects.find(sub => (sub.class_subject_id || sub.id) === filterSubject)?.name : 'Todas as Disciplinas'}
+                    </Text>
+                    <MaterialIcons name="arrow-drop-down" size={20} color="#64748b" />
+                </TouchableOpacity>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filterChips}>
                     {statuses.map((st) => (
                         <TouchableOpacity key={st.key} style={[s.chip, filterStatus === st.key && s.chipActive]} onPress={() => setFilterStatus(st.key)}>
@@ -113,6 +121,32 @@ export default function StudentsScreen() {
                     })}
                 </ScrollView>
             )}
+
+            {/* Subject Dropdown Modal */}
+            <Modal visible={dropdownOpen} transparent animationType="fade">
+                <TouchableWithoutFeedback onPress={() => setDropdownOpen(false)}>
+                    <View style={s.modalOverlay}>
+                        <TouchableWithoutFeedback>
+                            <View style={s.dropdownContent}>
+                                <Text style={s.modalTitle}>Filtrar por Disciplina</Text>
+                                <ScrollView style={{ maxHeight: 300 }} indicatorStyle="black">
+                                    <TouchableOpacity style={s.modalOption} onPress={() => { setFilterSubject(undefined); setDropdownOpen(false); }}>
+                                        <Text style={[s.modalOptionText, filterSubject === undefined && { color: '#6366f1', fontWeight: 'bold' }]}>Todas as Disciplinas</Text>
+                                    </TouchableOpacity>
+                                    {subjects.map(sub => {
+                                        const actId = sub.class_subject_id || sub.id;
+                                        return (
+                                            <TouchableOpacity key={actId} style={s.modalOption} onPress={() => { setFilterSubject(actId); setDropdownOpen(false); }}>
+                                                <Text style={[s.modalOptionText, filterSubject === actId && { color: '#6366f1', fontWeight: 'bold' }]}>{sub.name}</Text>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </ScrollView>
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
         </SafeAreaView>
     );
 }
@@ -124,10 +158,12 @@ const s = StyleSheet.create({
     headerTitle: { flex: 1, color: '#fff', fontSize: 18, fontWeight: '700' },
     badge: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
     badgeText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-    filtersWrap: { backgroundColor: '#fff', paddingHorizontal: spacing.md, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+    filtersWrap: { backgroundColor: '#fff', paddingHorizontal: spacing.md, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#e2e8f0', gap: 10 },
     searchRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 10, paddingHorizontal: 12, height: 40, borderWidth: 1, borderColor: '#e2e8f0' },
     searchInput: { flex: 1, marginLeft: 8, fontSize: 14, color: '#1e293b' },
-    filterChips: { flexDirection: 'row', gap: 8, paddingTop: 10 },
+    subjectDropdownBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 10, paddingHorizontal: 12, height: 40, borderWidth: 1, borderColor: '#e2e8f0' },
+    subjectDropdownText: { flex: 1, marginLeft: 8, fontSize: 13, color: '#475569', fontWeight: '500' },
+    filterChips: { flexDirection: 'row', gap: 8 },
     chip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0' },
     chipActive: { backgroundColor: '#6366f1', borderColor: '#6366f1' },
     chipText: { fontSize: 12, fontWeight: '600', color: '#64748b' },
@@ -148,4 +184,9 @@ const s = StyleSheet.create({
     metricBox: { flex: 1, alignItems: 'center' },
     metricValue: { fontSize: 18, fontWeight: '800', color: '#1e293b' },
     metricLabel: { fontSize: 11, color: '#64748b', marginTop: 2 },
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    dropdownContent: { width: '80%', backgroundColor: '#fff', borderRadius: 14, padding: 16, maxHeight: '70%' },
+    modalTitle: { fontSize: 16, fontWeight: '700', color: '#1e293b', marginBottom: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9', paddingBottom: 8 },
+    modalOption: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+    modalOptionText: { fontSize: 14, color: '#475569' },
 });

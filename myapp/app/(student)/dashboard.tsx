@@ -7,6 +7,8 @@ import {
     SafeAreaView,
     TouchableOpacity,
     Animated,
+    Modal,
+    TouchableWithoutFeedback,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -15,11 +17,11 @@ import { Header } from '@/components/navigation/Header';
 import { BottomNav, NavItem } from '@/components/navigation/BottomNav';
 import { SubjectCard } from '@/components/cards/SubjectCard';
 import SummaryToast from '@/components/notifications/SummaryToast';
-import { Subject, Activity } from '@/types';
+import { Subject, Activity, CourseEnrollment } from '@/types';
 import { colors } from '@/constants/colors';
 import { typography } from '@/constants/typography';
 import { spacing, borderRadius } from '@/constants/spacing';
-import { getSubjects, Subject as APISubject, getMe, getActiveActivity, LiveActivity, isActivitySubmitted, submitActivityResponse } from '@/services/api';
+import { getSubjects, Subject as APISubject, getMe, getActiveActivity, LiveActivity, isActivitySubmitted, submitActivityResponse, getMyCourses } from '@/services/api';
 import { useCallback } from 'react';
 
 /**
@@ -32,6 +34,11 @@ export default function StudentDashboardScreen() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [userName, setUserName] = useState('Aluno');
+    
+    // Múltiplos cursos
+    const [courses, setCourses] = useState<CourseEnrollment[]>([]);
+    const [activeCourseId, setActiveCourseId] = useState<number | null>(null);
+    const [isCourseDropdownOpen, setIsCourseDropdownOpen] = useState(false);
 
     // Estado para atividade ao vivo
     const [liveActivity, setLiveActivity] = useState<LiveActivity | null>(null);
@@ -170,14 +177,27 @@ export default function StudentDashboardScreen() {
                 setUserName(meResponse.user.name);
             }
 
-            // Buscar disciplinas
-            const data = await getSubjects();
+            // Buscar cursos do aluno
+            const coursesRes = await getMyCourses();
+            let currentCourseId = activeCourseId;
+            
+            if (coursesRes.success && coursesRes.courses && coursesRes.courses.length > 0) {
+                setCourses(coursesRes.courses);
+                // Se não tem curso ativo, seleciona o primeiro
+                if (!currentCourseId) {
+                    currentCourseId = coursesRes.courses[0].course_id;
+                    setActiveCourseId(currentCourseId);
+                }
+            }
+
+            // Buscar disciplinas baseadas no curso selecionado
+            const data = await getSubjects(currentCourseId || undefined);
 
             // Converter para o formato esperado pelo componente
             const formattedSubjects: Subject[] = data.map((subject: APISubject) => ({
                 id: subject.id.toString(),
                 name: subject.name,
-                imageUrl: subject.imageUrl || subject.image_url || 'https://via.placeholder.com/400'
+                imageUrl: subject.image_url || subject.imageUrl || 'https://via.placeholder.com/400'
             }));
 
             setSubjects(formattedSubjects);
@@ -245,6 +265,19 @@ export default function StudentDashboardScreen() {
                             <View>
                                 <Text style={styles.greeting}>Olá, {userName}</Text>
                                 <Text style={styles.date}>{getCurrentDate()}</Text>
+                                
+                                {/* Seletor de Curso (só exibe se tiver mais de um) */}
+                                {courses.length > 1 && (
+                                    <TouchableOpacity 
+                                        style={styles.courseSelector}
+                                        onPress={() => setIsCourseDropdownOpen(true)}
+                                    >
+                                        <Text style={styles.courseSelectorText} numberOfLines={1}>
+                                            {courses.find(c => c.course_id === activeCourseId)?.course_name || 'Selecionar Curso'}
+                                        </Text>
+                                        <MaterialIcons name="arrow-drop-down" size={20} color={colors.white} />
+                                    </TouchableOpacity>
+                                )}
                             </View>
                             <View style={styles.headerButtons}>
                                 <TouchableOpacity
@@ -355,8 +388,61 @@ export default function StudentDashboardScreen() {
                     onItemPress={handleNavPress}
                 />
             </View>
+
+            {/* Modal de Seleção de Curso */}
+            <Modal
+                visible={isCourseDropdownOpen}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={() => setIsCourseDropdownOpen(false)}
+            >
+                <TouchableWithoutFeedback onPress={() => setIsCourseDropdownOpen(false)}>
+                    <View style={styles.modalOverlay}>
+                        <TouchableWithoutFeedback>
+                            <View style={styles.dropdownModalContainer}>
+                                <View style={styles.modalHeader}>
+                                    <Text style={styles.modalTitle}>Selecionar Curso</Text>
+                                    <TouchableOpacity onPress={() => setIsCourseDropdownOpen(false)}>
+                                        <MaterialIcons name="close" size={24} color={colors.textSecondary} />
+                                    </TouchableOpacity>
+                                </View>
+                                <ScrollView style={styles.modalScroll}>
+                                    {courses.map((course) => (
+                                        <TouchableOpacity
+                                            key={course.id}
+                                            style={[styles.modalOption, activeCourseId === course.course_id && styles.modalOptionActive]}
+                                            onPress={() => {
+                                                setActiveCourseId(course.course_id);
+                                                setIsCourseDropdownOpen(false);
+                                                // Fetch subjects specifically for this selected course
+                                                getSubjects(course.course_id).then(data => {
+                                                    const formattedSubjects: Subject[] = data.map((subject: APISubject) => ({
+                                                        id: subject.id.toString(),
+                                                        name: subject.name,
+                                                        imageUrl: subject.image_url || subject.imageUrl || 'https://via.placeholder.com/400'
+                                                    }));
+                                                    setSubjects(formattedSubjects);
+                                                });
+                                            }}
+                                        >
+                                            <MaterialIcons 
+                                                name="school" 
+                                                size={20} 
+                                                color={activeCourseId === course.course_id ? colors.primary : colors.textSecondary} 
+                                            />
+                                            <Text style={[styles.modalOptionText, activeCourseId === course.course_id && styles.modalOptionTextActive]}>
+                                                {course.course_name}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </ScrollView>
+                            </View>
+                        </TouchableWithoutFeedback>
+                    </View>
+                </TouchableWithoutFeedback>
+            </Modal>
         </SafeAreaView>
-    );
+    );    
 }
 
 const styles = StyleSheet.create({
@@ -396,6 +482,23 @@ const styles = StyleSheet.create({
         fontFamily: typography.fontFamily.body,
         color: 'rgba(255,255,255,0.8)',
         marginTop: 4,
+    },
+    courseSelector: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: spacing.xs,
+        paddingVertical: 2,
+        paddingHorizontal: 8,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        borderRadius: borderRadius.sm,
+        alignSelf: 'flex-start',
+    },
+    courseSelectorText: {
+        fontSize: typography.fontSize.xs,
+        fontFamily: typography.fontFamily.display,
+        color: colors.white,
+        marginRight: 2,
+        maxWidth: 150,
     },
     notificationButton: {
         width: 40,
@@ -533,5 +636,61 @@ const styles = StyleSheet.create({
     liveActivityDesc: {
         fontSize: typography.fontSize.sm,
         color: 'rgba(255,255,255,0.9)',
+    },
+    // Modal Styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: spacing.md,
+    },
+    dropdownModalContainer: {
+        backgroundColor: colors.white,
+        borderRadius: borderRadius.xl,
+        width: '100%',
+        maxHeight: '80%',
+        padding: spacing.lg,
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingBottom: spacing.md,
+        borderBottomWidth: 1,
+        borderBottomColor: '#E2E8F0', // colors.border
+        marginBottom: spacing.sm,
+    },
+    modalTitle: {
+        fontSize: typography.fontSize.lg,
+        fontWeight: typography.fontWeight.bold,
+        color: colors.textPrimary,
+    },
+    modalScroll: {
+        maxHeight: 400,
+    },
+    modalOption: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: spacing.md,
+        paddingHorizontal: spacing.sm,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F1F5F9', // colors.borderLight
+        gap: spacing.sm,
+    },
+    modalOptionActive: {
+        backgroundColor: `${colors.primary}10`,
+        borderRadius: borderRadius.md,
+        borderBottomWidth: 0,
+    },
+    modalOptionText: {
+        fontSize: typography.fontSize.base,
+        color: colors.textPrimary,
+        fontFamily: typography.fontFamily.body,
+        flex: 1,
+    },
+    modalOptionTextActive: {
+        color: colors.primary,
+        fontWeight: typography.fontWeight.bold,
     },
 });

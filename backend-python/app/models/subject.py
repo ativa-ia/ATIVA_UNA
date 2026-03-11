@@ -3,7 +3,7 @@ from datetime import datetime
 
 
 class Subject(db.Model):
-    """Modelo de Disciplina"""
+    """Modelo de Disciplina (Catálogo - definição oficial)"""
     __tablename__ = 'subjects'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -14,12 +14,8 @@ class Subject(db.Model):
     image_url = db.Column(db.String(500))  # URL da imagem da disciplina
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
-    # Relationships
-    teachings = db.relationship('Teaching', backref='subject', lazy=True, cascade='all, delete-orphan')
-    enrollments = db.relationship('Enrollment', backref='subject', lazy=True, cascade='all, delete-orphan')
-    materials = db.relationship('Material', backref='subject', lazy=True, cascade='all, delete-orphan')
-    activities = db.relationship('Activity', backref='subject', lazy=True, cascade='all, delete-orphan')
-    # announcements = db.relationship('Announcement', backref='subject', lazy=True, cascade='all, delete-orphan')
+    # Relationships (apenas com ClassSubject - as filhas agora estão lá)
+    # class_subjects definido via backref no ClassSubject
     
     def __repr__(self):
         return f'<Subject {self.name}>'

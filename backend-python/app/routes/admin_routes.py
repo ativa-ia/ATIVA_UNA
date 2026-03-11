@@ -5,6 +5,7 @@ from app.models.subject import Subject
 from app.models.enrollment import Enrollment
 from app.models.teaching import Teaching
 from app.models.class_model import Class
+from app.models.class_subject import ClassSubject
 from app.middleware.admin_middleware import admin_required
 
 admin_bp = Blueprint('admin', __name__)
@@ -72,25 +73,24 @@ def enroll_student(current_user):
     data = request.get_json()
     
     student_id = data.get('student_id')
-    subject_id = data.get('subject_id')
-    class_id = data.get('class_id', 1) # Default class 1 for now
+    class_subject_id = data.get('class_subject_id')
     
-    if not all([student_id, subject_id]):
-        return jsonify({'success': False, 'message': 'IDs de aluno e disciplina obrigatórios'}), 400
+    if not all([student_id, class_subject_id]):
+        return jsonify({'success': False, 'message': 'IDs de aluno e oferta de disciplina obrigatórios'}), 400
         
     # Verify existence
     if not User.query.get(student_id):
         return jsonify({'success': False, 'message': 'Aluno não encontrado'}), 404
-    if not Subject.query.get(subject_id):
-        return jsonify({'success': False, 'message': 'Disciplina não encontrada'}), 404
+    if not ClassSubject.query.get(class_subject_id):
+        return jsonify({'success': False, 'message': 'Oferta de disciplina não encontrada'}), 404
         
     # Check if already enrolled
-    existing = Enrollment.query.filter_by(student_id=student_id, subject_id=subject_id).first()
+    existing = Enrollment.query.filter_by(student_id=student_id, class_subject_id=class_subject_id).first()
     if existing:
-        return jsonify({'success': False, 'message': 'Aluno já matriculado nesta disciplina'}), 400
+        return jsonify({'success': False, 'message': 'Aluno já matriculado nesta oferta de disciplina'}), 400
         
     try:
-        enrollment = Enrollment(student_id=student_id, subject_id=subject_id, class_id=class_id)
+        enrollment = Enrollment(student_id=student_id, class_subject_id=class_subject_id)
         db.session.add(enrollment)
         db.session.commit()
         return jsonify({'success': True, 'message': 'Matrícula realizada com sucesso'}), 201
@@ -103,23 +103,22 @@ def assign_teacher(current_user):
     data = request.get_json()
     
     teacher_id = data.get('teacher_id')
-    subject_id = data.get('subject_id')
-    class_id = data.get('class_id', 1)
+    class_subject_id = data.get('class_subject_id')
     
-    if not all([teacher_id, subject_id]):
-        return jsonify({'success': False, 'message': 'IDs de professor e disciplina obrigatórios'}), 400
+    if not all([teacher_id, class_subject_id]):
+        return jsonify({'success': False, 'message': 'IDs de professor e oferta de disciplina obrigatórios'}), 400
         
     if not User.query.get(teacher_id):
         return jsonify({'success': False, 'message': 'Professor não encontrado'}), 404
-    if not Subject.query.get(subject_id):
-        return jsonify({'success': False, 'message': 'Disciplina não encontrada'}), 404
+    if not ClassSubject.query.get(class_subject_id):
+        return jsonify({'success': False, 'message': 'Oferta de disciplina não encontrada'}), 404
         
-    existing = Teaching.query.filter_by(teacher_id=teacher_id, subject_id=subject_id).first()
+    existing = Teaching.query.filter_by(teacher_id=teacher_id, class_subject_id=class_subject_id).first()
     if existing:
-        return jsonify({'success': False, 'message': 'Professor já atribuído a esta disciplina'}), 400
+        return jsonify({'success': False, 'message': 'Professor já atribuído a esta oferta'}), 400
         
     try:
-        teaching = Teaching(teacher_id=teacher_id, subject_id=subject_id, class_id=class_id)
+        teaching = Teaching(teacher_id=teacher_id, class_subject_id=class_subject_id)
         db.session.add(teaching)
         db.session.commit()
         return jsonify({'success': True, 'message': 'Professor atribuído com sucesso'}), 201
@@ -170,15 +169,14 @@ def delete_user(current_user, user_id):
 @admin_bp.route('/subjects/<int:subject_id>', methods=['DELETE'])
 @admin_required
 def delete_subject(current_user, subject_id):
-    """Deletar uma disciplina do sistema"""
+    """Deletar uma disciplina do catálogo"""
     subject = Subject.query.get(subject_id)
     if not subject:
         return jsonify({'success': False, 'message': 'Disciplina não encontrada'}), 404
 
     try:
-        # Delete related enrollments and teachings first
-        Enrollment.query.filter_by(subject_id=subject_id).delete()
-        Teaching.query.filter_by(subject_id=subject_id).delete()
+        # Delete related class_subjects (cascade will clean enrollments/teachings)
+        ClassSubject.query.filter_by(subject_id=subject_id).delete()
         db.session.delete(subject)
         db.session.commit()
         return jsonify({'success': True, 'message': f'Disciplina "{subject.name}" deletada com sucesso'}), 200
@@ -189,15 +187,15 @@ def delete_subject(current_user, subject_id):
 @admin_bp.route('/unenroll', methods=['DELETE'])
 @admin_required
 def unenroll_student(current_user):
-    """Desmatricular um aluno de uma disciplina"""
+    """Desmatricular um aluno de uma oferta de disciplina"""
     data = request.get_json()
     student_id = data.get('student_id')
-    subject_id = data.get('subject_id')
+    class_subject_id = data.get('class_subject_id')
 
-    if not all([student_id, subject_id]):
-        return jsonify({'success': False, 'message': 'IDs de aluno e disciplina obrigatórios'}), 400
+    if not all([student_id, class_subject_id]):
+        return jsonify({'success': False, 'message': 'IDs de aluno e oferta de disciplina obrigatórios'}), 400
 
-    enrollment = Enrollment.query.filter_by(student_id=student_id, subject_id=subject_id).first()
+    enrollment = Enrollment.query.filter_by(student_id=student_id, class_subject_id=class_subject_id).first()
     if not enrollment:
         return jsonify({'success': False, 'message': 'Matrícula não encontrada'}), 404
 
@@ -212,15 +210,15 @@ def unenroll_student(current_user):
 @admin_bp.route('/unteach', methods=['DELETE'])
 @admin_required
 def remove_teacher(current_user):
-    """Remover um professor de uma disciplina"""
+    """Remover um professor de uma oferta de disciplina"""
     data = request.get_json()
     teacher_id = data.get('teacher_id')
-    subject_id = data.get('subject_id')
+    class_subject_id = data.get('class_subject_id')
 
-    if not all([teacher_id, subject_id]):
-        return jsonify({'success': False, 'message': 'IDs de professor e disciplina obrigatórios'}), 400
+    if not all([teacher_id, class_subject_id]):
+        return jsonify({'success': False, 'message': 'IDs de professor e oferta de disciplina obrigatórios'}), 400
 
-    teaching = Teaching.query.filter_by(teacher_id=teacher_id, subject_id=subject_id).first()
+    teaching = Teaching.query.filter_by(teacher_id=teacher_id, class_subject_id=class_subject_id).first()
     if not teaching:
         return jsonify({'success': False, 'message': 'Atribuição não encontrada'}), 404
 
@@ -232,15 +230,15 @@ def remove_teacher(current_user):
         db.session.rollback()
         return jsonify({'success': False, 'message': str(e)}), 500
 
-@admin_bp.route('/subjects/<int:subject_id>/enrollments', methods=['GET'])
+@admin_bp.route('/class-subjects/<int:class_subject_id>/enrollments', methods=['GET'])
 @admin_required
-def get_subject_enrollments(current_user, subject_id):
-    """Listar alunos matriculados em uma disciplina"""
-    subject = Subject.query.get(subject_id)
-    if not subject:
-        return jsonify({'success': False, 'message': 'Disciplina não encontrada'}), 404
+def get_class_subject_enrollments(current_user, class_subject_id):
+    """Listar alunos matriculados em uma oferta de disciplina"""
+    cs = ClassSubject.query.get(class_subject_id)
+    if not cs:
+        return jsonify({'success': False, 'message': 'Oferta de disciplina não encontrada'}), 404
 
-    enrollments = Enrollment.query.filter_by(subject_id=subject_id).all()
+    enrollments = Enrollment.query.filter_by(class_subject_id=class_subject_id).all()
     students = []
     for e in enrollments:
         student = User.query.get(e.student_id)
@@ -249,15 +247,15 @@ def get_subject_enrollments(current_user, subject_id):
 
     return jsonify({'success': True, 'students': students}), 200
 
-@admin_bp.route('/subjects/<int:subject_id>/teachings', methods=['GET'])
+@admin_bp.route('/class-subjects/<int:class_subject_id>/teachings', methods=['GET'])
 @admin_required
-def get_subject_teachings(current_user, subject_id):
-    """Listar professores atribuídos a uma disciplina"""
-    subject = Subject.query.get(subject_id)
-    if not subject:
-        return jsonify({'success': False, 'message': 'Disciplina não encontrada'}), 404
+def get_class_subject_teachings(current_user, class_subject_id):
+    """Listar professores atribuídos a uma oferta de disciplina"""
+    cs = ClassSubject.query.get(class_subject_id)
+    if not cs:
+        return jsonify({'success': False, 'message': 'Oferta de disciplina não encontrada'}), 404
 
-    teachings = Teaching.query.filter_by(subject_id=subject_id).all()
+    teachings = Teaching.query.filter_by(class_subject_id=class_subject_id).all()
     teachers = []
     for t in teachings:
         teacher = User.query.get(t.teacher_id)
@@ -265,4 +263,3 @@ def get_subject_teachings(current_user, subject_id):
             teachers.append({'id': teacher.id, 'name': teacher.name, 'email': teacher.email})
 
     return jsonify({'success': True, 'teachers': teachers}), 200
-

@@ -138,7 +138,7 @@ export const sendTargetedSupportNotification = async (payload: {
             'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-            subject_id: payload.subjectId,
+            class_subject_id: payload.subjectId,
             student_ids: payload.studentIds,
             title: payload.title,
             message: payload.message,
@@ -179,10 +179,15 @@ export interface Subject {
     id: number;
     name: string;
     code: string;
+    class_subject_id?: number;
+    catalogId?: number;
     description?: string;
     credits?: number;
     image_url?: string;
     imageUrl?: string; // Alias para compatibilidade
+    class_name?: string;
+    class_year?: number;
+    class_semester?: string;
 }
 
 export interface SubjectDetails extends Subject {
@@ -192,7 +197,7 @@ export interface SubjectDetails extends Subject {
     pending_activities?: number;
 }
 
-import { Material } from '@/types';
+import { Material, CourseEnrollment } from '@/types';
 
 // ... (other code)
 
@@ -206,11 +211,30 @@ import { Material } from '@/types';
 //     size?: string;
 // }
 
-// Buscar disciplinas do usuário logado
-export const getSubjects = async (): Promise<Subject[]> => {
+// Buscar cursos do aluno logado
+export const getMyCourses = async (): Promise<{ success: boolean; courses?: CourseEnrollment[]; message?: string }> => {
     const token = await AsyncStorage.getItem('authToken');
 
-    const response = await fetch(`${API_URL}/subjects`, {
+    const response = await fetch(`${API_URL}/courses/me`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
+
+    return response.json();
+};
+
+// Buscar disciplinas do usuário logado
+export const getSubjects = async (courseId?: number): Promise<Subject[]> => {
+    const token = await AsyncStorage.getItem('authToken');
+    
+    // Constrói a URL com course_id se existir
+    let url = `${API_URL}/subjects`;
+    if (courseId) {
+        url += `?course_id=${courseId}`;
+    }
+
+    const response = await fetch(url, {
         headers: {
             'Authorization': `Bearer ${token}`,
         },
@@ -218,10 +242,16 @@ export const getSubjects = async (): Promise<Subject[]> => {
 
     const data = await response.json();
 
-    // Mapear image_url para imageUrl para compatibilidade
+    // Mapear image_url para imageUrl e usar class_subject_id como id principal
     return data.map((subject: any) => ({
         ...subject,
-        imageUrl: subject.image_url || subject.imageUrl
+        id: subject.class_subject_id || subject.id,
+        catalogId: subject.id,
+        class_subject_id: subject.class_subject_id,
+        imageUrl: subject.image_url || subject.imageUrl,
+        class_name: subject.class_name,
+        class_year: subject.class_year,
+        class_semester: subject.class_semester
     }));
 };
 
@@ -336,7 +366,7 @@ export const uploadFileToStorage = async (file: any, subjectId: number, options?
             body: JSON.stringify({
                 file_url: fileUrl,
                 filename: file.name,
-                subject_id: subjectId,
+                class_subject_id: subjectId,
                 session_id: options?.sessionId,
                 file_size: file.size,
                 mime_type: file.mimeType || file.type
@@ -420,7 +450,7 @@ export const getTeacherClasses = async (): Promise<TeacherClass[]> => {
 
     // Mapear para o formato esperado pelo dashboard
     return subjects.map((subject: any) => ({
-        id: subject.id,
+        id: subject.class_subject_id || subject.id,
         name: subject.name,
         code: subject.code,
         schedule: subject.schedule || 'Seg/Qua 14h-16h',
@@ -492,7 +522,7 @@ export const generateSuggestions = async (subjectId: number) => {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`,
             },
-            body: JSON.stringify({ subject_id: subjectId }),
+            body: JSON.stringify({ class_subject_id: subjectId }),
         });
         return response.json();
     } catch (error) {
@@ -562,7 +592,7 @@ export const shareContent = async (subjectId: number, content: string | object, 
                 'Authorization': `Bearer ${token}`,
             },
             body: JSON.stringify({
-                subject_id: subjectId,
+                class_subject_id: subjectId,
                 content,
                 type,
                 title
@@ -664,6 +694,7 @@ export const getPublicCourses = async (): Promise<{ success: boolean; courses: C
 export interface TranscriptionSession {
     id: number;
     subject_id: number;
+    class_subject_id?: number;
     teacher_id: number;
     title: string;
     full_transcript: string;
@@ -804,7 +835,7 @@ export const createTranscriptionSession = async (subjectId: number, title?: stri
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ subject_id: subjectId, title }),
+        body: JSON.stringify({ class_subject_id: subjectId, title }),
     });
 
     return response.json();
@@ -1338,7 +1369,7 @@ export const getStudentMaterials = async (): Promise<Material[]> => {
         uploadDate: item.upload_date || item.created_at || new Date().toISOString(),
         size: item.file_size || item.size || undefined,
         url: item.content_url || item.url,
-        subjectId: item.subject_id || undefined,
+        subjectId: item.class_subject_id || item.subject_id || undefined,
         source: item.source || undefined,
     }));
 };
@@ -1495,7 +1526,7 @@ export const sharePresentationDocumentToStudents = async (presentationCode: stri
 // Compartilhar video atual da apresentacao com os alunos
 export const sharePresentationVideoToStudents = async (
     presentationCode: string,
-    payload?: { subject_id?: number; classroom_id?: string; title?: string }
+    payload?: { class_subject_id?: number; classroom_id?: string; title?: string }
 ): Promise<{
     success: boolean;
     message?: string;
@@ -1526,6 +1557,7 @@ export interface SocraticSessionData {
     id: number;
     user_id: number;
     subject_id: number;
+    class_subject_id?: number;
     title: string;
     status: string;
     message_count: number;
@@ -1571,7 +1603,7 @@ export const createSocraticSession = async (subjectId: number, title?: string): 
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`,
             },
-            body: JSON.stringify({ subject_id: subjectId, title }),
+            body: JSON.stringify({ class_subject_id: subjectId, title }),
         });
         return response.json();
     } catch (error) {
@@ -1589,7 +1621,7 @@ export const getSocraticSessions = async (subjectId?: number): Promise<{
     try {
         const token = await AsyncStorage.getItem('authToken');
         const url = subjectId
-            ? `${API_URL}/socratic/sessions?subject_id=${subjectId}`
+            ? `${API_URL}/socratic/sessions?class_subject_id=${subjectId}`
             : `${API_URL}/socratic/sessions`;
         const response = await fetch(url, {
             headers: { 'Authorization': `Bearer ${token}` },
@@ -1659,6 +1691,7 @@ export interface AppNotification {
     message: string;
     type: 'quiz' | 'summary' | 'open_question' | 'material' | 'general' | 'notice';
     subject_id?: number;
+    class_subject_id?: number;
     teacher_id?: number;
     subject_name?: string | null;
     teacher_name?: string | null;
@@ -1832,6 +1865,7 @@ export interface LessonRecap {
     id: number;
     session_id: number;
     subject_id: number;
+    class_subject_id?: number;
     teacher_id: number;
     teacher_name?: string;
     subject_name?: string;
@@ -2008,6 +2042,7 @@ export interface CoordinatorDashboard {
 
 export interface CoordinatorSubject {
     id: number;
+    class_subject_id?: number;
     name: string;
     code: string;
     description?: string;
@@ -2062,6 +2097,7 @@ export interface CourseStudent {
 
 export interface CoordinatorRecapGroup {
     subject_id: number;
+    class_subject_id?: number;
     subject_name: string;
     subject_code: string;
     recap_count: number;
@@ -2079,7 +2115,7 @@ export interface CoordinatorRecapGroup {
 export const getCoordinatorDashboard = async (subjectId?: number | null, studentId?: number | null, semester?: string | null): Promise<CoordinatorDashboard> => {
     const token = await AsyncStorage.getItem('authToken');
     const queryParams = new URLSearchParams();
-    if (subjectId) queryParams.append('subject_id', String(subjectId));
+    if (subjectId) queryParams.append('class_subject_id', String(subjectId));
     if (studentId) queryParams.append('student_id', String(studentId));
     if (semester) queryParams.append('semester', semester);
     const qs = queryParams.toString();
@@ -2127,10 +2163,10 @@ export interface StudentOverview {
     status: string;
 }
 
-export const getCoordinatorStudents = async (params?: { subject_id?: number; status?: string; search?: string }): Promise<{ success: boolean; students: StudentOverview[] }> => {
+export const getCoordinatorStudents = async (params?: { class_subject_id?: number; status?: string; search?: string }): Promise<{ success: boolean; students: CourseStudent[] }> => {
     const token = await AsyncStorage.getItem('authToken');
     const queryParams = new URLSearchParams();
-    if (params?.subject_id) queryParams.append('subject_id', String(params.subject_id));
+    if (params?.class_subject_id) queryParams.append('class_subject_id', String(params.class_subject_id));
     if (params?.status) queryParams.append('status', params.status);
     if (params?.search) queryParams.append('search', params.search);
     const qs = queryParams.toString();
@@ -2232,7 +2268,7 @@ export const removeTeacherFromSubject = async (subjectId: number, teacherId: num
     return response.json();
 };
 
-export const sendCoordinatorNotification = async (data: { title: string; message: string; target: 'students' | 'teachers' | 'all'; subject_id?: number }): Promise<{ success: boolean; message?: string; sent_count?: number }> => {
+export const sendCoordinatorNotification = async (data: { title: string; message: string; target: 'students' | 'teachers' | 'all'; class_subject_id?: number }): Promise<{ success: boolean; message?: string; sent_count?: number }> => {
     const token = await AsyncStorage.getItem('authToken');
     const response = await fetch(`${API_URL}/coordinator/notifications/send`, {
         method: 'POST',

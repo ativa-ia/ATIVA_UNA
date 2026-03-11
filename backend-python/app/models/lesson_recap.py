@@ -53,7 +53,7 @@ class LessonRecap(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     session_id = db.Column(db.Integer, db.ForeignKey('transcription_sessions.id'), nullable=False, unique=True)
-    subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id'), nullable=False)
+    class_subject_id = db.Column(db.Integer, db.ForeignKey('class_subjects.id'), nullable=False)
     teacher_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
     title = db.Column(db.String(300), nullable=False)
@@ -72,17 +72,16 @@ class LessonRecap(db.Model):
 
     # Relationships
     session = db.relationship('TranscriptionSession', backref=db.backref('recap', uselist=False))
-    subject = db.relationship('Subject', backref=db.backref('lesson_recaps', lazy=True))
     teacher = db.relationship('User', backref=db.backref('lesson_recaps', lazy=True))
 
     def to_dict(self, include_events=False):
         data = {
             'id': self.id,
             'session_id': self.session_id,
-            'subject_id': self.subject_id,
+            'class_subject_id': self.class_subject_id,
             'teacher_id': self.teacher_id,
             'teacher_name': self.teacher.name if self.teacher else None,
-            'subject_name': self.subject.name if self.subject else None,
+            'subject_name': self.class_subject.subject.name if self.class_subject and self.class_subject.subject else None,
             'title': self.title,
             'ai_summary': self.ai_summary,
             'recap_data': self.recap_data,

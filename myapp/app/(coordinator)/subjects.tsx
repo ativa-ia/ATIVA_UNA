@@ -48,7 +48,7 @@ export default function SubjectsScreen() {
     };
 
     const openAnalytics = (subj: CoordinatorSubject) => {
-        router.push({ pathname: '/(coordinator)/subject-analytics', params: { subjectId: String(subj.id), subjectName: subj.name } });
+        router.push({ pathname: '/(coordinator)/subject-analytics', params: { subjectId: String(subj.class_subject_id || subj.id), subjectName: subj.name } });
     };
 
     return (
